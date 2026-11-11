@@ -1,0 +1,6 @@
+{
+  "name": "Hospital — Patient Zero",
+  "description": "Jeu d'horreur et de survie 3D à la première personne dans l'hôpital abandonné Saint-Aurore. Échappez au terrifiant Patient Zéro.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

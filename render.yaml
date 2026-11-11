@@ -1,0 +1,20 @@
+# Render "Blueprint": free always-reachable hosting (it sleeps after 15 min
+# without players and wakes up in about a minute on the next visit).
+# Accounts, coins, achievements and the leaderboard are kept in Upstash
+# (free Redis database) because Render's free disk is wiped when it sleeps.
+services:
+  - type: web
+    name: hospital-patient-zero
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npx vite build
+    startCommand: npx tsx server/index.ts --prod
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # From your Upstash database page (REST API section)
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
