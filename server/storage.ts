@@ -51,6 +51,15 @@ class UpstashStore implements Store {
     const res = await fetch(`${this.url}/get/${encodeURIComponent(this.prefix + name)}`, {
       headers: { Authorization: `Bearer ${this.token}` },
     });
+    if (res.status === 401 || res.status === 403) {
+      // Never print the token: only what helps to spot a bad paste
+      const t = this.token;
+      throw new Error(
+        `Upstash refuse le token (HTTP ${res.status}). Token reçu : ${t.length} caractères, commence par « ${t.slice(0, 4)}… ». ` +
+          `Il doit faire environ 60 caractères et commencer par « gQAA » (pas l'exemple, pas le Read-Only Token, pas l'URL). ` +
+          `Recopie-le depuis Upstash → Details → Connect → REST (œil) dans Render → Environment.`
+      );
+    }
     if (!res.ok) throw new Error(`Upstash GET ${name}: HTTP ${res.status}`);
     const body = (await res.json()) as { result: string | null };
     return body.result ?? null;
