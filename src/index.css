@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  /* Phones: no double-tap zoom, no grey tap flash, no text selection while playing */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+canvas {
+  touch-action: none;
+}
+
+/* Small screens (phone in landscape): menus scroll instead of overflowing */
+@media (max-height: 640px), (max-width: 640px) {
+  .fixed.inset-0.flex.items-center > div {
+    max-height: 94vh;
+    overflow-y: auto;
+  }
+  .fixed.inset-0.flex.items-center {
+    padding: 8px;
+  }
+}
+
+@keyframes intro-thought {
+  0% { opacity: 0; filter: blur(6px); }
+  18% { opacity: 1; filter: blur(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.intro-thought {
+  animation: intro-thought 2.6s ease-out both;
+}
+
+@keyframes ach-pop {
+  0% { opacity: 0; transform: translateY(-24px) scale(0.92); }
+  12% { opacity: 1; transform: translateY(0) scale(1.03); }
+  18% { transform: translateY(0) scale(1); }
+  88% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-12px); }
+}
+.ach-pop {
+  animation: ach-pop 4.2s ease-out both;
+}
+
+@keyframes hud-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.hud-fade-in {
+  animation: hud-fade-in 450ms ease-out both;
+}
+
+@keyframes hud-glitch {
+  0%, 100% { transform: translate(0, 0) skewX(0); opacity: 1; }
+  20% { transform: translate(-3px, 1px) skewX(-4deg); opacity: 0.85; }
+  40% { transform: translate(3px, -2px) skewX(3deg); opacity: 1; }
+  60% { transform: translate(-1px, 2px) skewX(0); opacity: 0.7; }
+  80% { transform: translate(2px, 0) skewX(-2deg); opacity: 1; }
+}
+.hud-glitch {
+  animation: hud-glitch 180ms steps(2) infinite;
+}
+
+/* Screamer: face lunges at the screen, shaking and flickering */
+@keyframes screamer-lunge {
+  0% { transform: translate(-50%, -50%) scale(0.55) rotate(-4deg); filter: contrast(1.6) brightness(1.4); }
+  12% { transform: translate(-50%, -50%) scale(1.15) rotate(3deg); }
+  20% { transform: translate(-49%, -51%) scale(1.08) rotate(-2deg); filter: contrast(2) brightness(0.8) hue-rotate(-20deg); }
+  30% { transform: translate(-51%, -49%) scale(1.2) rotate(2deg); filter: contrast(1.4) brightness(1.6); }
+  45% { transform: translate(-50%, -50%) scale(1.12) rotate(-3deg); filter: invert(1) contrast(2); }
+  50% { transform: translate(-50%, -50%) scale(1.12) rotate(-3deg); filter: contrast(1.8); }
+  70% { transform: translate(-48%, -52%) scale(1.25) rotate(4deg); filter: contrast(1.5) brightness(1.2); }
+  100% { transform: translate(-50%, -50%) scale(1.35) rotate(-1deg); filter: contrast(2) brightness(0.6); }
+}
+.screamer-face {
+  animation: screamer-lunge 900ms steps(12) both;
+}
+@keyframes screamer-flash {
+  0%, 8% { background: rgba(255, 255, 255, 0.9); }
+  10%, 40% { background: rgba(150, 0, 0, 0.25); }
+  42%, 46% { background: rgba(255, 255, 255, 0.6); }
+  48%, 100% { background: rgba(120, 0, 0, 0.35); }
+}
+.screamer-flash {
+  animation: screamer-flash 900ms linear both;
+  mix-blend-mode: hard-light;
+}
+
+@keyframes title-flicker {
+  0%, 18%, 22%, 25%, 53%, 57%, 100% { opacity: 1; }
+  20%, 24%, 55% { opacity: 0.35; }
+}
+.title-flicker {
+  animation: title-flicker 5s infinite;
+}

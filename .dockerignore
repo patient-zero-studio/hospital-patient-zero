@@ -1,0 +1,9 @@
+node_modules
+dist
+server/data
+tools
+.claude
+*.log
+.env*
+!.env.example
+JOUER-EN-LIGNE.bat
