@@ -65,9 +65,13 @@ class UpstashStore implements Store {
   }
 }
 
+/** Pasted from a web page: drop spaces, line breaks and surrounding quotes. */
+const clean = (v: string | undefined) => (v ?? '').replace(/\s+/g, '').replace(/^["'`]+|["'`]+$/g, '');
+
 export const makeStore = (dataDir: string): Store => {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  let url = clean(process.env.UPSTASH_REDIS_REST_URL);
+  const token = clean(process.env.UPSTASH_REDIS_REST_TOKEN);
+  if (url && !/^https?:\/\//i.test(url)) url = `https://${url}`;
   if (url && token) return new UpstashStore(url, token);
   return new FileStore(dataDir);
 };
