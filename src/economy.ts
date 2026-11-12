@@ -2,6 +2,7 @@
  * Coins, cosmetics shop and mystery boxes. Pure functions shared by the
  * server (authoritative for accounts) and the client (display).
  */
+import type { Season } from './seasons';
 
 export type Tier = 'petit' | 'moyen' | 'style' | 'exclusif';
 export type Target = 'human' | 'monster';
@@ -16,6 +17,10 @@ export interface Cosmetic {
   /** colour (#hex) for colour slots, or an accessory / outfit id */
   value: string;
   tier: Tier;
+  /** Event item: only sold during that event (never in the daily shop or boxes) */
+  season?: Season;
+  /** Only in the advent calendar (never sold) */
+  calendarOnly?: boolean;
 }
 
 export const TIER_PRICE: Record<Tier, number> = { petit: 100, moyen: 500, style: 1000, exclusif: 2000 };
@@ -23,6 +28,12 @@ export const TIER_LABEL: Record<Tier, string> = { petit: 'Petit skin', moyen: 'S
 export const TIER_COLOR: Record<Tier, string> = { petit: '#a1a1aa', moyen: '#38bdf8', style: '#c084fc', exclusif: '#fbbf24' };
 
 const c = (id: string, name: string, target: Target, slot: Slot, value: string, tier: Tier): Cosmetic => ({ id, name, target, slot, value, tier });
+/** Event item (sold in the event shop while the event is on). */
+const ev = (season: Season, id: string, name: string, target: Target, slot: Slot, value: string, tier: Tier, calendarOnly = false): Cosmetic => ({
+  ...c(id, name, target, slot, value, tier),
+  season,
+  ...(calendarOnly ? { calendarOnly } : {}),
+});
 
 export const CATALOG: Cosmetic[] = [
   // ---- Petits skins (100) : couleurs ----
@@ -67,9 +78,47 @@ export const CATALOG: Cosmetic[] = [
   c('m-ex-inferno', 'Patient Infernal', 'monster', 'outfit', 'inferno', 'exclusif'),
   c('m-ex-shadow', 'Ombre', 'monster', 'outfit', 'shadow', 'exclusif'),
   c('m-ex-gold', 'Patient Doré', 'monster', 'outfit', 'goldm', 'exclusif'),
+
+  // ---- 🎄 Noël (1er décembre → 6 janvier) ----
+  ev('noel', 'h-noel-gown-red', 'Blouse rouge de Noël', 'human', 'gown', '#c8102e', 'petit'),
+  ev('noel', 'h-noel-gown-pine', 'Blouse vert sapin', 'human', 'gown', '#166534', 'petit'),
+  ev('noel', 'h-noel-hair-snow', 'Cheveux blanc neige', 'human', 'hair', '#f4f6ff', 'petit'),
+  ev('noel', 'm-noel-skin-frost', 'Peau givrée', 'monster', 'skin', '#cfefff', 'petit'),
+  ev('noel', 'm-noel-eyes-pine', 'Yeux vert sapin', 'monster', 'eyes', '#1aff5a', 'petit'),
+  ev('noel', 'h-noel-santahat', 'Bonnet de Père Noël', 'human', 'acc', 'santahat', 'moyen'),
+  ev('noel', 'h-noel-elfhat', 'Chapeau de lutin', 'human', 'acc', 'elfhat', 'moyen'),
+  ev('noel', 'm-noel-santahat', 'Bonnet de Père Noël', 'monster', 'acc', 'santahat', 'moyen'),
+  ev('noel', 'h-noel-antlers', 'Bois de renne', 'human', 'acc', 'antlers', 'moyen', true),
+  ev('noel', 'm-noel-antlers', 'Bois de renne', 'monster', 'acc', 'antlers', 'moyen', true),
+  ev('noel', 'h-noel-sweater', 'Pull moche de Noël', 'human', 'outfit', 'sweater', 'style'),
+  ev('noel', 'h-noel-elf', 'Lutin du Père Noël', 'human', 'outfit', 'elf', 'style'),
+  ev('noel', 'm-noel-yeti', 'Yéti des neiges', 'monster', 'outfit', 'yeti', 'style'),
+  ev('noel', 'm-noel-ginger', 'Bonhomme pain d\'épice', 'monster', 'outfit', 'gingerbread', 'style', true),
+  ev('noel', 'm-noel-krampus', 'Krampus', 'monster', 'outfit', 'krampus', 'exclusif', true),
+  ev('noel', 'h-noel-santa', 'Père Noël', 'human', 'outfit', 'santa', 'exclusif', true),
+
+  // ---- 🎃 Halloween (1er octobre → 5 novembre) ----
+  ev('halloween', 'h-hw-gown-pumpkin', 'Blouse citrouille', 'human', 'gown', '#f97316', 'petit'),
+  ev('halloween', 'h-hw-hair-witch', 'Cheveux de sorcière', 'human', 'hair', '#7c3aed', 'petit'),
+  ev('halloween', 'm-hw-skin-ghost', 'Peau de fantôme', 'monster', 'skin', '#e6eeee', 'petit'),
+  ev('halloween', 'm-hw-eyes-lime', 'Yeux de sorcière', 'monster', 'eyes', '#b6ff00', 'petit'),
+  ev('halloween', 'h-hw-witchhat', 'Chapeau de sorcière', 'human', 'acc', 'witchhat', 'moyen'),
+  ev('halloween', 'h-hw-pumpkin', 'Tête de citrouille', 'human', 'acc', 'pumpkinhead', 'moyen'),
+  ev('halloween', 'm-hw-witchhat', 'Chapeau de sorcière', 'monster', 'acc', 'witchhat', 'moyen'),
+  ev('halloween', 'm-hw-pumpkin', 'Tête de citrouille', 'monster', 'acc', 'pumpkinhead', 'moyen'),
+  ev('halloween', 'h-hw-witch', 'Sorcière', 'human', 'outfit', 'witch', 'style'),
+  ev('halloween', 'h-hw-vampire', 'Vampire', 'human', 'outfit', 'vampire', 'style'),
+  ev('halloween', 'm-hw-mummy', 'Momie', 'monster', 'outfit', 'mummy', 'style'),
+  ev('halloween', 'h-hw-reaper', 'Faucheuse', 'human', 'outfit', 'reaper', 'exclusif'),
+  ev('halloween', 'm-hw-pumpking', 'Roi Citrouille', 'monster', 'outfit', 'pumpking', 'exclusif'),
 ];
 
 export const cosmetic = (id: string) => CATALOG.find((x) => x.id === id);
+/** Everyday items (daily shop, boxes, free gift): no event items. */
+const REGULAR = CATALOG.filter((x) => !x.season);
+
+/** Items sold in the event shop while the event is on. */
+export const seasonShop = (season: Season | null): Cosmetic[] => (season ? CATALOG.filter((x) => x.season === season && !x.calendarOnly) : []);
 
 // ---------------------------------------------------------------------------
 // Wallet
@@ -140,7 +189,7 @@ const pickN = <T,>(arr: T[], n: number, rnd: () => number) => {
 /** Today's offers: 3 small, 2 medium, 2 stylish, 1 exclusive. */
 export const dailyShop = (key = todayKey()): Cosmetic[] => {
   const rnd = seedRng('shop-' + key);
-  const of = (t: Tier) => CATALOG.filter((x) => x.tier === t);
+  const of = (t: Tier) => REGULAR.filter((x) => x.tier === t);
   return [...pickN(of('petit'), 3, rnd), ...pickN(of('moyen'), 2, rnd), ...pickN(of('style'), 2, rnd), ...pickN(of('exclusif'), 1, rnd)];
 };
 
@@ -260,7 +309,7 @@ export const openBox = (w: Wallet, id: BoxId, rnd: () => number = Math.random): 
       .join(', ');
     return { kind: 'supplies', supplies: got, text: `Ressources : ${text} (à récupérer auprès du SDF)` };
   }
-  const pool = CATALOG.filter((x) => roll.tiers.includes(x.tier));
+  const pool = REGULAR.filter((x) => roll.tiers.includes(x.tier));
   const skin = pool[Math.floor(rnd() * pool.length)];
   if (w.owned.includes(skin.id)) {
     const refund = Math.round(TIER_PRICE[skin.tier] * 0.6);
@@ -282,7 +331,7 @@ export const rollDailyGift = (w: Wallet, streak: number, rnd: () => number = Mat
   const r = rnd();
   // Day 7 in a row: always something special
   if (streak >= MAX_STREAK || r < 0.06) {
-    const pool = CATALOG.filter((x) => x.tier === 'petit' && !w.owned.includes(x.id));
+    const pool = REGULAR.filter((x) => x.tier === 'petit' && !w.owned.includes(x.id));
     if (pool.length) {
       const skin = pool[Math.floor(rnd() * pool.length)];
       w.owned.push(skin.id);
@@ -302,17 +351,103 @@ export const rollDailyGift = (w: Wallet, streak: number, rnd: () => number = Mat
   return { kind: 'coins', coins: n, text: `${n} pièces` };
 };
 
-/** Buys one of today's offers. Returns an error message, or null on success. */
-export const buyCosmetic = (w: Wallet, id: string, key = todayKey()): string | null => {
+/** Buys one of today's offers (or an event item during its event). Returns an error message, or null on success. */
+export const buyCosmetic = (w: Wallet, id: string, key = todayKey(), season: Season | null = null): string | null => {
   const item = cosmetic(id);
   if (!item) return 'Article inconnu.';
-  if (!dailyShop(key).some((x) => x.id === id)) return 'Cet article n\'est plus en boutique aujourd\'hui.';
+  const inEvent = seasonShop(season).some((x) => x.id === id);
+  if (item.season && !inEvent) return item.calendarOnly ? 'Cet article est seulement dans le calendrier de l\'Avent.' : 'L\'événement est terminé.';
+  if (!inEvent && !dailyShop(key).some((x) => x.id === id)) return 'Cet article n\'est plus en boutique aujourd\'hui.';
   if (w.owned.includes(id)) return 'Vous l\'avez déjà.';
   const price = TIER_PRICE[item.tier];
   if (w.coins < price) return 'Pas assez de pièces.';
   w.coins -= price;
   w.owned.push(id);
   return null;
+};
+
+// ---------------------------------------------------------------------------
+// 🎄 Advent calendar: one box a day from December 1st to 25th
+// ---------------------------------------------------------------------------
+export interface AdventReward {
+  coins?: number;
+  /** random resources (collected from the hobo) */
+  supplies?: number;
+  skin?: string;
+}
+/** Day N = ADVENT[N - 1]. Special skins on 6, 12, 18, 24 and the Santa outfit on the 25th. */
+export const ADVENT: AdventReward[] = [
+  { coins: 50 },
+  { supplies: 2 },
+  { skin: 'h-noel-gown-red' },
+  { coins: 75 },
+  { supplies: 2 },
+  { skin: 'h-noel-antlers' },
+  { coins: 100 },
+  { skin: 'm-noel-eyes-pine' },
+  { supplies: 3 },
+  { coins: 120 },
+  { skin: 'h-noel-hair-snow' },
+  { skin: 'm-noel-antlers' },
+  { coins: 150 },
+  { supplies: 3 },
+  { skin: 'm-noel-skin-frost' },
+  { coins: 200 },
+  { skin: 'h-noel-santahat' },
+  { skin: 'm-noel-ginger' },
+  { coins: 250 },
+  { supplies: 4 },
+  { skin: 'h-noel-elf' },
+  { coins: 300 },
+  { skin: 'm-noel-santahat' },
+  { skin: 'm-noel-krampus' },
+  { skin: 'h-noel-santa', coins: 500 },
+];
+
+/** Opens advent box `day` (mutates the wallet). */
+export const claimAdvent = (w: Wallet, day: number, rnd: () => number = Math.random): BoxResult => {
+  const r = ADVENT[day - 1];
+  const parts: string[] = [];
+  const result: BoxResult = { kind: 'coins', text: '' };
+  if (r.skin) {
+    const skin = cosmetic(r.skin)!;
+    result.kind = 'skin';
+    result.skin = skin.id;
+    if (w.owned.includes(skin.id)) {
+      const refund = Math.round(TIER_PRICE[skin.tier] * 0.6);
+      w.coins += refund;
+      result.refund = refund;
+      parts.push(`${skin.name} (déjà possédé → +${refund} pièces)`);
+    } else {
+      w.owned.push(skin.id);
+      parts.push(`${skin.name} — ${TIER_LABEL[skin.tier]} !`);
+    }
+  }
+  if (r.supplies) {
+    const kinds: SupplyKind[] = ['battery', 'medkit', 'sedative', 'food', 'alarm'];
+    const got: Partial<Record<SupplyKind, number>> = {};
+    for (let i = 0; i < r.supplies; i++) {
+      const k = kinds[Math.floor(rnd() * kinds.length)];
+      got[k] = (got[k] ?? 0) + 1;
+      w.stash[k] += 1;
+    }
+    if (result.kind !== 'skin') result.kind = 'supplies';
+    result.supplies = got;
+    parts.push(
+      'Ressources : ' +
+        Object.entries(got)
+          .map(([k, n]) => `${n}× ${SUPPLY_NAMES[k as SupplyKind]}`)
+          .join(', ') +
+        ' (à récupérer auprès du SDF)'
+    );
+  }
+  if (r.coins) {
+    w.coins += r.coins;
+    result.coins = r.coins;
+    parts.push(`${r.coins} pièces`);
+  }
+  result.text = parts.join(' + ');
+  return result;
 };
 
 // ---------------------------------------------------------------------------

@@ -7,6 +7,8 @@ import { sound } from '../audio/SoundSystem';
 import { DIFFICULTIES, Difficulty } from '../game/Difficulty';
 import { fmtCoins } from '../economy';
 import { InstallButton } from './InstallButton';
+import { SeasonalOverlay } from './SeasonalOverlay';
+import { SEASON_INFO, Season } from '../seasons';
 
 interface StartScreenProps {
   onStartGame: () => void;
@@ -20,6 +22,10 @@ interface StartScreenProps {
   coins: number | null;
   /** the free daily gift is waiting in the shop */
   giftReady?: boolean;
+  /** 🎄 / 🎃 event on */
+  season?: Season | null;
+  /** an advent calendar box can be opened */
+  adventReady?: boolean;
   /** phone / tablet */
   touch?: boolean;
   menuMusic?: boolean;
@@ -54,6 +60,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onChangeDifficulty,
   coins,
   giftReady = false,
+  season = null,
+  adventReady = false,
   onShop,
   achCount = null,
   onAchievements,
@@ -85,6 +93,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
         className="absolute inset-0 pointer-events-none"
         style={{ background: 'radial-gradient(ellipse at center, rgba(40,0,0,0.35) 0%, rgba(0,0,0,0.78) 55%, rgba(0,0,0,0.96) 100%)' }}
       />
+      {season && <SeasonalOverlay season={season} />}
 
       {/* Header */}
       <div className="relative z-10 flex justify-between items-center border-b border-zinc-900 pb-4 [@media(max-height:520px)]:pb-1">
@@ -122,9 +131,26 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           SURVIE & HORREUR PSYCHOLOGIQUE 3D
         </span>
 
-        <h1 className="title-flicker text-4xl sm:text-6xl md:text-8xl [@media(max-height:520px)]:text-4xl [@media(max-height:520px)]:mb-1 font-serif tracking-[0.15em] font-black text-zinc-100 mb-3 drop-shadow-[0_0_35px_rgba(200,0,0,0.55)]">
+        <h1 className="relative title-flicker text-4xl sm:text-6xl md:text-8xl [@media(max-height:520px)]:text-4xl [@media(max-height:520px)]:mb-1 font-serif tracking-[0.15em] font-black text-zinc-100 mb-3 drop-shadow-[0_0_35px_rgba(200,0,0,0.55)]">
           HOSPITAL
+          {season && (
+            <span
+              className="absolute -top-[0.45em] -left-[0.35em] text-[0.6em] -rotate-[25deg] select-none"
+              aria-hidden
+            >
+              {season === 'noel' ? '🎅' : '🎃'}
+            </span>
+          )}
         </h1>
+        {season && (
+          <button
+            onClick={onShop}
+            className="mb-3 px-4 py-1 border font-mono text-[11px] uppercase tracking-[0.3em] animate-pulse"
+            style={{ borderColor: SEASON_INFO[season].color, color: SEASON_INFO[season].color, background: SEASON_INFO[season].color + '1a' }}
+          >
+            {SEASON_INFO[season].emoji} Événement {SEASON_INFO[season].name} — skins limités{season === 'noel' ? ' & calendrier' : ''}
+          </button>
+        )}
 
         <div className="inline-block px-4 py-1 border border-red-900/80 bg-red-950/40 text-red-400 font-mono tracking-widest text-sm mb-6 [@media(max-height:520px)]:hidden">
           PATIENT ZERO
@@ -275,6 +301,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               <ShoppingBag className="w-4 h-4" />
               <span>Boutique — skins & boîtes mystère</span>
               {giftReady && <span className="normal-case tracking-normal text-emerald-300 animate-pulse">🎁 cadeau !</span>}
+              {adventReady && <span className="normal-case tracking-normal text-red-300 animate-pulse">🎄 case du jour !</span>}
               {coins != null && (
                 <span className="flex items-center gap-1 normal-case tracking-normal text-amber-200">
                   <Coins className="w-3.5 h-3.5" /> {fmtCoins(coins)}

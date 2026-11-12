@@ -27,6 +27,8 @@ import { NoiseMarkers } from './NoiseMarkers';
 import { VentCrawler, CRAWLER_STATES, CrawlerHuman } from './VentCrawler';
 import { buildItemModel } from './ItemModels';
 import type { SupplyKind } from '../economy';
+import { getActiveSeason } from '../seasons';
+import { buildSeasonalDecor } from './SeasonalDecor';
 
 /** Anything that can kill the player (and play the death lunge). */
 type Killer = { poseLunge: (camPos: THREE.Vector3, t: number) => void; headWorld: THREE.Vector3 };
@@ -673,6 +675,27 @@ export class GameEngine {
   // -----------------------------------------------------------------------
   // World lifecycle
   // -----------------------------------------------------------------------
+  private decor: { season: string; group: THREE.Group; disposables: { dispose: () => void }[] } | null = null;
+  /** 🎄 / 🎃 Event decorations: (re)built when the event changes (menu background included). */
+  public refreshSeasonDecor() {
+    if (!this.map) return;
+    const season = getActiveSeason();
+    if ((this.decor?.season ?? null) === season) return;
+    if (this.decor) {
+      this.decor.group.removeFromParent();
+      this.decor.disposables.forEach((d) => d.dispose());
+      this.decor = null;
+    }
+    if (!season) return;
+    try {
+      const d = buildSeasonalDecor(season, this.map);
+      this.map.sceneGroup.add(d.group);
+      this.decor = { season, ...d };
+    } catch (e) {
+      console.warn('[decor]', e);
+    }
+  }
+
   private buildWorld() {
     this.map = MapBuilder.buildHospital();
     if (this.lowEndGpu) {
@@ -686,6 +709,7 @@ export class GameEngine {
       });
     }
     this.scene.add(this.map.sceneGroup);
+    this.refreshSeasonDecor();
 
     this.builtDifficulty = this.difficulty;
     this.builtChapter = this.chapter;
@@ -1116,6 +1140,8 @@ export class GameEngine {
     this.cans.dispose();
     this.scene.remove(this.map.sceneGroup);
     this.map.disposables.forEach((d) => d.dispose());
+    this.decor?.disposables.forEach((d) => d.dispose());
+    this.decor = null;
     for (const m of this.monsters) {
       this.scene.remove(m.mesh);
       m.dispose();

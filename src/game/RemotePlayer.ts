@@ -485,8 +485,8 @@ export class RemotePlayer {
     // Special materials (exclusive outfits)
     gown.metalness = outfit?.gownFx === 'gold' ? 0.85 : 0;
     gown.roughness = outfit?.gownFx === 'gold' ? 0.3 : outfit?.gownFx === 'white' ? 0.8 : 0.95;
-    gown.emissive.set(outfit?.gownFx === 'neon' ? 0x00e5ff : 0x000000);
-    gown.emissiveIntensity = outfit?.gownFx === 'neon' ? 0.9 : 0;
+    gown.emissive.set(outfit?.gownFx === 'neon' ? 0x00e5ff : outfit?.gownFx === 'ghost' ? 0x3a0a5a : 0x000000);
+    gown.emissiveIntensity = outfit?.gownFx === 'neon' ? 0.9 : outfit?.gownFx === 'ghost' ? 0.5 : 0;
     hair.emissive.set(outfit?.hairFx === 'neon' ? 0xff3ad8 : 0x000000);
     hair.emissiveIntensity = outfit?.hairFx === 'neon' ? 0.8 : 0;
 

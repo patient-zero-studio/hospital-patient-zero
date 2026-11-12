@@ -3,6 +3,7 @@ import { Appearance, DEFAULT_APPEARANCE, sanitizeAppearance } from '../appearanc
 
 import type { BoxId, BoxResult, SupplyKind, Wallet } from '../economy';
 import type { AchState, StatKey } from '../achievements';
+import type { Season, SeasonSetting } from '../seasons';
 
 const TOKEN_KEY = 'hospital-pz-token';
 
@@ -25,6 +26,14 @@ export interface WalletView {
   newAch?: string[];
   /** today's challenge and whether this account already won it */
   challenge?: { id: string; done: boolean };
+  /** event currently on (Christmas / Halloween) */
+  season?: Season | null;
+  /** admins only: what the event switch is set to */
+  seasonSetting?: SeasonSetting;
+  /** ids sold in the event shop */
+  seasonShop?: string[];
+  /** advent calendar (Christmas only): last box that can be opened + boxes already opened */
+  advent?: { open: number; claimed: number[] };
 }
 
 export interface BoardEntry {
@@ -135,6 +144,18 @@ export const api = {
   reward: (token: string, difficulty: number, found: number): Promise<WalletView & { gained: number }> =>
     post('/api/wallet/reward', { difficulty, found }, token),
   claimDaily: (token: string): Promise<WalletView & { result: BoxResult }> => post('/api/shop/daily', {}, token),
+  claimAdvent: (token: string, day: number): Promise<WalletView & { result: BoxResult }> => post('/api/shop/advent', { day }, token),
+  /** Event on for everyone (null = none, undefined = server unreachable). */
+  async season(): Promise<Season | null | undefined> {
+    try {
+      const res = await fetch('/api/season');
+      if (!res.ok) return undefined;
+      return (await res.json()).season ?? null;
+    } catch {
+      return undefined;
+    }
+  },
+  adminSeason: (token: string, season: SeasonSetting): Promise<WalletView> => post('/api/admin/season', { season }, token),
   buyCosmetic: (token: string, id: string): Promise<WalletView> => post('/api/shop/buy', { id }, token),
   openBox: (token: string, box: BoxId): Promise<WalletView & { result: BoxResult }> => post('/api/shop/box', { box }, token),
   buyGoods: (token: string, kind: string): Promise<WalletView> => post('/api/hobo/buy', { kind }, token),

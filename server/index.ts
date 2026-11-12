@@ -26,7 +26,11 @@ import {
   todayKey,
   INFINITE_COINS,
   rollDailyGift,
+  ADVENT,
+  claimAdvent,
+  seasonShop,
 } from '../src/economy.ts';
+import { SeasonSetting, adventDay, adventYear, isSeasonSetting, resolveSeason } from '../src/seasons.ts';
 import { AchDef, AchState, StatKey, applyAchReport, sanitizeAch } from '../src/achievements.ts';
 import { challengeMet, dailyChallenge } from '../src/challenges.ts';
 import { debouncedSaver, makeStore } from './storage.ts';
@@ -63,6 +67,8 @@ interface User {
   lastChallenge?: string;
   /** last run submitted (anti-spam) */
   lastRun?: number;
+  /** Advent calendar boxes opened, for the Christmas of `year` */
+  advent?: { year: number; days: number[] };
 }
 
 const store = makeStore(DATA_DIR);
@@ -208,7 +214,38 @@ const reportAch = (u: User, unlock: unknown, stats: unknown, trusted: Partial<Re
   if (coins > 0) walletOf(u).coins += coins;
   return newly.map((a: AchDef) => a.id);
 };
+// ---- Events (Christmas / Halloween): follows the calendar unless an admin forces one ----
+/** PZ_FAKE_DATE (tests only) pretends today is another day for the events. */
+const eventNow = () => (process.env.PZ_FAKE_DATE ? new Date(process.env.PZ_FAKE_DATE) : new Date());
+const settings: { season: SeasonSetting } = await (async () => {
+  try {
+    const raw = await store.load('settings');
+    const s = raw ? JSON.parse(raw) : {};
+    return { season: isSeasonSetting(s.season) ? s.season : 'auto' };
+  } catch {
+    return { season: 'auto' as SeasonSetting };
+  }
+})();
+const settingsSaver = debouncedSaver(store, 'settings', () => JSON.stringify(settings), 300);
+const currentSeason = () => resolveSeason(settings.season, eventNow());
+const adventOf = (u: User) => {
+  const year = adventYear(eventNow());
+  if (!u.advent || u.advent.year !== year || !Array.isArray(u.advent.days)) u.advent = { year, days: [] };
+  return u.advent;
+};
+/** Calendar state, only while Christmas is on. Admins can open every box (to try it). */
+const adventView = (u: User) =>
+  currentSeason() === 'noel' ? { open: isAdmin(u) ? 25 : adventDay(eventNow()), claimed: adventOf(u).days } : undefined;
+
+app.get('/api/season', (_req, res) => {
+  res.json({ season: currentSeason() });
+});
+
 const walletView = (u: User) => ({
+  season: currentSeason(),
+  seasonSetting: isAdmin(u) ? settings.season : undefined,
+  seasonShop: seasonShop(currentSeason()).map((x) => x.id),
+  advent: adventView(u),
   ach: achOf(u),
   challenge: { id: dailyChallenge().id, done: u.lastChallenge === todayKey() },
   wallet: walletOf(u),
@@ -340,6 +377,36 @@ app.post('/api/admin/gift', (req, res) => {
   res.json({ to: target.username, coins: walletOf(target).coins });
 });
 
+// Admin: start / stop an event for everyone
+app.post('/api/admin/season', (req, res) => {
+  const user = authUser(req);
+  if (!user || !isAdmin(user)) return res.status(403).json({ error: 'Réservé aux admins.' });
+  const s = req.body?.season;
+  if (!isSeasonSetting(s)) return res.status(400).json({ error: 'Événement inconnu.' });
+  settings.season = s;
+  settingsSaver.save();
+  console.log(`[admin] ${user.username} règle l'événement sur « ${s} »`);
+  res.json(walletView(user));
+});
+
+// 🎄 Advent calendar: one box per day, December 1 → 25
+app.post('/api/shop/advent', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const view = adventView(user);
+  if (!view) return res.status(400).json({ error: 'Le calendrier de l\'Avent n\'est ouvert que pendant Noël.' });
+  const day = Math.floor(Number(req.body?.day));
+  if (!(day >= 1 && day <= ADVENT.length)) return res.status(400).json({ error: 'Case inconnue.' });
+  if (day > view.open) return res.status(400).json({ error: `Patience ! Cette case s'ouvre le ${day} décembre.` });
+  const cal = adventOf(user);
+  if (cal.days.includes(day)) return res.status(400).json({ error: 'Case déjà ouverte.' });
+  const result = claimAdvent(walletOf(user), day);
+  cal.days.push(day);
+  const newAch = reportAch(user, [], {}, { boxes: 1 });
+  saveUsers();
+  res.json({ result, newAch, ...walletView(user) });
+});
+
 app.get('/api/wallet', (req, res) => {
   const user = authUser(req);
   if (!user) return res.status(401).json({ error: 'Session expirée.' });
@@ -364,7 +431,7 @@ app.post('/api/wallet/reward', (req, res) => {
 app.post('/api/shop/buy', (req, res) => {
   const user = authUser(req);
   if (!user) return res.status(401).json({ error: 'Session expirée.' });
-  const err = buyCosmetic(walletOf(user), String(req.body?.id ?? ''));
+  const err = buyCosmetic(walletOf(user), String(req.body?.id ?? ''), todayKey(), currentSeason());
   if (err) return res.status(400).json({ error: err });
   saveUsers();
   res.json(walletView(user));
@@ -626,7 +693,7 @@ const shutdown = async (sig: string) => {
   if (stopping) return;
   stopping = true;
   console.log(`[server] ${sig} : sauvegarde avant l'arrêt…`);
-  await Promise.allSettled([usersSaver.flush(), boardsSaver.flush(), remote ? sessionsSaver.flush() : Promise.resolve()]);
+  await Promise.allSettled([usersSaver.flush(), boardsSaver.flush(), settingsSaver.flush(), remote ? sessionsSaver.flush() : Promise.resolve()]);
   process.exit(0);
 };
 process.on('SIGTERM', () => void shutdown('SIGTERM'));

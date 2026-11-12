@@ -347,10 +347,10 @@ export class MonsterAI {
     this.eyeMat.emissive.set(o?.eyes ?? look.eyes);
     const fx = o?.skinFx;
     skin.metalness = fx === 'gold' ? 0.85 : 0;
-    skin.roughness = fx === 'gold' ? 0.28 : fx === 'bone' ? 0.6 : 0.42;
-    skin.emissive.set(fx === 'inferno' ? 0xff3a00 : fx === 'shadow' ? 0x14002a : 0x000000);
+    skin.roughness = fx === 'gold' ? 0.28 : fx === 'bone' ? 0.6 : fx === 'frost' ? 0.85 : 0.42;
+    skin.emissive.set(fx === 'inferno' ? 0xff3a00 : fx === 'shadow' ? 0x14002a : fx === 'frost' ? 0x5ab0ff : 0x000000);
     skin.emissiveMap = fx === 'inferno' ? skin.map : null;
-    skin.emissiveIntensity = fx === 'inferno' ? 1.4 : fx === 'shadow' ? 0.6 : 0;
+    skin.emissiveIntensity = fx === 'inferno' ? 1.4 : fx === 'shadow' ? 0.6 : fx === 'frost' ? 0.18 : 0;
     skin.transparent = fx === 'shadow';
     skin.opacity = fx === 'shadow' ? 0.82 : 1;
     skin.needsUpdate = true;

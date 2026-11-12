@@ -1,7 +1,110 @@
 import React, { useEffect, useState } from 'react';
 import { Coins, Crown, Gift, Loader2, ShoppingBag, Sparkles, X } from 'lucide-react';
-import { BOXES, BoxId, BoxResult, CATALOG, Cosmetic, TIER_COLOR, TIER_LABEL, TIER_PRICE, cosmetic, fmtCoins } from '../economy';
+import { ADVENT, BOXES, BoxId, BoxResult, CATALOG, Cosmetic, TIER_COLOR, TIER_LABEL, TIER_PRICE, cosmetic, fmtCoins } from '../economy';
 import { api, AdminUser, WalletView } from '../net/api';
+import { SEASON_INFO, Season, SeasonSetting } from '../seasons';
+
+/** Admin: start or stop an event (Christmas / Halloween) for every player. */
+const SeasonSwitch: React.FC<{ value: SeasonSetting; onSet: (s: SeasonSetting) => Promise<void> }> = ({ value, onSet }) => {
+  const [busy, setBusy] = useState(false);
+  const opts: [SeasonSetting, string][] = [
+    ['auto', '📅 Automatique (dates)'],
+    ['noel', '🎄 Noël maintenant'],
+    ['halloween', '🎃 Halloween maintenant'],
+    ['off', '⛔ Aucun événement'],
+  ];
+  return (
+    <div className="mb-5 p-3 border border-zinc-800 bg-black/40">
+      <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-2">Événement pour tous les joueurs</div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
+        {opts.map(([v, label]) => (
+          <button
+            key={v}
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await onSet(v);
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className={`px-2 py-2 border text-[11px] font-mono ${value === v ? 'border-amber-400 text-amber-200 bg-amber-950/40' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="text-[10px] font-mono text-zinc-600 mt-2">
+        Automatique : Halloween du 1er octobre au 5 novembre, Noël du 1er décembre au 6 janvier. Les cases du calendrier s'ouvrent quand même jour par jour en décembre (les
+        admins peuvent toutes les ouvrir pour tester).
+      </p>
+    </div>
+  );
+};
+
+/** One reward of the advent calendar, as a little icon. */
+const adventIcon = (day: number) => {
+  const r = ADVENT[day - 1];
+  if (r.skin) return cosmetic(r.skin);
+  return null;
+};
+
+/** 🎄 Advent calendar: 25 boxes, one opens every day of December. */
+const AdventCalendar: React.FC<{
+  open: number;
+  claimed: number[];
+  busy: boolean;
+  onOpen: (day: number) => void;
+}> = ({ open, claimed, busy, onOpen }) => (
+  <div className="mb-5">
+    <div className="flex items-baseline justify-between mb-2">
+      <h3 className="font-mono uppercase tracking-[0.25em] text-xs text-red-300">🎁 Calendrier de l'Avent</h3>
+      <span className="text-[10px] font-mono text-zinc-500">{claimed.length} / 25 ouvertes</span>
+    </div>
+    <div className="grid grid-cols-5 gap-1.5 p-2 max-w-[440px] mx-auto border border-red-900/60 bg-gradient-to-b from-red-950/40 to-emerald-950/30">
+      {ADVENT.map((r, i) => {
+        const day = i + 1;
+        const done = claimed.includes(day);
+        const ready = !done && day <= open;
+        const skin = adventIcon(day);
+        const special = !!skin && (skin.tier === 'exclusif' || skin.calendarOnly);
+        return (
+          <button
+            key={day}
+            disabled={!ready || busy}
+            onClick={() => onOpen(day)}
+            title={done ? 'Déjà ouverte' : ready ? 'Ouvrir !' : `S'ouvre le ${day} décembre`}
+            className={`relative aspect-square flex flex-col items-center justify-center border-2 text-center transition-transform ${
+              done
+                ? 'border-zinc-700 bg-black/50'
+                : ready
+                  ? 'border-amber-300 bg-red-700/80 hover:scale-105 animate-pulse shadow-[0_0_18px_rgba(252,211,77,0.6)] cursor-pointer'
+                  : `${special ? 'border-amber-500/70' : 'border-red-900'} bg-red-950/70`
+            }`}
+          >
+            {done ? (
+              skin ? (
+                <CosmeticBadge c={skin} size={30} />
+              ) : (
+                <span className="text-xl">{r.supplies ? '📦' : '🪙'}</span>
+              )
+            ) : (
+              <>
+                <span className={`font-serif font-black ${day === 25 ? 'text-2xl text-amber-300' : 'text-lg text-zinc-100'}`}>{day}</span>
+                <span className="text-[10px] leading-none">{ready ? '🎁' : special ? '⭐' : '🔒'}</span>
+              </>
+            )}
+          </button>
+        );
+      })}
+    </div>
+    <p className="text-[10px] font-mono text-zinc-500 mt-1.5">
+      Une case par jour du 1er au 25 décembre. ⭐ = skin spécial qu'on ne trouve que dans le calendrier (le 25 : le costume de Père Noël !). Une case oubliée peut être
+      ouverte plus tard, jusqu'au 6 janvier.
+    </p>
+  </div>
+);
 
 /** Little visual for a cosmetic card. */
 export const CosmeticBadge: React.FC<{ c: Cosmetic; size?: number }> = ({ c, size = 44 }) => {
@@ -11,6 +114,9 @@ export const CosmeticBadge: React.FC<{ c: Cosmetic; size?: number }> = ({ c, siz
     horns: '😈', chains: '⛓️', bandages: '🩹', hockey: '🏒',
     surgeon: '🩺', doctor: '🥼', prisoner: '🟧', punk: '🎸', gold: '🏆', neon: '💡',
     skeleton: '💀', zombie: '🧟', demon: '👹', inferno: '🔥', shadow: '🌑', goldm: '👑',
+    santahat: '🎅', elfhat: '🧝', antlers: '🦌', sweater: '🧶', elf: '🧝', santa: '🎅',
+    yeti: '❄️', gingerbread: '🍪', krampus: '👹',
+    witchhat: '🧙', pumpkinhead: '🎃', witch: '🧙', vampire: '🧛', reaper: '💀', mummy: '🧻', pumpking: '🎃',
   };
   return (
     <div
@@ -42,6 +148,10 @@ interface Props {
   onOpenBox: (box: BoxId) => Promise<BoxResult>;
   /** free gift of the day */
   onClaimDaily?: () => Promise<BoxResult>;
+  /** 🎄 advent calendar box of the day */
+  onClaimAdvent?: (day: number) => Promise<BoxResult>;
+  /** admin: start / stop an event for everyone */
+  onSetSeason?: (s: SeasonSetting) => Promise<void>;
   onLogin: () => void;
   onCustomize?: () => void;
   onClose: () => void;
@@ -137,11 +247,16 @@ const AdminPanel: React.FC<{ token: string }> = ({ token }) => {
 };
 
 /** Cosmetics shop: today's offers (change every day) and mystery boxes. */
-export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, onClaimDaily, onLogin, onCustomize, onClose, token }) => {
-  const [tab, setTab] = useState<'shop' | 'boxes' | 'mine' | 'admin'>('shop');
+export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, onClaimDaily, onClaimAdvent, onSetSeason, onLogin, onCustomize, onClose, token }) => {
+  const season: Season | null = wallet?.season ?? null;
+  const [tab, setTab] = useState<'event' | 'shop' | 'boxes' | 'mine' | 'admin'>(season ? 'event' : 'shop');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reveal, setReveal] = useState<{ box: BoxId | 'daily'; result: BoxResult | null } | null>(null);
+  const [reveal, setReveal] = useState<{ box: BoxId | 'daily' | 'advent'; result: BoxResult | null } | null>(null);
+  // The event can start / stop while the shop is open (admin switch)
+  useEffect(() => {
+    if (!season && tab === 'event') setTab('shop');
+  }, [season, tab]);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30000);
@@ -163,6 +278,48 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
   const coins = wallet?.wallet.coins ?? 0;
   const owned = new Set(wallet?.wallet.owned ?? []);
   const offers = (wallet?.shop ?? []).map(cosmetic).filter(Boolean) as Cosmetic[];
+  const eventOffers = (wallet?.seasonShop ?? []).map(cosmetic).filter(Boolean) as Cosmetic[];
+
+  const offerCard = (c: Cosmetic) => {
+    const price = TIER_PRICE[c.tier];
+    const have = owned.has(c.id);
+    return (
+      <div key={c.id} className="flex items-center gap-3 p-2 border border-zinc-800 bg-black/40">
+        <CosmeticBadge c={c} />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm text-zinc-100 truncate">{c.name}</div>
+          <div className="text-[10px] font-mono uppercase tracking-wider" style={{ color: TIER_COLOR[c.tier] }}>
+            {TIER_LABEL[c.tier]} · {c.target === 'human' ? 'Humain' : 'Monstre'}
+          </div>
+        </div>
+        {have ? (
+          <span className="text-[10px] font-mono text-emerald-400 uppercase">Possédé</span>
+        ) : (
+          <button
+            disabled={!!busy || coins < price}
+            onClick={() => run(c.id, () => onBuy(c.id))}
+            className="px-3 py-1.5 font-mono text-xs flex items-center gap-1 border border-amber-600 text-amber-300 hover:bg-amber-900/40 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {busy === c.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Coins className="w-3 h-3" />} {price}
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const openAdvent = (day: number) =>
+    onClaimAdvent &&
+    run('advent', async () => {
+      setReveal({ box: 'advent', result: null });
+      try {
+        const r = await onClaimAdvent(day);
+        await new Promise((ok) => setTimeout(ok, 900));
+        setReveal({ box: 'advent', result: r });
+      } catch (e) {
+        setReveal(null);
+        throw e;
+      }
+    });
 
   const tabBtn = (t: typeof tab, label: React.ReactNode) => (
     <button
@@ -211,7 +368,8 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
           </div>
         ) : (
           <>
-            <div className="flex gap-1 mb-4">
+            <div className="flex flex-wrap gap-1 mb-4">
+              {season && tabBtn('event', <>{SEASON_INFO[season].emoji} {SEASON_INFO[season].name}</>)}
               {tabBtn('shop', <><ShoppingBag className="w-3.5 h-3.5" /> Offres du jour</>)}
               {tabBtn('boxes', <><Gift className="w-3.5 h-3.5" /> Boîtes mystère</>)}
               {tabBtn('mine', <><Sparkles className="w-3.5 h-3.5" /> Mes skins ({owned.size})</>)}
@@ -268,34 +426,31 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
                 <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-2">
                   Nouvelle boutique dans {fmtCountdown(wallet.nextReset - now)}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {offers.map((c) => {
-                    const price = TIER_PRICE[c.tier];
-                    const have = owned.has(c.id);
-                    return (
-                      <div key={c.id} className="flex items-center gap-3 p-2 border border-zinc-800 bg-black/40">
-                        <CosmeticBadge c={c} />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm text-zinc-100 truncate">{c.name}</div>
-                          <div className="text-[10px] font-mono uppercase tracking-wider" style={{ color: TIER_COLOR[c.tier] }}>
-                            {TIER_LABEL[c.tier]} · {c.target === 'human' ? 'Humain' : 'Monstre'}
-                          </div>
-                        </div>
-                        {have ? (
-                          <span className="text-[10px] font-mono text-emerald-400 uppercase">Possédé</span>
-                        ) : (
-                          <button
-                            disabled={!!busy || coins < price}
-                            onClick={() => run(c.id, () => onBuy(c.id))}
-                            className="px-3 py-1.5 font-mono text-xs flex items-center gap-1 border border-amber-600 text-amber-300 hover:bg-amber-900/40 disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            {busy === c.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Coins className="w-3 h-3" />} {price}
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{offers.map(offerCard)}</div>
+              </>
+            )}
+
+            {tab === 'event' && season && (
+              <>
+                <div
+                  className="mb-4 p-3 border text-center"
+                  style={{ borderColor: SEASON_INFO[season].color + '88', background: `linear-gradient(90deg, ${SEASON_INFO[season].color}22, ${SEASON_INFO[season].accent}22)` }}
+                >
+                  <div className="text-2xl">{season === 'noel' ? '🎄 ❄️ 🎅 ❄️ 🎄' : '🎃 🦇 👻 🦇 🎃'}</div>
+                  <div className="font-serif font-black text-lg tracking-widest" style={{ color: SEASON_INFO[season].color }}>
+                    {season === 'noel' ? 'JOYEUX NOËL À SAINT-AURORE' : 'HALLOWEEN À SAINT-AURORE'}
+                  </div>
+                  <div className="text-[11px] font-mono text-zinc-400">
+                    Skins en édition limitée, en vente seulement pendant l'événement ({SEASON_INFO[season].dates}).
+                  </div>
                 </div>
+                {season === 'noel' && wallet.advent && (
+                  <AdventCalendar open={wallet.advent.open} claimed={wallet.advent.claimed} busy={!!busy} onOpen={openAdvent} />
+                )}
+                <h3 className="font-mono uppercase tracking-[0.25em] text-xs mb-2" style={{ color: SEASON_INFO[season].accent }}>
+                  {SEASON_INFO[season].emoji} Boutique {season === 'noel' ? 'de Noël' : "d'Halloween"}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{eventOffers.map(offerCard)}</div>
               </>
             )}
 
@@ -382,7 +537,12 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
                 )}
               </>
             )}
-            {tab === 'admin' && wallet.admin && token && <AdminPanel token={token} />}
+            {tab === 'admin' && wallet.admin && token && (
+              <>
+                {onSetSeason && <SeasonSwitch value={wallet.seasonSetting ?? 'auto'} onSet={onSetSeason} />}
+                <AdminPanel token={token} />
+              </>
+            )}
             {error && <p className="text-xs font-mono text-red-400 mt-3">{error}</p>}
           </>
         )}
@@ -390,7 +550,12 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
         {reveal && (
           <div className="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center" onClick={() => reveal.result && setReveal(null)}>
             {(() => {
-              const b = reveal.box === 'daily' ? { name: 'Cadeau du jour', color: '#34d399' } : BOXES.find((x) => x.id === reveal.box)!;
+              const b =
+                reveal.box === 'daily'
+                  ? { name: 'Cadeau du jour', color: '#34d399' }
+                  : reveal.box === 'advent'
+                    ? { name: "Calendrier de l'Avent", color: '#ef4444' }
+                    : BOXES.find((x) => x.id === reveal.box)!;
               const r = reveal.result;
               const skin = r?.skin ? cosmetic(r.skin) : undefined;
               return (

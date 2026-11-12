@@ -24,6 +24,7 @@ import { HoboShop } from './components/HoboShop';
 import { IS_TOUCH, RotateHint, TouchControls, enterMobileFullscreen } from './components/TouchControls';
 import type { BoxId, SupplyKind } from './economy';
 import type { StatKey } from './achievements';
+import { Season, SeasonSetting, getActiveSeason, onSeasonChange, setActiveSeason } from './seasons';
 import { challengeMet, dailyChallenge, fmtTime } from './challenges';
 import { LeaderboardMenu } from './components/Leaderboard';
 import { IntroOverlay } from './components/IntroOverlay';
@@ -171,6 +172,24 @@ export default function App() {
   const [customize, setCustomize] = useState<null | 'edit' | 'welcome'>(null);
   /** Coins, owned skins, today's shop. */
   const [wallet, setWallet] = useState<WalletView | null>(null);
+  // 🎄 / 🎃 Event on (decorations, menu, event shop): the server decides, local date until it answers
+  const [season, setSeason] = useState<Season | null>(getActiveSeason());
+  useEffect(
+    () =>
+      onSeasonChange((s) => {
+        setSeason(s);
+        engineRef.current?.refreshSeasonDecor();
+      }),
+    []
+  );
+  useEffect(() => {
+    api.season().then((s) => {
+      if (s !== undefined) setActiveSeason(s);
+    });
+  }, []);
+  useEffect(() => {
+    if (wallet && wallet.season !== undefined) setActiveSeason(wallet.season ?? null);
+  }, [wallet]);
   const [shopOpen, setShopOpen] = useState(false);
   /** Talking to the hobo in the warehouse */
   const [hoboOpen, setHoboOpen] = useState(false);
@@ -647,6 +666,13 @@ export default function App() {
     showNewAch(r.newAch);
     return r.result;
   };
+  const claimAdvent = async (day: number) => {
+    const r = await api.claimAdvent(tokenOrThrow(), day);
+    setWallet(r);
+    showNewAch(r.newAch);
+    return r.result;
+  };
+  const adminSetSeason = async (s: SeasonSetting) => setWallet(await api.adminSeason(tokenOrThrow(), s));
   const hoboBuy = async (kind: string) => {
     const e = engineRef.current;
     if (!e || e.handsFull) throw new Error('Mains pleines.');
@@ -881,6 +907,8 @@ export default function App() {
           onToggleMusic={() => setMenuMusic((m) => !m)}
           coins={wallet?.wallet.coins ?? null}
           giftReady={!!wallet?.dailyAvailable}
+          season={season}
+          adventReady={!!wallet?.advent && wallet.advent.claimed.length < wallet.advent.open}
           onShop={() => {
             refreshWallet();
             setShopOpen(true);
@@ -956,6 +984,8 @@ export default function App() {
           onBuy={buyCosmetic}
           onOpenBox={openBox}
           onClaimDaily={claimDaily}
+          onClaimAdvent={claimAdvent}
+          onSetSeason={adminSetSeason}
           token={session?.token ?? null}
           onLogin={() => {
             setShopOpen(false);
