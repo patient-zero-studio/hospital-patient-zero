@@ -21,6 +21,7 @@ import { Appearance, DEFAULT_APPEARANCE } from './appearance';
 import { api, Boost, BoostKind, FriendsView, Session, WalletView } from './net/api';
 import { LevelUpToast } from './components/LevelUpToast';
 import { WakeScreen } from './components/WakeScreen';
+import { ProgressionMenu, progressionAlerts } from './components/ProgressionMenu';
 import { TUTO_STEPS, TutorialOverlay, markTutorialDone, tutorialDone } from './components/Tutorial';
 import { levelReward } from './levels';
 import { FriendsPanel, InviteToast } from './components/FriendsPanel';
@@ -116,6 +117,7 @@ const EMPTY_HUD: HudSnapshot = {
   blindLeft: 0,
   runCoins: 0,
   runTreats: 0,
+  presents: null,
   treatEmoji: null,
   selectedSlot: 0,
   voice: null,
@@ -419,6 +421,7 @@ export default function App() {
     const e = engineRef.current!;
     grantRewardRef.current(e.builtDifficulty ?? 2);
     bankTreatsRef.current();
+    if (e.xmasNight) xmasRewardRef.current(e.runPresents);
     const cp = campaignRef.current;
     if (cp && !onlineRef.current) {
       cp.time += e.runTime;
@@ -443,6 +446,7 @@ export default function App() {
   victoryRef.current = onVictory;
 
   const startCampaign = () => {
+    xmasRef.current = false;
     engineRef.current?.setNet(null);
     if (engineRef.current) engineRef.current.levelSeed = null;
     campaignRef.current = { ch: 1, diff: difficulty, time: 0, carry: null };
@@ -489,6 +493,12 @@ export default function App() {
     getScreamerFace(); // pre-render now so the scare doesn't hitch
     engine.setDifficulty(diff);
     engine.chapter = ch;
+    // 🎄 Christmas night is a separate mode of chapter 1
+    const xmas = xmasRef.current && ch === 1 && !onlineRef.current;
+    if (engine.xmasNight !== xmas) {
+      engine.xmasNight = xmas;
+      fresh = true;
+    }
     // The daily challenge is a solo thing
     const wantChallenge = !onlineRef.current && challengeOnRef.current ? dailyChallenge().id : null;
     if (engine.challenge !== wantChallenge) fresh = true;
@@ -508,7 +518,17 @@ export default function App() {
   };
 
   const hasStartedOnce = useRef(false);
+  const xmasRef = useRef(false);
+  const startXmasNight = () => {
+    xmasRef.current = true;
+    campaignRef.current = null;
+    engineRef.current?.setNet(null);
+    if (engineRef.current) engineRef.current.levelSeed = null;
+    beginRun(true, difficulty < 2 ? (2 as Difficulty) : difficulty, 1);
+    hasStartedOnce.current = true;
+  };
   const handleStartGame = () => {
+    xmasRef.current = false;
     campaignRef.current = null;
     engineRef.current?.setNet(null);
     if (engineRef.current) engineRef.current.levelSeed = null;
@@ -524,6 +544,7 @@ export default function App() {
   const [tutorial, setTutorial] = useState<{ step: number; start: { x: number; z: number } | null; items: number; lamp?: boolean } | null>(null);
   const [tutoSeen, setTutoSeen] = useState(tutorialDone());
   const startTutorial = () => {
+    xmasRef.current = false;
     campaignRef.current = null;
     engineRef.current?.setNet(null);
     if (engineRef.current) engineRef.current.levelSeed = null;
@@ -676,11 +697,13 @@ export default function App() {
     const s = sessionRef.current;
     const e = engineRef.current;
     const n = e?.runTreats ?? 0;
-    if (!e || n <= 0 || !s) return;
+    const chests = e?.runChests ?? 0;
+    if (!e || (n <= 0 && chests <= 0) || !s) return;
     e.runTreats = 0;
+    e.runChests = 0;
     try {
       await new Promise((r) => setTimeout(r, 900)); // after the coin reward
-      setWallet(await api.addTreats(s.token, n));
+      setWallet(await api.addTreats(s.token, n, chests));
     } catch {
       /* offline */
     }
@@ -698,6 +721,21 @@ export default function App() {
   };
   const deathXpRef = useRef(deathXp);
   deathXpRef.current = deathXp;
+  /** 🎄 Christmas night: coins per present, the unique skin for all 12. */
+  const xmasReward = async (presents: number) => {
+    const s = sessionRef.current;
+    if (!s) return;
+    try {
+      await new Promise((r) => setTimeout(r, 1600));
+      const r = await api.xmasReward(s.token, presents);
+      setWallet(r);
+      setRunMsg(r.message);
+    } catch {
+      /* offline */
+    }
+  };
+  const xmasRewardRef = useRef(xmasReward);
+  xmasRewardRef.current = xmasReward;
   const bankTreatsRef = useRef(bankTreats);
   bankTreatsRef.current = bankTreats;
   const grantRewardRef = useRef(grantReward);
@@ -860,6 +898,17 @@ export default function App() {
     if (s) api.inviteDismiss(s.token, code).then(setFriends).catch(() => {});
   };
 
+  const [progOpen, setProgOpen] = useState(false);
+  const claimWeekly = async (id: string) => {
+    const r = await api.claimWeekly(tokenOrThrow(), id);
+    setWallet(r);
+    return r.result.text;
+  };
+  const claimPass = async (tier: number) => {
+    const r = await api.claimPass(tokenOrThrow(), tier);
+    setWallet(r);
+    return r.result.text;
+  };
   const adminBoost = async (kind: BoostKind | null, hours: number) => setWallet(await api.adminBoost(tokenOrThrow(), kind, hours));
   const adminSetSeason = async (s: SeasonSetting) => setWallet(await api.adminSeason(tokenOrThrow(), s));
   const hoboBuy = async (kind: string) => {
@@ -1100,6 +1149,15 @@ export default function App() {
           coins={wallet?.wallet.coins ?? null}
           shopLocked={!!wallet && !wallet.shopUnlocked}
           level={wallet?.level ?? null}
+          onProgression={
+            session
+              ? () => {
+                  refreshWallet();
+                  setProgOpen(true);
+                }
+              : undefined
+          }
+          progressionAlert={progressionAlerts(wallet)}
           boost={boost}
           onFriends={
             session
@@ -1125,6 +1183,7 @@ export default function App() {
           ch5Unlocked={ch5Unlocked}
           onCampaign={startCampaign}
           onTutorial={startTutorial}
+          onXmasNight={season === 'noel' ? startXmasNight : undefined}
           tutorialDone={tutoSeen}
           challenge={todayChallenge}
           challengeOn={challengeOn}
@@ -1203,6 +1262,9 @@ export default function App() {
             setTutorial(null);
           }}
         />
+      )}
+      {progOpen && session && !isPlaying && (
+        <ProgressionMenu wallet={wallet} onClaimWeekly={claimWeekly} onClaimPass={claimPass} onClose={() => setProgOpen(false)} />
       )}
       {levelUp && <LevelUpToast level={levelUp.level} coins={levelUp.coins} onDone={() => setLevelUp(null)} />}
       {friendsOpen && session && !isPlaying && (
@@ -1337,6 +1399,7 @@ export default function App() {
           maxSlots={hud.maxSlots}
           runCoins={hud.runCoins}
           runTreats={hud.runTreats}
+          presents={hud.presents}
           treatEmoji={hud.treatEmoji}
           selectedSlot={hud.selectedSlot}
           voice={hud.voice}

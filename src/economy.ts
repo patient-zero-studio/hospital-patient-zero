@@ -21,6 +21,8 @@ export interface Cosmetic {
   season?: Season;
   /** Only in the advent calendar (never sold) */
   calendarOnly?: boolean;
+  /** Earned, never sold: season pass tier or player level */
+  unlock?: 'pass' | 'level' | 'xmas';
 }
 
 export const TIER_PRICE: Record<Tier, number> = { petit: 100, moyen: 500, style: 1000, exclusif: 2000 };
@@ -96,6 +98,7 @@ export const CATALOG: Cosmetic[] = [
   ev('noel', 'm-noel-ginger', 'Bonhomme pain d\'épice', 'monster', 'outfit', 'gingerbread', 'style', true),
   ev('noel', 'm-noel-krampus', 'Krampus', 'monster', 'outfit', 'krampus', 'exclusif', true),
   ev('noel', 'h-noel-santa', 'Père Noël', 'human', 'outfit', 'santa', 'exclusif', true),
+  { ...ev('noel', 'm-noel-evilsanta', 'Père Noël maléfique', 'monster', 'outfit', 'evilsanta', 'exclusif', true), unlock: 'xmas' },
 
   // ---- 🎃 Halloween (1er octobre → 5 novembre) ----
   ev('halloween', 'h-hw-gown-pumpkin', 'Blouse citrouille', 'human', 'gown', '#f97316', 'petit'),
@@ -138,11 +141,21 @@ export const CATALOG: Cosmetic[] = [
   ev('poisson', 'h-pa-clownnose', 'Nez de clown', 'human', 'acc', 'clownnose', 'moyen'),
   ev('poisson', 'h-pa-clown', 'Clown farceur', 'human', 'outfit', 'clown', 'style'),
   ev('poisson', 'm-pa-clown', 'Clown maléfique', 'monster', 'outfit', 'clownm', 'exclusif'),
+
+  // ---- 🏆 Pass de saison (paliers 10, 20, 30) ----
+  { ...c('h-pass-crown', 'Couronne du survivant', 'human', 'acc', 'crown', 'style'), unlock: 'pass' },
+  { ...c('m-pass-toxic', 'Patient Toxique', 'monster', 'outfit', 'toxic', 'style'), unlock: 'pass' },
+  { ...c('h-pass-hazmat', 'Combinaison NRBC', 'human', 'outfit', 'hazmat', 'exclusif'), unlock: 'pass' },
+  // ---- ⭐ Niveaux 10, 25, 50, 100 ----
+  { ...c('h-lvl-goggles', 'Lunettes de vision nocturne', 'human', 'acc', 'nightvision', 'moyen'), unlock: 'level' },
+  { ...c('m-lvl-abyss', 'Créature des abysses', 'monster', 'outfit', 'abyss', 'style'), unlock: 'level' },
+  { ...c('h-lvl-veteran', 'Vétéran de Saint-Aurore', 'human', 'outfit', 'veteran', 'exclusif'), unlock: 'level' },
+  { ...c('m-lvl-legend', 'Patient Zéro Légendaire', 'monster', 'outfit', 'legend', 'exclusif'), unlock: 'level' },
 ];
 
 export const cosmetic = (id: string) => CATALOG.find((x) => x.id === id);
 /** Everyday items (daily shop, boxes, free gift): no event items. */
-const REGULAR = CATALOG.filter((x) => !x.season);
+const REGULAR = CATALOG.filter((x) => !x.season && !x.unlock);
 
 /** Items sold in the event shop while the event is on. */
 export const seasonShop = (season: Season | null): Cosmetic[] => (season ? CATALOG.filter((x) => x.season === season && !x.calendarOnly) : []);
@@ -390,6 +403,8 @@ export const rollDailyGift = (w: Wallet, streak: number, rnd: () => number = Mat
 export const buyCosmetic = (w: Wallet, id: string, key = todayKey(), season: Season | null = null): string | null => {
   const item = cosmetic(id);
   if (!item) return 'Article inconnu.';
+  if (item.unlock)
+    return item.unlock === 'pass' ? 'Ce skin se gagne dans le pass de saison.' : item.unlock === 'xmas' ? 'Ce skin se gagne dans la Nuit de Noël (les 12 cadeaux).' : 'Ce skin se gagne en montant de niveau.';
   const inEvent = seasonShop(season).some((x) => x.id === id);
   if (item.season && !inEvent) return item.calendarOnly ? 'Cet article est seulement dans le calendrier de l\'Avent.' : 'L\'événement est terminé.';
   if (!inEvent && !dailyShop(key).some((x) => x.id === id)) return 'Cet article n\'est plus en boutique aujourd\'hui.';
@@ -491,6 +506,10 @@ export const claimAdvent = (w: Wallet, day: number, rnd: () => number = Math.ran
 export const EVENT_BOX_PRICE = 500;
 /** Most treats a single run can bring back (anti-abuse). */
 export const MAX_TREATS_PER_RUN = 60;
+/** A rare chest found in a level gives this many treats (one per run at most). */
+export const TREATS_PER_CHEST = 250;
+/** 🎄 Christmas night: presents hidden in the hospital */
+export const XMAS_PRESENTS = 12;
 
 /** Opens an event box with treats (mutates). Returns null if not enough treats. */
 export const openEventBox = (w: Wallet, season: Season, rnd: () => number = Math.random): BoxResult | null => {

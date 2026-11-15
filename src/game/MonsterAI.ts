@@ -115,24 +115,31 @@ export class MonsterAI {
       this.disposables.push(o);
       return o;
     };
+    // Wet, sickly skin: a little sheen (thin skin over flesh) and a clear coat (sweat / mucus)
     const skin = t(
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshPhysicalMaterial({
         map: ProceduralTextures.getMonsterSkinTexture(),
         bumpMap: ProceduralTextures.getMonsterSkinTexture(),
-        bumpScale: 2,
-        roughness: 0.42,
+        bumpScale: 2.2,
+        roughness: 0.5,
         metalness: 0,
         color: 0x8f968d,
+        sheen: 0.5,
+        sheenColor: new THREE.Color(0x6a2a2a),
+        sheenRoughness: 0.6,
+        clearcoat: 0.35,
+        clearcoatRoughness: 0.45,
       })
     );
     const gown = t(
       new THREE.MeshStandardMaterial({ map: ProceduralTextures.getGownTexture(), color: 0x6a6a60, roughness: 0.95, side: THREE.DoubleSide })
     );
-    const dark = t(new THREE.MeshStandardMaterial({ color: 0x120505, roughness: 0.6 }));
+    const dark = t(new THREE.MeshStandardMaterial({ color: 0x0c0303, roughness: 0.7 }));
+    const gum = t(new THREE.MeshPhysicalMaterial({ color: 0x4a0d10, roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.2 }));
     this.skinMat = skin;
     this.gownMat = gown;
-    const teeth = t(new THREE.MeshStandardMaterial({ color: 0xc9c0a0, roughness: 0.4 }));
-    const claw = t(new THREE.MeshStandardMaterial({ color: 0x1d1a16, roughness: 0.3, metalness: 0.2 }));
+    const teeth = t(new THREE.MeshStandardMaterial({ color: 0xbfb38a, roughness: 0.35 }));
+    const claw = t(new THREE.MeshStandardMaterial({ color: 0x1d1a16, roughness: 0.25, metalness: 0.2 }));
 
     const mesh = (geo: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D, x = 0, y = 0, z = 0) => {
       const m = new THREE.Mesh(t(geo), mat);
@@ -141,49 +148,114 @@ export class MonsterAI {
       parent.add(m);
       return m;
     };
+    const gauss = (d2: number, w: number) => Math.exp(-d2 / (w * w));
 
-    // Hips
+    /**
+     * Organic limb: a lathe profile from the joint (y = 0) down to `len`,
+     * thick near the top (muscle), bony and thin lower down, knobbly joint at the end.
+     */
+    const limb = (len: number, rTop: number, rMuscle: number, rBottom: number, flat = 0.85) => {
+      const pts: THREE.Vector2[] = [];
+      const N = 18;
+      for (let i = 0; i <= N; i++) {
+        const k = i / N;
+        let r = THREE.MathUtils.lerp(rTop, rBottom, k);
+        r += (rMuscle - rTop) * Math.sin(Math.min(1, k / 0.55) * Math.PI) * (k < 0.55 ? 1 : 0.3);
+        r += rBottom * 0.35 * gauss((k - 0.95) ** 2, 0.06); // joint knob
+        if (i === 0 || i === N) r *= 0.55;
+        pts.push(new THREE.Vector2(Math.max(0.004, r), -k * len));
+      }
+      // Bottom → top so the faces point outwards
+      const geo = new THREE.LatheGeometry(pts.reverse(), 16);
+      geo.scale(1, 1, flat);
+      geo.computeVertexNormals();
+      return geo;
+    };
+
+    /** Sphere sculpted by a radius function of the unit direction. */
+    const sculpted = (wSeg: number, hSeg: number, dims: [number, number, number], f: (n: THREE.Vector3) => number) => {
+      const geo = new THREE.SphereGeometry(1, wSeg, hSeg);
+      const p = geo.attributes.position;
+      const n = new THREE.Vector3();
+      for (let i = 0; i < p.count; i++) {
+        n.set(p.getX(i), p.getY(i), p.getZ(i)).normalize();
+        const r = f(n);
+        p.setXYZ(i, n.x * r * dims[0], n.y * r * dims[1], n.z * r * dims[2]);
+      }
+      geo.computeVertexNormals();
+      return geo;
+    };
+
+    // ---- Hips: bony pelvis ----
     this.hips.position.y = 1.08;
     this.mesh.add(this.hips);
-    mesh(new THREE.CapsuleGeometry(0.15, 0.22, 4, 10), skin, this.hips).rotation.z = Math.PI / 2;
+    mesh(
+      sculpted(24, 16, [0.2, 0.12, 0.13], (n) => 1 + 0.18 * gauss((Math.abs(n.x) - 0.75) ** 2 + (n.y - 0.3) ** 2, 0.3) - 0.15 * gauss(n.x * n.x + (n.z - 0.9) ** 2, 0.35)),
+      skin,
+      this.hips,
+      0,
+      0.02,
+      0
+    );
 
-    // Legs (hip → thigh → knee → shin → foot) total length ≈ 1.05
+    // ---- Legs: wasted thighs, bony shins, long splayed feet ----
     for (const side of [-1, 1]) {
       const hip = new THREE.Group();
       hip.position.set(side * 0.14, 0, 0);
       this.hips.add(hip);
-      mesh(new THREE.CapsuleGeometry(0.075, 0.38, 4, 10), skin, hip, 0, -0.26, 0);
+      mesh(limb(0.54, 0.085, 0.092, 0.05), skin, hip, 0, 0.02, 0);
       const knee = new THREE.Group();
       knee.position.set(0, -0.52, 0);
       hip.add(knee);
-      mesh(new THREE.SphereGeometry(0.075, 10, 8), skin, knee);
-      mesh(new THREE.CapsuleGeometry(0.055, 0.4, 4, 10), skin, knee, 0, -0.26, 0);
-      const foot = mesh(new THREE.BoxGeometry(0.11, 0.06, 0.28), skin, knee, 0, -0.52, 0.07);
+      mesh(new THREE.SphereGeometry(0.058, 12, 10), skin, knee, 0, 0, 0.012).scale.set(1, 1.1, 1.05);
+      mesh(limb(0.5, 0.055, 0.06, 0.032), skin, knee, 0, 0, 0);
+      // Foot: a long tapered shape + toe bones
+      const foot = mesh(
+        sculpted(18, 10, [0.055, 0.035, 0.15], (n) => 1 - 0.25 * Math.max(0, -n.y) - 0.2 * Math.max(0, -n.z)),
+        skin,
+        knee,
+        0,
+        -0.53,
+        0.08
+      );
       foot.rotation.x = 0.05;
+      for (let toe = 0; toe < 4; toe++) {
+        const tb = mesh(new THREE.CapsuleGeometry(0.011, 0.05, 3, 6), skin, knee, -0.03 + toe * 0.02, -0.55, 0.22);
+        tb.rotation.x = Math.PI / 2 - 0.2;
+        mesh(new THREE.ConeGeometry(0.007, 0.03, 5), claw, knee, -0.03 + toe * 0.02, -0.555, 0.265).rotation.x = Math.PI / 2;
+      }
       this.legs.push({ hip, knee });
     }
 
-    // Spine (hunched forward)
+    // ---- Torso: sunken belly, ribs and spine under the skin, shoulder blades ----
     this.spine.rotation.x = 0.38;
     this.hips.add(this.spine);
-    mesh(new THREE.CapsuleGeometry(0.17, 0.42, 6, 12), skin, this.spine, 0, 0.32, 0).scale.set(1.15, 1, 0.75);
-    // Visible ribs
-    for (let i = 0; i < 5; i++) {
-      const rib = mesh(new THREE.TorusGeometry(0.17, 0.012, 4, 16, Math.PI), skin, this.spine, 0, 0.18 + i * 0.07, 0.02);
-      rib.rotation.set(Math.PI / 2, 0, 0);
-      rib.scale.set(1.1, 0.75, 1);
-    }
-    // Protruding vertebrae
-    for (let i = 0; i < 6; i++) {
-      mesh(new THREE.SphereGeometry(0.035, 6, 6), skin, this.spine, 0, 0.12 + i * 0.09, -0.13);
-    }
-    // Torn gown scraps: only around the hips, open on the chest and back
+    const torso = sculpted(48, 40, [0.205, 0.37, 0.15], (n) => {
+      const front = Math.max(0, n.z);
+      const back = Math.max(0, -n.z);
+      let r = 1;
+      // Ribcage: ridges on the chest and the flanks
+      const ribZone = THREE.MathUtils.smoothstep(n.y, -0.25, 0.05) * (1 - THREE.MathUtils.smoothstep(n.y, 0.55, 0.75));
+      r += 0.045 * Math.max(0, Math.sin(n.y * 24 + 1.2)) * ribZone * (0.4 + 0.6 * Math.abs(n.x) + front * 0.4);
+      // Sternum dip, starved belly
+      r -= 0.05 * gauss(n.x * n.x, 0.15) * front * ribZone;
+      r -= 0.2 * front * (1 - THREE.MathUtils.smoothstep(n.y, -0.75, -0.2));
+      // Spine: a row of knobs down the back
+      r += 0.09 * gauss(n.x * n.x, 0.12) * back * (0.6 + 0.4 * Math.max(0, Math.sin(n.y * 30)));
+      // Shoulder blades sticking out
+      r += 0.12 * back * gauss((Math.abs(n.x) - 0.45) ** 2 + (n.y - 0.42) ** 2, 0.22);
+      // Collarbones
+      r += 0.06 * front * gauss((n.y - 0.8) ** 2, 0.08) * (1 - gauss(n.x * n.x, 0.1));
+      return r;
+    });
+    mesh(torso, skin, this.spine, 0, 0.33, 0);
+
+    // ---- Torn gown scraps: only around the hips, open on the chest and back ----
     const gownMesh = mesh(new THREE.CylinderGeometry(0.2, 0.27, 0.5, 18, 4, true, 0.9, Math.PI * 1.2), gown, this.spine, 0, 0.0, -0.01);
     gownMesh.rotation.y = Math.PI;
     const pos = gownMesh.geometry.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       const y = pos.getY(i);
-      // Ragged hem + crumpled cloth
       if (y < -0.2) pos.setY(i, y - Math.random() * 0.22);
       pos.setX(i, pos.getX(i) * (0.92 + Math.random() * 0.16));
       pos.setZ(i, pos.getZ(i) * (0.92 + Math.random() * 0.16));
@@ -191,64 +263,113 @@ export class MonsterAI {
     pos.needsUpdate = true;
     gownMesh.geometry.computeVertexNormals();
 
-    // Shoulders + arms (abnormally long)
+    // ---- Shoulders + abnormally long arms, jointed fingers with claws ----
     for (const side of [-1, 1]) {
       const shoulder = new THREE.Group();
       shoulder.position.set(side * 0.27, 0.6, 0);
       this.spine.add(shoulder);
-      mesh(new THREE.SphereGeometry(0.08, 10, 8), skin, shoulder);
-      mesh(new THREE.CapsuleGeometry(0.05, 0.45, 4, 10), skin, shoulder, 0, -0.29, 0);
+      mesh(new THREE.SphereGeometry(0.075, 14, 10), skin, shoulder).scale.set(1.1, 0.95, 1);
+      mesh(limb(0.58, 0.062, 0.07, 0.04), skin, shoulder, 0, 0, 0);
       const elbow = new THREE.Group();
       elbow.position.set(0, -0.56, 0);
       shoulder.add(elbow);
-      mesh(new THREE.SphereGeometry(0.05, 8, 8), skin, elbow);
-      mesh(new THREE.CapsuleGeometry(0.04, 0.5, 4, 10), skin, elbow, 0, -0.3, 0);
-      // Hand with long claws
+      mesh(new THREE.SphereGeometry(0.045, 10, 8), skin, elbow, 0, 0, -0.01).scale.set(1, 1, 1.2);
+      mesh(limb(0.6, 0.045, 0.05, 0.03), skin, elbow, 0, 0, 0);
       const hand = new THREE.Group();
       hand.position.set(0, -0.6, 0);
       elbow.add(hand);
-      mesh(new THREE.BoxGeometry(0.09, 0.12, 0.04), skin, hand);
-      for (let f = 0; f < 4; f++) {
-        const finger = mesh(new THREE.ConeGeometry(0.012, 0.24, 5), claw, hand, -0.035 + f * 0.023, -0.17, 0.01);
-        finger.rotation.x = Math.PI + 0.2;
-        finger.rotation.z = (f - 1.5) * 0.08;
+      // Bony palm
+      mesh(sculpted(16, 10, [0.05, 0.065, 0.022], (n) => 1 + 0.12 * Math.max(0, n.z) * Math.abs(Math.sin(n.x * 9))), skin, hand, 0, -0.01, 0);
+      // 4 long fingers (2 phalanges + claw) and a thumb
+      for (let f = 0; f < 5; f++) {
+        const thumb = f === 4;
+        const finger = new THREE.Group();
+        finger.position.set(thumb ? side * -0.045 : -0.036 + f * 0.024, thumb ? -0.02 : -0.07, 0.006);
+        finger.rotation.set(-0.15, 0, thumb ? side * 0.7 : (f - 1.5) * 0.09);
+        hand.add(finger);
+        const l1 = thumb ? 0.05 : 0.075 - Math.abs(f - 1.5) * 0.008;
+        mesh(limb(l1, 0.009, 0.01, 0.007, 1), skin, finger);
+        const mid = new THREE.Group();
+        mid.position.y = -l1;
+        mid.rotation.x = 0.35;
+        finger.add(mid);
+        mesh(limb(l1 * 0.85, 0.008, 0.0085, 0.006, 1), skin, mid);
+        const tip = mesh(new THREE.ConeGeometry(0.0075, 0.075, 6), claw, mid, 0, -l1 * 0.85 - 0.035, 0.004);
+        tip.rotation.x = Math.PI + 0.25;
       }
       shoulder.rotation.z = side * 0.12;
       this.arms.push({ shoulder, elbow });
     }
 
-    // Neck & head
+    // ---- Neck: thin, with the tendons showing ----
     this.neck.position.set(0, 0.7, 0.04);
     this.spine.add(this.neck);
-    mesh(new THREE.CapsuleGeometry(0.05, 0.16, 4, 8), skin, this.neck, 0, 0.08, 0);
+    mesh(limb(0.2, 0.06, 0.05, 0.058, 0.9), skin, this.neck, 0, 0.18, 0);
+    for (const side of [-1, 1]) {
+      const tendon = mesh(new THREE.CapsuleGeometry(0.009, 0.16, 3, 6), skin, this.neck, side * 0.028, 0.08, 0.035);
+      tendon.rotation.z = side * -0.25;
+    }
+
+    // ---- Head: elongated skull, deep eye sockets, cheekbones, no nose, no lips ----
     this.head.position.set(0, 0.2, 0.02);
     this.head.rotation.x = -0.45; // looks forward despite the hunch
     this.neck.add(this.head);
-    const skull = mesh(new THREE.SphereGeometry(0.14, 16, 14), skin, this.head, 0, 0.1, 0);
-    skull.scale.set(0.95, 1.4, 1.15);
-    // Elongated, bulging cranium at the back
-    mesh(new THREE.SphereGeometry(0.12, 14, 12), skin, this.head, 0.02, 0.22, -0.06).scale.set(1, 1.2, 1.2);
-    // Cheekbones
+    const skull = sculpted(64, 52, [0.133, 0.196, 0.161], (n) => {
+      let r = 1;
+      // Bulging, elongated cranium at the back
+      r += 0.3 * gauss((n.y - 0.55) ** 2 + (n.z + 0.55) ** 2 + n.x * n.x * 0.5, 0.5);
+      // Deep eye sockets
+      for (const s of [-1, 1]) r -= 0.2 * gauss((n.x - s * 0.36) ** 2 + (n.y - 0.2) ** 2 + (n.z - 0.86) ** 2, 0.2);
+      // Brow ridge above them
+      r += 0.06 * gauss((n.y - 0.38) ** 2 + (n.z - 0.86) ** 2, 0.13) * (1 - gauss(n.x * n.x, 0.08) * 0.5);
+      // High cheekbones, hollow cheeks under them
+      for (const s of [-1, 1]) {
+        r += 0.1 * gauss((n.x - s * 0.62) ** 2 + (n.y + 0.02) ** 2 + (n.z - 0.68) ** 2, 0.18);
+        r -= 0.1 * gauss((n.x - s * 0.55) ** 2 + (n.y + 0.38) ** 2 + (n.z - 0.6) ** 2, 0.2);
+      }
+      // Nasal cavity instead of a nose
+      r -= 0.14 * gauss(n.x * n.x * 3 + (n.y + 0.02) ** 2 + (n.z - 0.98) ** 2, 0.13);
+      // Sunken temples
+      for (const s of [-1, 1]) r -= 0.08 * gauss((n.x - s * 0.92) ** 2 + (n.y - 0.25) ** 2 + n.z * n.z, 0.3);
+      // The lower face is cut off: the jaw is a separate piece
+      if (n.y < -0.45) r *= 0.82 + 0.18 * THREE.MathUtils.smoothstep(n.y, -0.9, -0.45);
+      return r;
+    });
+    mesh(skull, skin, this.head, 0, 0.1, 0);
+    // Dark inside of the sockets and the nose hole
+    for (const side of [-1, 1]) mesh(new THREE.SphereGeometry(0.026, 12, 10), dark, this.head, side * 0.047, 0.135, 0.112);
+    mesh(new THREE.SphereGeometry(0.016, 10, 8), dark, this.head, 0, 0.098, 0.142).scale.set(0.8, 1.3, 0.6);
+    // Glowing pupils, deep in the sockets
     for (const side of [-1, 1]) {
-      mesh(new THREE.SphereGeometry(0.04, 8, 6), skin, this.head, side * 0.085, 0.08, 0.08);
-    }
-    // Sunken eye sockets with glowing pupils
-    for (const side of [-1, 1]) {
-      mesh(new THREE.SphereGeometry(0.035, 10, 8), dark, this.head, side * 0.05, 0.14, 0.115);
-      const eye = new THREE.Mesh(t(new THREE.SphereGeometry(0.014, 8, 6)), this.eyeMat);
-      eye.position.set(side * 0.05, 0.14, 0.135);
+      const eye = new THREE.Mesh(t(new THREE.SphereGeometry(0.0125, 10, 8)), this.eyeMat);
+      eye.position.set(side * 0.047, 0.137, 0.128);
       this.head.add(eye);
     }
-    // Lower jaw (hinged) with teeth
+    // Upper gum + crooked teeth
+    mesh(new THREE.TorusGeometry(0.058, 0.014, 6, 16, Math.PI), gum, this.head, 0, 0.045, 0.072).rotation.set(Math.PI / 2, 0, Math.PI);
+    for (let i = 0; i < 9; i++) {
+      const a = -0.95 + (i / 8) * 1.9;
+      const len = 0.022 + (i % 3 === 1 ? 0.016 : 0) + Math.abs(Math.sin(i * 7.3)) * 0.008;
+      const tooth = mesh(new THREE.ConeGeometry(0.0065, len, 5), teeth, this.head, Math.sin(a) * 0.056, 0.04 - len / 2, 0.072 + Math.cos(a) * 0.056);
+      tooth.rotation.set(Math.PI + (Math.sin(i * 3.1) * 0.15), 0, Math.sin(i * 5.7) * 0.18);
+    }
+    // ---- Lower jaw (hinged): U-shaped bone, gum, teeth ----
     this.jaw.position.set(0, 0.03, 0.02);
     this.head.add(this.jaw);
-    mesh(new THREE.BoxGeometry(0.15, 0.04, 0.13), skin, this.jaw, 0, -0.02, 0.05);
-    mesh(new THREE.BoxGeometry(0.12, 0.06, 0.02), dark, this.head, 0, 0.03, 0.12);
-    for (let i = 0; i < 6; i++) {
-      const tooth = mesh(new THREE.ConeGeometry(0.008, 0.035, 4), teeth, this.head, -0.05 + i * 0.02, 0.035, 0.125);
-      tooth.rotation.x = Math.PI;
-      const tooth2 = mesh(new THREE.ConeGeometry(0.008, 0.03, 4), teeth, this.jaw, -0.05 + i * 0.02, 0.01, 0.105);
-      tooth2.rotation.x = 0;
+    mesh(
+      sculpted(28, 14, [0.075, 0.032, 0.085], (n) => 1 - 0.35 * Math.max(0, n.y) - 0.25 * gauss(n.x * n.x + (n.z + 0.9) ** 2, 0.4)),
+      skin,
+      this.jaw,
+      0,
+      -0.03,
+      0.045
+    );
+    mesh(new THREE.TorusGeometry(0.052, 0.012, 6, 16, Math.PI), gum, this.jaw, 0, -0.006, 0.05).rotation.set(Math.PI / 2, 0, Math.PI);
+    for (let i = 0; i < 8; i++) {
+      const a = -0.9 + (i / 7) * 1.8;
+      const len = 0.02 + Math.abs(Math.cos(i * 4.1)) * 0.012;
+      const tooth = mesh(new THREE.ConeGeometry(0.006, len, 5), teeth, this.jaw, Math.sin(a) * 0.05, -0.004 + len / 2, 0.05 + Math.cos(a) * 0.05);
+      tooth.rotation.z = Math.sin(i * 2.3) * 0.2;
     }
   }
 
@@ -347,10 +468,12 @@ export class MonsterAI {
     this.eyeMat.emissive.set(o?.eyes ?? look.eyes);
     const fx = o?.skinFx;
     skin.metalness = fx === 'gold' ? 0.85 : 0;
-    skin.roughness = fx === 'gold' ? 0.28 : fx === 'bone' ? 0.6 : fx === 'frost' ? 0.85 : 0.42;
-    skin.emissive.set(fx === 'inferno' ? 0xff3a00 : fx === 'shadow' ? 0x14002a : fx === 'frost' ? 0x5ab0ff : 0x000000);
+    skin.roughness = fx === 'gold' ? 0.28 : fx === 'bone' ? 0.6 : fx === 'frost' ? 0.85 : fx === 'toxic' ? 0.3 : 0.42;
+    skin.emissive.set(
+      fx === 'inferno' ? 0xff3a00 : fx === 'shadow' ? 0x14002a : fx === 'frost' ? 0x5ab0ff : fx === 'toxic' ? 0x3aff1a : fx === 'abyss' ? 0x0a3a8a : 0x000000
+    );
     skin.emissiveMap = fx === 'inferno' ? skin.map : null;
-    skin.emissiveIntensity = fx === 'inferno' ? 1.4 : fx === 'shadow' ? 0.6 : fx === 'frost' ? 0.18 : 0;
+    skin.emissiveIntensity = fx === 'inferno' ? 1.4 : fx === 'shadow' ? 0.6 : fx === 'frost' ? 0.18 : fx === 'toxic' ? 0.45 : fx === 'abyss' ? 0.5 : 0;
     skin.transparent = fx === 'shadow';
     skin.opacity = fx === 'shadow' ? 0.82 : 1;
     skin.needsUpdate = true;

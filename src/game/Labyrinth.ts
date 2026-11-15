@@ -1050,6 +1050,16 @@ export class Labyrinth {
   // ---------------------------------------------------------------------
   // Supplies & coins scattered in the first part of the maze
   // ---------------------------------------------------------------------
+  /** Free floor spots for event treats (random cells reachable from the start). */
+  public freeSpots(n: number): THREE.Vector3[] {
+    const cells = [...this.bfs(0, 0, 34).entries()].filter(([, d]) => d >= 2).map(([k]) => k.split(',').map(Number) as [number, number]);
+    for (let i = cells.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [cells[i], cells[j]] = [cells[j], cells[i]];
+    }
+    return cells.slice(0, n).map(([gx, gz]) => this.cellPos(gx, gz, 0).add(new THREE.Vector3((Math.random() - 0.5) * 1.4, 0, (Math.random() - 0.5) * 1.4)));
+  }
+
   public supplyDrops(): { item: GameItem; pos: THREE.Vector3 }[] {
     const r = rng(hashN(this.sd(), 123));
     const dist = this.bfs(0, 0, 34);

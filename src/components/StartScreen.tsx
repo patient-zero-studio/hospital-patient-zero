@@ -39,6 +39,8 @@ const BoostBanner: React.FC<{ boost: Boost }> = ({ boost }) => {
 
 interface StartScreenProps {
   onStartGame: () => void;
+  /** 🎄 Christmas night special chapter (December only) */
+  onXmasNight?: () => void;
   /** 🎓 guided first game */
   onTutorial?: () => void;
   tutorialDone?: boolean;
@@ -52,6 +54,9 @@ interface StartScreenProps {
   coins: number | null;
   /** the free daily gift is waiting in the shop */
   giftReady?: boolean;
+  /** 🏆 season pass & weekly challenges */
+  onProgression?: () => void;
+  progressionAlert?: number;
   /** player level (null = not logged in) */
   level?: LevelInfo | null;
   /** ⚡ surprise event on */
@@ -96,6 +101,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onStartGame,
   onCampaign,
   onTutorial,
+  onXmasNight,
   tutorialDone = true,
   onMultiplayer,
   username,
@@ -105,6 +111,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   giftReady = false,
   shopLocked = false,
   level = null,
+  onProgression,
+  progressionAlert = 0,
   boost = null,
   onFriends,
   friendsOnline = null,
@@ -344,6 +352,16 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                 <span>Nouveau ? Commence par le tutoriel (2 min)</span>
               </button>
             )}
+            {onXmasNight && (
+              <button
+                onClick={onXmasNight}
+                className="px-8 py-3 bg-gradient-to-r from-red-800 to-emerald-800 hover:from-red-700 hover:to-emerald-700 text-white font-mono text-xs uppercase tracking-widest flex items-center gap-3 transition-all cursor-pointer border border-red-300/60 shadow-[0_0_24px_rgba(239,68,68,0.45)]"
+              >
+                <span>🎄</span>
+                <span>Chapitre spécial — Nuit de Noël</span>
+                <span className="normal-case tracking-normal text-amber-200">🎁 skin unique</span>
+              </button>
+            )}
             <button
               onClick={onStartGame}
               className="px-10 py-4 bg-red-700 hover:bg-red-600 text-white font-mono text-sm uppercase tracking-widest flex items-center gap-3 transition-all shadow-[0_0_30px_rgba(220,38,38,0.5)] cursor-pointer font-bold border border-red-500"
@@ -386,6 +404,20 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               )}
             </button>
             <div className="flex gap-2 flex-wrap justify-center">
+            {onProgression && (
+              <button
+                onClick={onProgression}
+                className="relative px-6 py-2.5 bg-black/60 hover:bg-violet-950/40 text-violet-200 font-mono text-xs uppercase tracking-widest flex items-center gap-3 transition-all cursor-pointer border border-violet-700/70 hover:border-violet-400"
+              >
+                <span>🏆</span>
+                <span>Pass & défis</span>
+                {progressionAlert > 0 && (
+                  <span className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1 rounded-full bg-emerald-500 text-black font-bold text-[11px] flex items-center justify-center animate-pulse">
+                    {progressionAlert}
+                  </span>
+                )}
+              </button>
+            )}
             {onTutorial && tutorialDone && (
               <button
                 onClick={onTutorial}

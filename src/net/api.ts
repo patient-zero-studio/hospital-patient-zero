@@ -5,6 +5,7 @@ import type { BoxId, BoxResult, SupplyKind, Wallet } from '../economy';
 import type { AchState, StatKey } from '../achievements';
 import type { Season, SeasonSetting } from '../seasons';
 import type { LevelInfo } from '../levels';
+import type { WeeklyDef } from '../progression';
 
 export type BoostKind = 'coins2' | 'treats2' | 'xp2' | 'all2';
 export interface Boost {
@@ -35,6 +36,10 @@ export interface WalletView {
   challenge?: { id: string; done: boolean };
   /** player level (XP) */
   level?: LevelInfo;
+  /** 🗓️ weekly challenges */
+  weekly?: { resetAt: number; list: (WeeklyDef & { progress: number; claimed: boolean })[] };
+  /** 🏆 season pass of the month */
+  pass?: { key: string; name: string; xp: number; tier: number; claimed: number[]; ends: number };
   /** ⚡ surprise event on (double coins / treats / XP) */
   boost?: Boost | null;
   /** false until the player escapes once (Exploration is enough) */
@@ -69,6 +74,22 @@ export interface AdminUser {
   username: string;
   coins: number;
   admin: boolean;
+  banned?: boolean;
+  level?: number;
+  createdAt?: string;
+}
+
+export interface AdminStats {
+  accounts: number;
+  banned: number;
+  online: number;
+  playing: number;
+  rooms: number;
+  coins: number;
+  shopUnlocked: number;
+  days: { day: string; signups: number; escapes: number; deaths: number; players: number }[];
+  topSkins: { name: string; count: number }[];
+  levels: Record<string, number>;
 }
 
 export interface Session {
@@ -166,9 +187,12 @@ export const api = {
   },
   reward: (token: string, difficulty: number, found: number): Promise<WalletView & { gained: number; xp?: number }> =>
     post('/api/wallet/reward', { difficulty, found }, token),
+  claimWeekly: (token: string, id: string): Promise<WalletView & { result: BoxResult }> => post('/api/weekly/claim', { id }, token),
+  claimPass: (token: string, tier: number): Promise<WalletView & { result: BoxResult }> => post('/api/pass/claim', { tier }, token),
+  xmasReward: (token: string, presents: number): Promise<WalletView & { message: string }> => post('/api/event/xmas', { presents }, token),
   claimDaily: (token: string): Promise<WalletView & { result: BoxResult }> => post('/api/shop/daily', {}, token),
   /** Event treats picked up during a run (sent when it ends, win or lose). */
-  addTreats: (token: string, count: number): Promise<WalletView & { added: number }> => post('/api/event/treats', { count }, token),
+  addTreats: (token: string, count: number, chests = 0): Promise<WalletView & { added: number }> => post('/api/event/treats', { count, chests }, token),
   openEventBox: (token: string): Promise<WalletView & { result: BoxResult }> => post('/api/event/box', {}, token),
   claimAdvent: (token: string, day: number): Promise<WalletView & { result: BoxResult }> => post('/api/shop/advent', { day }, token),
   /** Event + surprise boost on for everyone (undefined = server unreachable). */
@@ -231,6 +255,14 @@ export const api = {
     if (!res.ok) throw new Error(data.error || 'Serveur injoignable.');
     return data;
   },
+  async adminStats(token: string): Promise<AdminStats> {
+    const res = await fetch('/api/admin/stats', { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Serveur injoignable.');
+    return data;
+  },
+  adminModerate: (token: string, username: string, action: 'ban' | 'unban' | 'rename', newName?: string): Promise<{ message: string }> =>
+    post('/api/admin/moderate', { username, action, newName }, token),
   adminGift: (token: string, to: string, amount: number): Promise<{ to: string; coins: number }> => post('/api/admin/gift', { to, amount }, token),
 
   async logout(token: string) {

@@ -27,7 +27,7 @@ export interface HumanOutfit {
   /** extra material tweaks */
   gownFx?: 'gold' | 'neon' | 'white' | 'ghost';
   hairFx?: 'neon';
-  extras?: ('stethoscope' | 'mohawk' | 'stripes' | 'belt' | 'xmasbands' | 'cape' | 'wings')[];
+  extras?: ('stethoscope' | 'mohawk' | 'stripes' | 'belt' | 'xmasbands' | 'cape' | 'wings' | 'medal')[];
 }
 
 export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
@@ -51,6 +51,9 @@ export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
   cupid: { gown: '#fff1f5', hair: '#f5d36a', accs: ['heartshades'], gownFx: 'white', extras: ['wings'] },
   // 🐟 Poisson d'avril
   clown: { gown: '#facc15', hair: '#f97316', accs: ['clownnose', 'fishhat'], extras: ['xmasbands'] },
+  // 🏆 Pass de saison / ⭐ niveaux
+  hazmat: { gown: '#f5c400', hair: '#1d1d22', accs: ['gasmask'], extras: ['belt'] },
+  veteran: { gown: '#4b5320', hair: '#2a2a20', accs: ['beret', 'shades'], extras: ['medal', 'belt'] },
 };
 
 /** Size of a head, so the event hats fit both the human and the creature. */
@@ -246,6 +249,53 @@ const buildFestive = (id: string, h: HeadSpec, track: Track, g: THREE.Group): bo
       for (const side of [-1, 1]) add(track, pivot, new THREE.SphereGeometry(0.009 * s, 8, 6), std(track, 0x111111), 0.075 * s, 0.012 * s, side * 0.03 * s);
       return true;
     }
+    case 'crown': {
+      const gold = std(track, 0xe8c040, { metalness: 0.95, roughness: 0.22, emissive: 0x403000, emissiveIntensity: 0.3 });
+      const band = add(track, g, new THREE.CylinderGeometry(h.rx * 0.95, h.rx * 0.92, 0.045 * s, 24, 1, true), gold, 0, h.top - 0.005 * s, 0);
+      band.scale.z = h.rz / h.rx;
+      (band.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+      const gems = [0xe11d48, 0x2563eb, 0x16a34a];
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const x = Math.sin(a) * h.rx * 0.93;
+        const z = Math.cos(a) * h.rz * 0.93;
+        add(track, g, new THREE.ConeGeometry(0.014 * s, 0.045 * s, 4), gold, x, h.top + 0.04 * s, z);
+        add(track, g, new THREE.OctahedronGeometry(0.009 * s), std(track, gems[i % 3], { roughness: 0.1, emissive: gems[i % 3], emissiveIntensity: 0.4 }), x * 1.03, h.top - 0.005 * s, z * 1.03);
+      }
+      return true;
+    }
+    case 'nightvision': {
+      const body = std(track, 0x1f2a1f, { roughness: 0.5, metalness: 0.4 });
+      const strap = std(track, 0x111111, { roughness: 0.9 });
+      const ring = add(track, g, new THREE.TorusGeometry(h.rx * 1.02, 0.01 * s, 6, 28), strap, 0, h.cy + 0.04 * s, 0);
+      ring.rotation.x = Math.PI / 2;
+      ring.scale.set(1, h.rz / h.rx, 1);
+      for (const side of [-1, 1]) {
+        const tube = add(track, g, new THREE.CylinderGeometry(0.018 * s, 0.021 * s, 0.05 * s, 14), body, side * 0.027 * s, h.cy + 0.06 * s, h.rz + 0.028 * s);
+        tube.rotation.x = Math.PI / 2 - 0.5;
+        const lens = add(track, g, new THREE.CircleGeometry(0.016 * s, 14), track(new THREE.MeshBasicMaterial({ color: 0x39ff6a })), side * 0.027 * s, h.cy + 0.072 * s, h.rz + 0.05 * s);
+        lens.rotation.x = -0.5;
+      }
+      return true;
+    }
+    case 'gasmask': {
+      const rubber = std(track, 0x1a1a1a, { roughness: 0.7, side: THREE.DoubleSide });
+      const m = add(track, g, new THREE.SphereGeometry(h.rx * 1.05, 20, 14, -Math.PI * 0.4, Math.PI * 0.8, Math.PI * 0.25, Math.PI * 0.55), rubber, 0, h.cy, 0.004 * s);
+      m.scale.set(1, 1.15, h.rz / h.rx);
+      const glass = track(new THREE.MeshPhysicalMaterial({ color: 0x88aacc, transparent: true, opacity: 0.45, roughness: 0.05 }));
+      for (const side of [-1, 1]) add(track, g, new THREE.CircleGeometry(0.02 * s, 16), glass, side * 0.03 * s, h.cy + 0.015 * s, h.rz + 0.008 * s);
+      const filter = add(track, g, new THREE.CylinderGeometry(0.024 * s, 0.028 * s, 0.04 * s, 14), std(track, 0x3a4a2a, { roughness: 0.6 }), 0, h.cy - 0.045 * s, h.rz + 0.02 * s);
+      filter.rotation.x = Math.PI / 2;
+      return true;
+    }
+    case 'beret': {
+      const felt = std(track, 0x7a1010, { roughness: 1 });
+      const b = add(track, g, new THREE.SphereGeometry(h.rx * 1.08, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2.2), felt, -0.012 * s, h.top - 0.04 * s, 0);
+      b.scale.set(1.05, 0.45, (h.rz / h.rx) * 1.02);
+      b.rotation.z = 0.18;
+      add(track, g, new THREE.CircleGeometry(0.012 * s, 10), std(track, 0xe8c040, { metalness: 0.9, roughness: 0.3 }), -h.rx * 0.5, h.top - 0.01 * s, h.rz * 0.85).rotation.y = -0.4;
+      return true;
+    }
     case 'clownnose':
       add(track, g, new THREE.SphereGeometry(0.024 * s, 16, 12), std(track, 0xff1a1a, { roughness: 0.25, emissive: 0x500000, emissiveIntensity: 0.5 }), 0, h.cy - 0.01 * s, h.rz + 0.016 * s);
       return true;
@@ -416,6 +466,12 @@ export const buildHumanBodyExtra = (id: string, track: Track): THREE.Group => {
       wing.scale.x = side;
       wing.rotation.y = side * 0.5;
     }
+  } else if (id === 'medal') {
+    const gold = std(track, 0xe8c040, { metalness: 0.95, roughness: 0.25 });
+    const ribbon = std(track, 0x1d4ed8, { roughness: 0.8 });
+    add(track, g, new THREE.BoxGeometry(0.03, 0.04, 0.004), ribbon, -0.08, 0.36, 0.17);
+    const m = add(track, g, new THREE.CylinderGeometry(0.018, 0.018, 0.005, 16), gold, -0.08, 0.32, 0.172);
+    m.rotation.x = Math.PI / 2;
   } else if (id === 'stripes') {
     const black = std(track, 0x151515, { roughness: 0.9, side: THREE.DoubleSide });
     for (let i = 0; i < 6; i++) {
@@ -434,7 +490,7 @@ export interface MonsterOutfit {
   eyes?: string;
   gown?: string;
   accs: string[];
-  skinFx?: 'bone' | 'inferno' | 'shadow' | 'gold' | 'frost';
+  skinFx?: 'bone' | 'inferno' | 'shadow' | 'gold' | 'frost' | 'toxic' | 'abyss';
 }
 
 export const MONSTER_OUTFITS: Record<string, MonsterOutfit> = {
@@ -457,6 +513,12 @@ export const MONSTER_OUTFITS: Record<string, MonsterOutfit> = {
   lovebeast: { skin: '#f472b6', eyes: '#ff3a8a', gown: '#9d174d', accs: ['heartboppers'] },
   // 🐟 Poisson d'avril
   clownm: { skin: '#f4f4f0', eyes: '#22d3ee', gown: '#7c3aed', accs: ['clownnose'] },
+  // 🏆 Pass de saison / ⭐ niveaux
+  toxic: { skin: '#5adf3a', eyes: '#e8ff3a', gown: '#2a3a10', accs: ['gasmask'], skinFx: 'toxic' },
+  abyss: { skin: '#0a1428', eyes: '#38bdf8', gown: '#050a14', accs: [], skinFx: 'abyss' },
+  legend: { skin: '#4a0808', eyes: '#ffffff', gown: '#140000', accs: ['crown', 'chains'], skinFx: 'inferno' },
+  // 🎄 Nuit de Noël
+  evilsanta: { skin: '#d8cfc4', eyes: '#ff1a0a', gown: '#9a0c18', accs: ['santahat', 'beard'] },
 };
 
 export const buildMonsterAccessory = (id: string, track: Track): THREE.Group => {

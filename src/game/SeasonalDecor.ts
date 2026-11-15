@@ -455,6 +455,60 @@ export const buildTreatModel = (season: Season, track: <T extends { dispose: () 
   return g;
 };
 
+/** 🎁 Christmas night present: a wrapped box with a glowing bow. */
+export const buildPresentModel = (track: <T extends { dispose: () => void }>(o: T) => T): THREE.Group => {
+  const g = new THREE.Group();
+  const colors = [0xc8102e, 0x15803d, 0x1d4ed8, 0xd4a840];
+  const paper = track(new THREE.MeshStandardMaterial({ color: colors[Math.floor(Math.random() * colors.length)], roughness: 0.5, emissive: 0x200000, emissiveIntensity: 0.3 }));
+  const ribbon = track(new THREE.MeshStandardMaterial({ color: 0xffe9a0, roughness: 0.3, metalness: 0.4, emissive: 0x806020, emissiveIntensity: 0.6 }));
+  const geo = track(new THREE.BoxGeometry(1, 1, 1));
+  const add = (m: THREE.Material, sx: number, sy: number, sz: number, y: number) => {
+    const o = new THREE.Mesh(geo, m);
+    o.scale.set(sx, sy, sz);
+    o.position.y = y;
+    g.add(o);
+  };
+  add(paper, 0.3, 0.26, 0.3, 0.13);
+  add(ribbon, 0.31, 0.27, 0.05, 0.13);
+  add(ribbon, 0.05, 0.27, 0.31, 0.13);
+  for (const s of [-1, 1]) {
+    const bow = new THREE.Mesh(track(new THREE.TorusGeometry(0.045, 0.014, 6, 12)), ribbon);
+    bow.position.set(s * 0.04, 0.3, 0);
+    bow.rotation.y = Math.PI / 2;
+    bow.rotation.x = s * 0.5;
+    g.add(bow);
+  }
+  return g;
+};
+
+/** 💎 Rare chest (250 treats): a small wooden chest with gold trim and a glow. */
+export const buildChestModel = (season: Season, track: <T extends { dispose: () => void }>(o: T) => T): THREE.Group => {
+  const g = new THREE.Group();
+  const wood = track(new THREE.MeshStandardMaterial({ color: 0x6b3f1d, roughness: 0.8 }));
+  const gold = track(new THREE.MeshStandardMaterial({ color: 0xe8c040, metalness: 0.9, roughness: 0.25, emissive: 0x6a4a00, emissiveIntensity: 0.5 }));
+  const box = (w: number, h: number, d: number, m: THREE.Material, x: number, y: number, z: number) => {
+    const o = new THREE.Mesh(track(new THREE.BoxGeometry(w, h, d)), m);
+    o.position.set(x, y, z);
+    g.add(o);
+    return o;
+  };
+  box(0.6, 0.32, 0.4, wood, 0, 0.16, 0);
+  const lid = new THREE.Mesh(track(new THREE.CylinderGeometry(0.2, 0.2, 0.6, 16, 1, false, 0, Math.PI)), wood);
+  lid.rotation.z = Math.PI / 2;
+  lid.position.y = 0.32;
+  g.add(lid);
+  for (const x of [-0.24, 0.24]) box(0.05, 0.34, 0.42, gold, x, 0.17, 0);
+  box(0.08, 0.1, 0.03, gold, 0, 0.3, 0.205);
+  // Coloured glow of the event around it
+  const glow = track(new THREE.MeshBasicMaterial({ color: new THREE.Color(SEASON_INFO[season].color), transparent: true, opacity: 0.4, depthWrite: false, side: THREE.BackSide }));
+  const halo = new THREE.Mesh(track(new THREE.SphereGeometry(0.62, 18, 12)), glow);
+  halo.position.y = 0.25;
+  halo.scale.y = 0.7;
+  g.add(halo);
+  g.userData.glow = glow;
+  return g;
+};
+
 /** Where to drop the treats: open floor next to the walk graph. */
 export const treatSpots = (map: MapData, count: number): THREE.Vector3[] => {
   const boxes = map.collisionBoxes.filter((b) => !b.disabled);

@@ -28,7 +28,8 @@ import { VentCrawler, CRAWLER_STATES, CrawlerHuman } from './VentCrawler';
 import { buildItemModel } from './ItemModels';
 import type { SupplyKind } from '../economy';
 import { SEASON_INFO, Season, getActiveSeason } from '../seasons';
-import { buildSeasonalDecor, buildTreatModel, treatSpots } from './SeasonalDecor';
+import { buildChestModel, buildPresentModel, buildSeasonalDecor, buildTreatModel, treatSpots } from './SeasonalDecor';
+import { TREATS_PER_CHEST, XMAS_PRESENTS } from '../economy';
 
 /** Anything that can kill the player (and play the death lunge). */
 type Killer = { poseLunge: (camPos: THREE.Vector3, t: number) => void; headWorld: THREE.Vector3 };
@@ -192,6 +193,8 @@ export interface HudSnapshot {
   runCoins: number;
   /** Event treats picked up this run (bonbons, œufs…) + their emoji */
   runTreats: number;
+  /** 🎄 Christmas night: presents found (null = not that mode) */
+  presents: number | null;
   treatEmoji: string | null;
   /** Selected hotbar slot ([X] drops it, mouse wheel changes it). */
   selectedSlot: number;
@@ -2920,7 +2923,8 @@ export class GameEngine {
       canBlind: this.canBlind(),
       blindLeft: this.blindTimer,
       runCoins: this.state.runCoins,
-      runTreats: this.runTreats,
+      runTreats: this.runTreats + this.runChests * TREATS_PER_CHEST,
+      presents: this.xmasNight ? this.runPresents : null,
       treatEmoji: this.treatSeason ? SEASON_INFO[this.treatSeason].treat.emoji : null,
       selectedSlot: this.selectedSlot,
       intro: !!this.intro,
@@ -4092,52 +4096,142 @@ export class GameEngine {
   /** Tutorial: what the player has done this run */
   public tut = { cans: 0, interacts: 0 };
   private treatSeason: Season | null = null;
-  private treats: { mesh: THREE.Group; y: number; taken: boolean }[] = [];
+  private treats: { mesh: THREE.Group; y: number; taken: boolean; chest?: boolean; present?: boolean }[] = [];
+  /** Rare chests found this run (each worth TREATS_PER_CHEST) */
+  public runChests = 0;
+  /** 🎄 Christmas night (special chapter): evil Santa, snow, 12 presents to find */
+  public xmasNight = false;
+  public runPresents = 0;
+  private snow: THREE.Points | null = null;
   private treatDisposables: { dispose: () => void }[] = [];
   private clearTreats() {
     for (const t of this.treats) t.mesh.removeFromParent();
+    this.snow?.removeFromParent();
+    this.snow = null;
     this.treatDisposables.forEach((d) => d.dispose());
     this.treats = [];
     this.treatDisposables = [];
   }
-  /** During an event, ~40 treats are scattered in the hospital / sewers (chapters 1-2). */
+  /** During an event, ~40 treats are scattered in every chapter, and sometimes a rare chest. */
   private spawnTreats() {
     this.clearTreats();
     this.runTreats = 0;
+    this.runChests = 0;
+    this.runPresents = 0;
+    if (this.xmasNight && !this.maze && !this.forest && !this.site) this.setupXmasNight();
     this.treatSeason = getActiveSeason();
-    if (!this.treatSeason || this.maze || this.forest || this.site) return;
+    if (!this.treatSeason || this.vsRole === 'monster') return;
     const track = <T extends { dispose: () => void }>(o: T) => {
       this.treatDisposables.push(o);
       return o;
     };
-    for (const pos of treatSpots(this.map, 40)) {
-      const mesh = buildTreatModel(this.treatSeason, track);
+    const lv = this.maze ?? this.forest ?? this.site;
+    // Chapters 3-5 have their own floor; their spots are at ground level
+    const spots = lv ? lv.freeSpots(42).map((p) => p.setY(p.y + 0.45)) : treatSpots(this.map, 42);
+    // 1 chance in 3: one rare chest (250 treats) hidden among them
+    const chestAt = Math.random() < 0.34 && spots.length > 10 ? spots.length - 1 : -1;
+    spots.forEach((pos, i) => {
+      const chest = i === chestAt;
+      const mesh = chest ? buildChestModel(this.treatSeason!, track) : buildTreatModel(this.treatSeason!, track);
       mesh.position.copy(pos);
+      if (chest) mesh.position.y -= 0.45;
       mesh.rotation.y = Math.random() * Math.PI * 2;
       this.scene.add(mesh);
-      this.treats.push({ mesh, y: pos.y, taken: false });
-    }
+      this.treats.push({ mesh, y: mesh.position.y, taken: false, chest });
+    });
   }
   private updateTreats(delta: number) {
-    if (!this.treats.length || !this.treatSeason) return;
+    this.updateSnow(delta);
+    if (!this.treats.length) return;
     const t = performance.now() / 1000;
     const p = this.player.position;
     for (let i = 0; i < this.treats.length; i++) {
       const tr = this.treats[i];
       if (tr.taken) continue;
-      tr.mesh.rotation.y += delta * 1.6;
-      tr.mesh.position.y = tr.y + Math.sin(t * 2.2 + i) * 0.06;
+      if (tr.present) {
+        tr.mesh.rotation.y += delta * 0.6;
+      } else if (!tr.chest) {
+        tr.mesh.rotation.y += delta * 1.6;
+        tr.mesh.position.y = tr.y + Math.sin(t * 2.2 + i) * 0.06;
+      } else {
+        // The chest glows / pulses so you notice it from afar
+        const glow = tr.mesh.userData.glow as THREE.MeshBasicMaterial | undefined;
+        if (glow) glow.opacity = 0.35 + Math.sin(t * 3) * 0.2;
+      }
       const dx = tr.mesh.position.x - p.x;
       const dz = tr.mesh.position.z - p.z;
       if (dx * dx + dz * dz < 0.8 && Math.abs(p.y - tr.y) < 2.2) {
         tr.taken = true;
         tr.mesh.removeFromParent();
-        this.runTreats++;
         sound.playItemPickup();
+        if (tr.present) {
+          this.runPresents++;
+          this.state.showToast(
+            this.runPresents >= XMAS_PRESENTS
+              ? `🎁 ${XMAS_PRESENTS}/${XMAS_PRESENTS} — TOUS LES CADEAUX ! Sortez de l'hôpital pour gagner le skin.`
+              : `🎁 Cadeau ${this.runPresents}/${XMAS_PRESENTS}`
+          );
+          continue;
+        }
+        if (!this.treatSeason) continue;
         const info = SEASON_INFO[this.treatSeason].treat;
+        if (tr.chest) {
+          this.runChests++;
+          this.state.showToast(`💎 COFFRE RARE ! +${TREATS_PER_CHEST} ${info.many} ${info.emoji}`);
+          continue;
+        }
+        this.runTreats++;
         this.state.showToast(`${info.emoji} ${this.runTreats} ${this.runTreats > 1 ? info.many : info.one} — gardés même si vous mourez`);
       }
     }
+  }
+
+  /** 🎄 Christmas night: presents hidden everywhere, snow falling, Santa has turned… */
+  private setupXmasNight() {
+    const track = <T extends { dispose: () => void }>(o: T) => {
+      this.treatDisposables.push(o);
+      return o;
+    };
+    for (const pos of treatSpots(this.map, XMAS_PRESENTS + 6).slice(0, XMAS_PRESENTS)) {
+      const mesh = buildPresentModel(track);
+      mesh.position.set(pos.x, pos.y - 0.45, pos.z);
+      mesh.rotation.y = Math.random() * Math.PI * 2;
+      this.scene.add(mesh);
+      this.treats.push({ mesh, y: mesh.position.y, taken: false, present: true });
+    }
+    // Snow drifting down around the player (through the broken windows…)
+    const N = 1400;
+    const arr = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      arr[i * 3] = (Math.random() - 0.5) * 30;
+      arr[i * 3 + 1] = Math.random() * 3.4;
+      arr[i * 3 + 2] = (Math.random() - 0.5) * 30;
+    }
+    const geo = track(new THREE.BufferGeometry());
+    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    const mat = track(new THREE.PointsMaterial({ color: 0xffffff, size: 0.035, transparent: true, opacity: 0.85, depthWrite: false }));
+    this.snow = new THREE.Points(geo, mat);
+    this.snow.frustumCulled = false;
+    this.scene.add(this.snow);
+    // The creatures wear Santa's clothes tonight
+    for (const m of this.monsters) m.applyLook({ ...this.localLook.monster, outfit: 'evilsanta', acc: '' });
+    this.queueChapterToast(
+      `🎄 NUIT DE NOËL. Le Père Noël n'est pas passé… quelque chose a pris sa place. Retrouvez les ${XMAS_PRESENTS} cadeaux cachés dans l'hôpital, puis sortez. Tous les cadeaux = un skin unique !`
+    );
+  }
+  private updateSnow(delta: number) {
+    if (!this.snow) return;
+    const p = this.player.position;
+    const a = this.snow.geometry.attributes.position as THREE.BufferAttribute;
+    const t = performance.now() / 1000;
+    for (let i = 0; i < a.count; i++) {
+      let y = a.getY(i) - delta * (0.5 + (i % 7) * 0.06);
+      if (y < 0) y += 3.4;
+      a.setY(i, y);
+      a.setX(i, a.getX(i) + Math.sin(t + i) * delta * 0.15);
+    }
+    a.needsUpdate = true;
+    this.snow.position.set(p.x, 0, p.z);
   }
 
   /** Coins found during the run: yours if you get out. */

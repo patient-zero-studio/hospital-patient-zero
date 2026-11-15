@@ -5,6 +5,7 @@ import { Appearance, PALETTES } from '../appearance';
 import { CATALOG, Cosmetic, Slot, Target } from '../economy';
 import { CosmeticBadge } from './ShopMenu';
 import { MonsterAI } from '../game/MonsterAI';
+import { CHARACTERS } from '../characters';
 import { RemotePlayer } from '../game/RemotePlayer';
 
 interface Props {
@@ -205,6 +206,29 @@ export const CustomizeMenu: React.FC<Props> = ({ username, initial, welcome, own
           <div className="flex-1 space-y-4 w-full">
             {tab === 'human' ? (
               <>
+                <div>
+                  <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-1.5">Personnage</div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {CHARACTERS.map((c) => (
+                      <button
+                        key={c.id}
+                        title={c.desc}
+                        onClick={() =>
+                          setLook((l) => ({ ...l, human: { ...l.human, char: c.id, skin: c.colors.skin, hair: c.colors.hair, gown: c.colors.gown } }))
+                        }
+                        className={`flex flex-col items-center px-1 py-1.5 border-2 text-center ${
+                          (look.human.char || 'alex') === c.id ? 'border-white bg-zinc-800/60' : 'border-zinc-800 hover:border-zinc-500'
+                        }`}
+                      >
+                        <span className="text-2xl leading-none">{c.emoji}</span>
+                        <span className="text-[11px] text-zinc-100 mt-0.5 truncate w-full">{c.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] font-mono text-zinc-500 mt-1 min-h-[1.2em]">
+                    {CHARACTERS.find((c) => c.id === (look.human.char || 'alex'))?.desc}
+                  </p>
+                </div>
                 <Swatches label="Peau" colors={colors(PALETTES.humanSkin, 'human', 'skin')} value={look.human.skin} onPick={(c) => set('human', 'skin', c)} />
                 <Swatches label="Blouse" colors={colors(PALETTES.humanGown, 'human', 'gown')} value={look.human.gown} onPick={(c) => set('human', 'gown', c)} />
                 <Swatches label="Cheveux" colors={colors(PALETTES.humanHair, 'human', 'hair')} value={look.human.hair} onPick={(c) => set('human', 'hair', c)} />

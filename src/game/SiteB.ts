@@ -469,6 +469,24 @@ export class SiteB {
     ];
   }
 
+  /** Free floor spots for event treats. */
+  public freeSpots(n: number): THREE.Vector3[] {
+    const busy = (x: number, z: number) => this.boxes.some((b) => x > b.min.x - 0.5 && x < b.max.x + 0.5 && z > b.min.z - 0.5 && z < b.max.z + 0.5);
+    const free: THREE.Vector3[] = [];
+    for (let gz = 0; gz < G; gz++)
+      for (let gx = 0; gx < G; gx++) {
+        if (!this.isFloor(gx, gz)) continue;
+        const p = this.w(gx, gz, 0).add(new THREE.Vector3((Math.random() - 0.5) * 1.4, 0, (Math.random() - 0.5) * 1.4));
+        if (!busy(p.x, p.z)) free.push(p);
+      }
+    const out: THREE.Vector3[] = [];
+    while (free.length && out.length < n) {
+      const p = free.splice(Math.floor(Math.random() * free.length), 1)[0];
+      if (out.every((o) => o.distanceToSquared(p) > 16)) out.push(p);
+    }
+    return out;
+  }
+
   public supplyDrops(): { item: GameItem; pos: THREE.Vector3 }[] {
     const r = this.r;
     let n = 0;

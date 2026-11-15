@@ -31,6 +31,8 @@ import {
   seasonShop,
   EVENT_BOX_PRICE,
   MAX_TREATS_PER_RUN,
+  TREATS_PER_CHEST,
+  XMAS_PRESENTS,
   openEventBox,
 } from '../src/economy.ts';
 import { SEASONS, SeasonSetting, adventDay, adventYear, isSeasonSetting, resolveSeason } from '../src/seasons.ts';
@@ -38,6 +40,10 @@ import { AchDef, AchState, StatKey, applyAchReport, sanitizeAch } from '../src/a
 import { challengeMet, dailyChallenge } from '../src/challenges.ts';
 import { debouncedSaver, makeStore } from './storage.ts';
 import { DAILY_XP, DEATH_XP, ESCAPE_XP, levelOf, levelReward } from '../src/levels.ts';
+import { isBadName } from '../src/moderation.ts';
+import { LEVEL_SKINS, PASS_TIERS, PASS_XP_PER_TIER, nextWeek, passEnds, passKey, passName, passReward, weekKey, weeklyChallenges } from '../src/progression.ts';
+import { BOXES, SUPPLY_NAMES, TIER_LABEL, TIER_PRICE, cosmetic as cosmeticById } from '../src/economy.ts';
+import { CATALOG } from '../src/economy.ts';
 
 /** Admin accounts (lower case): infinite coins, can gift coins to anyone. */
 const ADMINS = new Set(['corrupted_wolf', ...(process.env.PZ_ADMINS ?? '').toLowerCase().split(',').filter(Boolean)]);
@@ -81,6 +87,14 @@ interface User {
   xp?: number;
   /** last XP for a lost run (anti-spam) */
   lastDeathXp?: number;
+  /** last Christmas night reward (anti-spam) */
+  lastXmas?: number;
+  /** Banned by an admin: can't log in any more */
+  banned?: boolean;
+  /** Weekly challenges: counters at the start of the week, escapes in Difficult+, rewards taken */
+  weekly?: { week: string; base: Partial<Record<StatKey, number>>; hard: number; claimed: string[] };
+  /** Season pass of the month: XP earned this month, tiers taken */
+  pass?: { key: string; xp: number; claimed: number[] };
   /** Friends (lower-case names) and friend requests received */
   friends?: string[];
   friendReqs?: string[];
@@ -126,7 +140,7 @@ const userFromToken = (token?: string | null) => {
   if (!token) return null;
   const s = sessions.get(token);
   if (!s) return null;
-  if (s.expires < Date.now()) {
+  if (s.expires < Date.now() || users.get(s.username.toLowerCase())?.banned) {
     sessions.delete(token);
     return null;
   }
@@ -161,11 +175,13 @@ app.post('/api/register', (req, res) => {
     return res.status(400).json({ error: 'Pseudo : 3 à 16 caractères (lettres, chiffres, _ ou -).' });
   if (typeof password !== 'string' || password.length < 6 || password.length > 64)
     return res.status(400).json({ error: 'Mot de passe : 6 à 64 caractères.' });
+  if (isBadName(username)) return res.status(400).json({ error: 'Ce pseudo n\'est pas autorisé. Choisis-en un autre (sans gros mots).' });
   const key = username.toLowerCase();
   if (users.has(key)) return res.status(409).json({ error: 'Ce pseudo est déjà pris.' });
   const salt = crypto.randomBytes(16).toString('hex');
   users.set(key, { username, salt, hash: hashPassword(password, salt), createdAt: new Date().toISOString() });
   saveUsers();
+  bumpStat('signups');
   res.json({ token: newSession(username), username });
 });
 
@@ -175,6 +191,7 @@ app.post('/api/login', (req, res) => {
   const user = typeof username === 'string' ? users.get(username.toLowerCase()) : undefined;
   if (!user || typeof password !== 'string' || !checkPassword(user, password))
     return res.status(401).json({ error: 'Pseudo ou mot de passe incorrect.' });
+  if (user.banned) return res.status(403).json({ error: 'Ce compte a été banni par un administrateur.' });
   res.json({ token: newSession(user.username), username: user.username });
 });
 
@@ -216,7 +233,47 @@ const walletOf = (u: User) => {
 };
 const authUser = (req: express.Request) => {
   const username = userFromToken(bearer(req));
-  return username ? users.get(username.toLowerCase()) : undefined;
+  const u = username ? users.get(username.toLowerCase()) : undefined;
+  if (u) markActive(u.username);
+  return u;
+};
+
+// ---- Daily statistics for the admin dashboard (last 60 days) ----
+interface DayStats {
+  signups: number;
+  escapes: number;
+  deaths: number;
+  /** players seen that day */
+  players: string[];
+}
+const stats: Record<string, DayStats> = await (async () => {
+  try {
+    const raw = await store.load('stats');
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+})();
+const statsSaver = debouncedSaver(store, 'stats', () => JSON.stringify(stats), remote ? 5000 : 1000);
+const today = () => {
+  const k = todayKey();
+  if (!stats[k]) {
+    stats[k] = { signups: 0, escapes: 0, deaths: 0, players: [] };
+    const keys = Object.keys(stats).sort();
+    while (keys.length > 60) delete stats[keys.shift()!];
+  }
+  return stats[k];
+};
+const bumpStat = (k: 'signups' | 'escapes' | 'deaths') => {
+  today()[k]++;
+  statsSaver.save();
+};
+const markActive = (name: string) => {
+  const d = today();
+  if (!d.players.includes(name)) {
+    d.players.push(name);
+    statsSaver.save();
+  }
 };
 const nextReset = () => {
   const d = new Date();
@@ -270,12 +327,47 @@ app.get('/api/season', (_req, res) => {
   res.json({ season: currentSeason(), boost: activeBoost() ?? null });
 });
 
-/** Adds XP (doubled during an XP surprise event) and pays the coins of every level reached. */
+/** Adds XP (doubled during an XP surprise event): coins for every level reached, level skins, season pass. */
 const addXp = (u: User, amount: number) => {
   const before = levelOf(u.xp ?? 0).level;
-  u.xp = (u.xp ?? 0) + Math.max(0, Math.floor(amount * boostMul('xp')));
+  const gain = Math.max(0, Math.floor(amount * boostMul('xp')));
+  u.xp = (u.xp ?? 0) + gain;
+  passOf(u).xp += gain;
   const after = levelOf(u.xp).level;
   for (let l = before + 1; l <= after; l++) walletOf(u).coins += levelReward(l);
+  grantLevelSkins(u);
+};
+const grantLevelSkins = (u: User) => {
+  const lv = levelOf(u.xp ?? 0).level;
+  const w = walletOf(u);
+  for (const ls of LEVEL_SKINS) if (lv >= ls.level && !w.owned.includes(ls.skin)) w.owned.push(ls.skin);
+};
+
+// ---- 🗓️ Weekly challenges & 🏆 season pass ----
+const weeklyOf = (u: User) => {
+  const wk = weekKey();
+  if (!u.weekly || u.weekly.week !== wk) u.weekly = { week: wk, base: { ...achOf(u).stats }, hard: 0, claimed: [] };
+  return u.weekly;
+};
+const weeklyView = (u: User) => {
+  const w = weeklyOf(u);
+  const st = achOf(u).stats;
+  return {
+    resetAt: nextWeek(),
+    list: weeklyChallenges(w.week).map((c) => {
+      const done = c.counter === 'hard' ? w.hard : Math.max(0, (st[c.counter] ?? 0) - (w.base[c.counter] ?? 0));
+      return { ...c, progress: Math.min(c.goal, done), claimed: w.claimed.includes(c.id) };
+    }),
+  };
+};
+const passOf = (u: User) => {
+  const k = passKey();
+  if (!u.pass || u.pass.key !== k) u.pass = { key: k, xp: 0, claimed: [] };
+  return u.pass;
+};
+const passView = (u: User) => {
+  const p = passOf(u);
+  return { key: p.key, name: passName(p.key), xp: p.xp, tier: Math.min(PASS_TIERS, Math.floor(p.xp / PASS_XP_PER_TIER)), claimed: p.claimed, ends: passEnds() };
 };
 
 /** Shop locked until the player gets out once (accounts that already bought skins keep it). */
@@ -284,6 +376,8 @@ const SHOP_LOCKED = 'Boutique verrouillée : échappe-toi de l\'hôpital une foi
 
 const walletView = (u: User) => ({
   level: levelOf(u.xp ?? 0),
+  weekly: weeklyView(u),
+  pass: passView(u),
   boost: activeBoost() ?? null,
   shopUnlocked: shopOpenFor(u),
   season: currentSeason(),
@@ -407,7 +501,105 @@ app.post('/api/achievements', (req, res) => {
 app.get('/api/admin/users', (req, res) => {
   const user = authUser(req);
   if (!user || !isAdmin(user)) return res.status(403).json({ error: 'Réservé aux admins.' });
-  res.json([...users.values()].map((u) => ({ username: u.username, coins: walletOf(u).coins, admin: isAdmin(u) })));
+  res.json(
+    [...users.values()].map((u) => ({
+      username: u.username,
+      coins: walletOf(u).coins,
+      admin: isAdmin(u),
+      banned: !!u.banned,
+      level: levelOf(u.xp ?? 0).level,
+      createdAt: u.createdAt,
+    }))
+  );
+});
+
+// 📊 Admin dashboard
+app.get('/api/admin/stats', (req, res) => {
+  const user = authUser(req);
+  if (!user || !isAdmin(user)) return res.status(403).json({ error: 'Réservé aux admins.' });
+  const all = [...users.values()];
+  const players = all.filter((u) => !isAdmin(u));
+  const days: { day: string; signups: number; escapes: number; deaths: number; players: number }[] = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - i);
+    const k = todayKey(d);
+    const st = stats[k];
+    days.push({ day: k, signups: st?.signups ?? 0, escapes: st?.escapes ?? 0, deaths: st?.deaths ?? 0, players: st?.players.length ?? 0 });
+  }
+  const owned = new Map<string, number>();
+  for (const u of players) for (const id of walletOf(u).owned) owned.set(id, (owned.get(id) ?? 0) + 1);
+  const topSkins = [...owned.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([id, n]) => ({ name: CATALOG.find((c) => c.id === id)?.name ?? id, count: n }));
+  const levels = { '1-4': 0, '5-9': 0, '10-19': 0, '20-49': 0, '50+': 0 };
+  for (const u of players) {
+    const l = levelOf(u.xp ?? 0).level;
+    levels[l >= 50 ? '50+' : l >= 20 ? '20-49' : l >= 10 ? '10-19' : l >= 5 ? '5-9' : '1-4']++;
+  }
+  const now = Date.now();
+  const online = new Set([...clients].map((c) => c.username.toLowerCase()));
+  for (const [n, t] of lastSeen) if (now - t < 75000) online.add(n);
+  res.json({
+    accounts: players.length,
+    banned: players.filter((u) => u.banned).length,
+    online: online.size,
+    playing: [...clients].filter((c) => c.room?.started).length,
+    rooms: rooms.size,
+    coins: players.reduce((t, u) => t + walletOf(u).coins, 0),
+    shopUnlocked: players.filter((u) => shopOpenFor(u)).length,
+    days,
+    topSkins,
+    levels,
+  });
+});
+
+// 🛡️ Admin: ban / unban / rename a player
+app.post('/api/admin/moderate', (req, res) => {
+  const user = authUser(req);
+  if (!user || !isAdmin(user)) return res.status(403).json({ error: 'Réservé aux admins.' });
+  const key = String(req.body?.username ?? '').toLowerCase();
+  const target = users.get(key);
+  if (!target) return res.status(404).json({ error: 'Ce joueur n\'existe pas.' });
+  if (isAdmin(target)) return res.status(400).json({ error: 'Impossible sur un admin.' });
+  const action = req.body?.action;
+  if (action === 'ban' || action === 'unban') {
+    target.banned = action === 'ban';
+    if (target.banned) {
+      for (const [t, se] of sessions) if (se.username.toLowerCase() === key) sessions.delete(t);
+      for (const c of clients) if (c.username.toLowerCase() === key) c.ws.close();
+      if (remote) sessionsSaver.save();
+    }
+    saveUsers();
+    console.log(`[admin] ${user.username} ${target.banned ? 'bannit' : 'débannit'} ${target.username}`);
+    return res.json({ message: target.banned ? `⛔ ${target.username} est banni.` : `✅ ${target.username} peut rejouer.` });
+  }
+  if (action === 'rename') {
+    const name = String(req.body?.newName ?? '').trim();
+    const nk = name.toLowerCase();
+    if (!USERNAME_RE.test(name)) return res.status(400).json({ error: 'Pseudo : 3 à 16 caractères (lettres, chiffres, _ ou -).' });
+    if (isBadName(name)) return res.status(400).json({ error: 'Ce pseudo n\'est pas autorisé non plus.' });
+    if (nk !== key && users.has(nk)) return res.status(409).json({ error: 'Ce pseudo est déjà pris.' });
+    const old = target.username;
+    users.delete(key);
+    target.username = name;
+    users.set(nk, target);
+    // Everywhere the old name was used
+    for (const u of users.values()) {
+      if (u.friends) u.friends = u.friends.map((f) => (f === key ? nk : f));
+      if (u.friendReqs) u.friendReqs = u.friendReqs.map((f) => (f === key ? nk : f));
+    }
+    for (const list of Object.values(boards)) for (const e of list) if (e.username.toLowerCase() === key) e.username = name;
+    for (const se of sessions.values()) if (se.username.toLowerCase() === key) se.username = name;
+    for (const c of clients) if (c.username.toLowerCase() === key) c.username = name;
+    saveUsers();
+    saveBoards();
+    if (remote) sessionsSaver.save();
+    console.log(`[admin] ${user.username} renomme ${old} en ${name}`);
+    return res.json({ message: `✏️ ${old} s'appelle maintenant ${name}.` });
+  }
+  res.status(400).json({ error: 'Action inconnue.' });
 });
 
 app.post('/api/admin/gift', (req, res) => {
@@ -436,13 +628,41 @@ app.post('/api/admin/season', (req, res) => {
   res.json(walletView(user));
 });
 
+// 🎄 Christmas night: coins per present found, the unique skin for all of them
+app.post('/api/event/xmas', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  if (currentSeason() !== 'noel') return res.status(400).json({ error: 'La Nuit de Noël n\'est jouable qu\'en décembre.' });
+  const now = Date.now();
+  if (user.lastXmas && now - user.lastXmas < 60000) return res.json({ message: '', ...walletView(user) });
+  user.lastXmas = now;
+  const n = Math.min(XMAS_PRESENTS, Math.max(0, Math.floor(Number(req.body?.presents) || 0)));
+  const w = walletOf(user);
+  const coins = n * 20 * boostMul('coins');
+  w.coins += coins;
+  let message = `🎁 ${n}/${XMAS_PRESENTS} cadeaux : +${coins} pièces`;
+  if (n >= XMAS_PRESENTS) {
+    if (!w.owned.includes('m-noel-evilsanta')) {
+      w.owned.push('m-noel-evilsanta');
+      message += ' · 🎅 SKIN « Père Noël maléfique » débloqué !';
+    } else {
+      w.coins += 300;
+      message += ' · +300 pièces bonus (skin déjà gagné)';
+    }
+  }
+  addXp(user, 30 + n * 5);
+  saveUsers();
+  res.json({ message, ...walletView(user) });
+});
+
 // 🍬 Event treats picked up in a run (kept even if you die)
 app.post('/api/event/treats', (req, res) => {
   const user = authUser(req);
   if (!user) return res.status(401).json({ error: 'Session expirée.' });
   const season = currentSeason();
   const now = Date.now();
-  const n = Math.min(MAX_TREATS_PER_RUN, Math.max(0, Math.floor(Number(req.body?.count) || 0)));
+  const chests = Math.min(1, Math.max(0, Math.floor(Number(req.body?.chests) || 0)));
+  const n = Math.min(MAX_TREATS_PER_RUN, Math.max(0, Math.floor(Number(req.body?.count) || 0))) + chests * TREATS_PER_CHEST;
   if (!season || n <= 0 || (user.lastTreats && now - user.lastTreats < 15000)) return res.json({ added: 0, ...walletView(user) });
   user.lastTreats = now;
   const w = walletOf(user);
@@ -464,6 +684,66 @@ app.post('/api/event/box', (req, res) => {
   const newAch = reportAch(user, [], {}, { boxes: 1 });
   saveUsers();
   res.json({ result, newAch, ...walletView(user) });
+});
+
+// 🗓️ Weekly challenge reward
+app.post('/api/weekly/claim', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const c = weeklyView(user).list.find((x) => x.id === String(req.body?.id ?? ''));
+  if (!c) return res.status(404).json({ error: 'Ce défi n\'est pas de cette semaine.' });
+  if (c.claimed) return res.status(400).json({ error: 'Récompense déjà prise.' });
+  if (c.progress < c.goal) return res.status(400).json({ error: 'Défi pas encore réussi.' });
+  weeklyOf(user).claimed.push(c.id);
+  walletOf(user).coins += c.coins;
+  addXp(user, c.xp);
+  saveUsers();
+  res.json({ result: { kind: 'coins', coins: c.coins, text: `${c.coins} pièces + ${c.xp} XP` }, ...walletView(user) });
+});
+
+// 🏆 Season pass tier reward
+app.post('/api/pass/claim', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const t = Math.floor(Number(req.body?.tier));
+  const p = passOf(user);
+  if (!(t >= 1 && t <= PASS_TIERS)) return res.status(400).json({ error: 'Palier inconnu.' });
+  if (t > Math.floor(p.xp / PASS_XP_PER_TIER)) return res.status(400).json({ error: 'Palier pas encore atteint : joue encore un peu !' });
+  if (p.claimed.includes(t)) return res.status(400).json({ error: 'Déjà pris.' });
+  const w = walletOf(user);
+  const r = passReward(t);
+  let result: { kind: string; coins?: number; skin?: string; text: string };
+  if (r.kind === 'coins') {
+    w.coins += r.coins;
+    result = { kind: 'coins', coins: r.coins, text: `${r.coins} pièces` };
+  } else if (r.kind === 'supplies') {
+    const kinds = Object.keys(w.stash) as SupplyKind[];
+    const got: Record<string, number> = {};
+    for (let i = 0; i < r.count; i++) {
+      const k = kinds[Math.floor(Math.random() * kinds.length)];
+      w.stash[k]++;
+      got[k] = (got[k] ?? 0) + 1;
+    }
+    result = { kind: 'supplies', text: 'Ressources : ' + Object.entries(got).map(([k, n]) => `${n}× ${SUPPLY_NAMES[k as SupplyKind]}`).join(', ') + ' (auprès du SDF)' };
+  } else if (r.kind === 'box') {
+    // A free box: the price is given back first, then it opens as usual
+    w.coins += BOXES.find((b) => b.id === r.box)!.price;
+    const box = openBox(w, r.box)!;
+    result = { ...box, text: `${BOXES.find((b) => b.id === r.box)!.name} : ${box.text}` };
+  } else {
+    const item = cosmeticById(r.skin)!;
+    if (w.owned.includes(item.id)) {
+      const refund = Math.round(TIER_PRICE[item.tier] * 0.6);
+      w.coins += refund;
+      result = { kind: 'skin', skin: item.id, text: `${item.name} (déjà possédé → +${refund} pièces)` };
+    } else {
+      w.owned.push(item.id);
+      result = { kind: 'skin', skin: item.id, text: `${item.name} — ${TIER_LABEL[item.tier]} !` };
+    }
+  }
+  p.claimed.push(t);
+  saveUsers();
+  res.json({ result, ...walletView(user) });
 });
 
 // ⚡ Admin: surprise event for everyone (double coins / treats / XP) for a while
@@ -521,8 +801,10 @@ app.post('/api/wallet/reward', (req, res) => {
   const gained = (base + found) * boostMul('coins');
   walletOf(user).coins += gained;
   const xp = ESCAPE_XP[diff] * boostMul('xp');
+  if (diff >= 3) weeklyOf(user).hard++;
   addXp(user, ESCAPE_XP[diff]);
   user.lastReward = now;
+  bumpStat('escapes');
   saveUsers();
   res.json({ gained, xp, ...walletView(user) });
 });
@@ -535,6 +817,7 @@ app.post('/api/xp/death', (req, res) => {
   if (user.lastDeathXp && now - user.lastDeathXp < 30000) return res.json({ xp: 0, ...walletView(user) });
   user.lastDeathXp = now;
   addXp(user, DEATH_XP);
+  bumpStat('deaths');
   saveUsers();
   res.json({ xp: DEATH_XP * boostMul('xp'), ...walletView(user) });
 });
@@ -939,7 +1222,7 @@ const shutdown = async (sig: string) => {
   if (stopping) return;
   stopping = true;
   console.log(`[server] ${sig} : sauvegarde avant l'arrêt…`);
-  await Promise.allSettled([usersSaver.flush(), boardsSaver.flush(), settingsSaver.flush(), remote ? sessionsSaver.flush() : Promise.resolve()]);
+  await Promise.allSettled([usersSaver.flush(), boardsSaver.flush(), settingsSaver.flush(), statsSaver.flush(), remote ? sessionsSaver.flush() : Promise.resolve()]);
   process.exit(0);
 };
 process.on('SIGTERM', () => void shutdown('SIGTERM'));

@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Coins, Crown, Gift, Loader2, ShoppingBag, Sparkles, X } from 'lucide-react';
-import { ADVENT, BOXES, EVENT_BOX_PRICE, BoxId, BoxResult, CATALOG, Cosmetic, TIER_COLOR, TIER_LABEL, TIER_PRICE, cosmetic, fmtCoins } from '../economy';
+import { ADVENT, BOXES, EVENT_BOX_PRICE, TREATS_PER_CHEST, BoxId, BoxResult, CATALOG, Cosmetic, TIER_COLOR, TIER_LABEL, TIER_PRICE, cosmetic, fmtCoins } from '../economy';
 import { api, AdminUser, Boost, BoostKind, WalletView } from '../net/api';
 import { SEASON_INFO, Season, SeasonSetting } from '../seasons';
+import { AdminDashboard } from './AdminDashboard';
 
 /** Admin: start or stop an event (Christmas / Halloween) for every player. */
 const SeasonSwitch: React.FC<{ value: SeasonSetting; onSet: (s: SeasonSetting) => Promise<void> }> = ({ value, onSet }) => {
@@ -186,6 +187,8 @@ export const CosmeticBadge: React.FC<{ c: Cosmetic; size?: number }> = ({ c, siz
     yeti: '❄️', gingerbread: '🍪', krampus: '👹',
     bunnyears: '🐰', bunny: '🐰', chocobunny: '🍫', heartshades: '😍', heartboppers: '💕', cupid: '💘', lovebeast: '💗',
     fishhat: '🐟', clownnose: '🔴', clown: '🤡', clownm: '🤡',
+    evilsanta: '🎅',
+    crown: '👑', toxic: '☣️', hazmat: '☢️', nightvision: '🥽', abyss: '🌊', veteran: '🎖️', legend: '🩸',
     witchhat: '🧙', pumpkinhead: '🎃', witch: '🧙', vampire: '🧛', reaper: '💀', mummy: '🧻', pumpking: '🎃',
   };
   return (
@@ -556,7 +559,7 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
                       <div className="flex-1 min-w-0 w-full">
                         <div className="text-sm font-bold text-zinc-100">Boîte {SEASON_INFO[season].name}</div>
                         <div className="text-[11px] font-mono text-zinc-400 mb-1.5">
-                          Ramasse des {t.many} {t.emoji} dans l'hôpital et les égouts (gardés même si tu meurs). {EVENT_BOX_PRICE} {t.many} = une boîte avec un skin {SEASON_INFO[season].name} (ou des pièces).
+                          Ramasse des {t.many} {t.emoji} dans tous les chapitres (gardés même si tu meurs). Parfois un 💎 coffre rare en cache {TREATS_PER_CHEST} d'un coup ! {EVENT_BOX_PRICE} {t.many} = une boîte avec un skin {SEASON_INFO[season].name} (ou des pièces).
                         </div>
                         <div className="h-2.5 bg-zinc-900 border border-zinc-800">
                           <div className="h-full transition-all" style={{ width: `${pct}%`, background: SEASON_INFO[season].color }} />
@@ -684,6 +687,7 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
             )}
             {tab === 'admin' && wallet.admin && token && (
               <>
+                <AdminDashboard token={token} />
                 {onBoost && <BoostSwitch boost={wallet.boost} onBoost={onBoost} />}
                 {onSetSeason && <SeasonSwitch value={wallet.seasonSetting ?? 'auto'} onSet={onSetSeason} />}
                 <AdminPanel token={token} />

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { PlayerNetState } from '../net/protocol';
 import { ProceduralTextures } from '../textures/ProceduralTextures';
 import { HUMAN_OUTFITS, buildHumanAccessory, buildHumanBodyExtra } from './Cosmetics';
+import { CharacterDef, characterOf } from '../characters';
 
 type Limb = { root: THREE.Group; mid: THREE.Group };
 
@@ -438,6 +439,7 @@ export class RemotePlayer {
     const hairMesh = new THREE.Mesh(hairGeo, hair);
     hairMesh.castShadow = true;
     this.head.add(hairMesh);
+    this.hairMesh = hairMesh;
 
     this.group.add(this.body);
 
@@ -473,7 +475,69 @@ export class RemotePlayer {
   private cosmeticDisposables: { dispose: () => void }[] = [];
 
   /** Player customisation: colours, accessory and outfit. */
-  public applyLook(look: { skin: string; gown: string; hair: string; acc?: string; outfit?: string }) {
+  private hairMesh: THREE.Mesh | null = null;
+
+  /** Character hairstyle / beard pieces (hair-coloured), in the head's space. */
+  private buildCharacter(c: CharacterDef, track: <T extends { dispose: () => void }>(o: T) => T) {
+    const hair = this.mats.hair;
+    const g = new THREE.Group();
+    const piece = (geo: THREE.BufferGeometry, x: number, y: number, z: number) => {
+      const m = new THREE.Mesh(track(geo), hair);
+      m.position.set(x, y, z);
+      m.castShadow = true;
+      g.add(m);
+      return m;
+    };
+    if (this.hairMesh) this.hairMesh.visible = c.hair !== 'bald' && c.hair !== 'curly';
+    switch (c.hair) {
+      case 'long': {
+        // Back curtain down to the shoulders + two side locks
+        const back = piece(new THREE.CapsuleGeometry(0.075, 0.16, 6, 16), 0, 0.04, -0.052);
+        back.scale.set(1.18, 1, 0.55);
+        for (const s of [-1, 1]) {
+          const lock = piece(new THREE.CapsuleGeometry(0.022, 0.13, 4, 10), s * 0.083, 0.06, 0.012);
+          lock.rotation.z = s * 0.08;
+        }
+        break;
+      }
+      case 'ponytail': {
+        piece(new THREE.SphereGeometry(0.022, 10, 8), 0, 0.17, -0.1);
+        const tail = piece(new THREE.CapsuleGeometry(0.028, 0.15, 5, 10), 0, 0.08, -0.13);
+        tail.rotation.x = 0.35;
+        break;
+      }
+      case 'bun':
+        piece(new THREE.SphereGeometry(0.045, 16, 12), 0, 0.225, -0.06).scale.set(1, 0.85, 1);
+        break;
+      case 'curly': {
+        const geo = new THREE.SphereGeometry(0.118, 32, 24);
+        const p = geo.attributes.position;
+        for (let i = 0; i < p.count; i++) {
+          const x = p.getX(i);
+          const y = p.getY(i);
+          const z = p.getZ(i);
+          // Lots of small curls, and no hair over the face
+          const k = 1 + 0.06 * Math.sin(x * 90) * Math.sin(y * 85) * Math.sin(z * 95);
+          const face = z > 0.03 && y < 0.05 ? 0.6 : 1;
+          p.setXYZ(i, x * k * face, y * k, z * k * face);
+        }
+        geo.computeVertexNormals();
+        piece(geo, 0, 0.155, -0.012).scale.set(1.02, 0.86, 1.06);
+        break;
+      }
+    }
+    if (c.beard) {
+      const beard = piece(new THREE.SphereGeometry(0.075, 20, 12, -Math.PI * 0.45, Math.PI * 0.9, Math.PI * 0.55, Math.PI * 0.35), 0, 0.105, 0.0);
+      beard.scale.set(1.08, 1.05, 1.1);
+      for (const s of [-1, 1]) {
+        const mous = piece(new THREE.CapsuleGeometry(0.009, 0.026, 4, 8), s * 0.016, 0.083, 0.098);
+        mous.rotation.z = s * 1.25;
+      }
+    }
+    return g;
+  }
+
+  public applyLook(look: { skin: string; gown: string; hair: string; acc?: string; outfit?: string; char?: string }) {
     const outfit = look.outfit ? HUMAN_OUTFITS[look.outfit] : undefined;
     const gown = this.mats.gown;
     const hair = this.mats.hair;
@@ -499,6 +563,10 @@ export class RemotePlayer {
       this.cosmeticDisposables.push(o);
       return o;
     };
+    // Character: hairstyle, beard, build
+    const ch = characterOf(look.char);
+    this.cosmetic.add(this.buildCharacter(ch, track));
+    this.body.scale.set(ch.width, ch.height, ch.width);
     const accs = new Set([...(outfit?.accs ?? []), ...(look.acc ? [look.acc] : [])]);
     // A hat hides the mohawk / hair volume conflicts: keep it simple, wear everything
     for (const id of accs) this.cosmetic.add(buildHumanAccessory(id, track));

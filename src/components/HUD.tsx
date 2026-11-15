@@ -32,6 +32,7 @@ interface HUDProps {
   /** Coins found this run */
   runCoins?: number;
   runTreats?: number;
+  presents?: number | null;
   treatEmoji?: string | null;
   /** Hotbar slot [X] drops */
   selectedSlot?: number;
@@ -93,6 +94,7 @@ export const HUD: React.FC<HUDProps> = ({
   maxSlots,
   runCoins = 0,
   runTreats = 0,
+  presents = null,
   treatEmoji = null,
   selectedSlot = 0,
   touch = false,
@@ -276,6 +278,13 @@ export const HUD: React.FC<HUDProps> = ({
       {runCoins > 0 && (
         <div className="absolute bottom-[100px] left-1/2 -translate-x-1/2 px-2 py-0.5 bg-black/60 border border-amber-700/60 text-amber-300 font-mono text-[11px]">
           🪙 {runCoins} pièce{runCoins > 1 ? 's' : ''} trouvée{runCoins > 1 ? 's' : ''}
+        </div>
+      )}
+
+      {/* 🎄 Christmas night presents */}
+      {presents != null && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 px-3 py-1 bg-black/70 border border-red-600/80 text-red-100 font-mono text-xs">
+          🎁 {presents}/12 cadeaux
         </div>
       )}
 

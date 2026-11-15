@@ -273,6 +273,20 @@ export class Forest {
     else this.grid.set(k, [b]);
   }
 
+  /** Free ground spots for event treats (not in a trunk, a rock or a cabin). */
+  public freeSpots(n: number): THREE.Vector3[] {
+    const out: THREE.Vector3[] = [];
+    for (let tries = 0; tries < n * 30 && out.length < n; tries++) {
+      const x = CX + (Math.random() * 2 - 1) * (S - 6);
+      const z = CZ + (Math.random() * 2 - 1) * (S - 6);
+      if (this.boxesNear(x, z, 2).some((b) => x > b.min.x - 0.6 && x < b.max.x + 0.6 && z > b.min.z - 0.6 && z < b.max.z + 0.6)) continue;
+      if (this.trunks.some((t) => (t.x - x) ** 2 + (t.z - z) ** 2 < (t.r + 0.8) ** 2)) continue;
+      if (out.some((o) => (o.x - x) ** 2 + (o.z - z) ** 2 < 36)) continue;
+      out.push(new THREE.Vector3(x, 0, z));
+    }
+    return out;
+  }
+
   private boxesNear(x: number, z: number, rad: number) {
     const out: CollisionBox[] = [];
     for (let gx = Math.floor((x - rad) / 8); gx <= Math.floor((x + rad) / 8); gx++)

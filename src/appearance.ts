@@ -1,19 +1,20 @@
 import { CATALOG } from './economy';
+import { CHARACTERS, isCharacter } from './characters';
 
 /** Player customisation: colours, accessory and outfit of your human and your creature. */
 export interface Appearance {
-  human: { skin: string; gown: string; hair: string; acc: string; outfit: string };
+  human: { skin: string; gown: string; hair: string; acc: string; outfit: string; char: string };
   monster: { skin: string; eyes: string; gown: string; acc: string; outfit: string };
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
-  human: { skin: '#d9b59a', gown: '#7f9aa8', hair: '#1d1d22', acc: '', outfit: '' },
+  human: { skin: '#d9b59a', gown: '#7f9aa8', hair: '#1d1d22', acc: '', outfit: '', char: 'alex' },
   monster: { skin: '#8f968d', eyes: '#ff2a10', gown: '#6a6a60', acc: '', outfit: '' },
 };
 
 const HEX = /^#[0-9a-f]{6}$/i;
 const ID = /^[a-z0-9]{0,16}$/;
-const COSMETIC_KEYS = ['acc', 'outfit'];
+const COSMETIC_KEYS = ['acc', 'outfit', 'char'];
 
 /** Keeps only valid colours / ids, falling back to the defaults. */
 export const sanitizeAppearance = (a: unknown): Appearance => {
@@ -41,9 +42,9 @@ export const PALETTES = {
 };
 
 const FREE: Record<string, string[]> = {
-  'human.skin': PALETTES.humanSkin,
-  'human.gown': PALETTES.humanGown,
-  'human.hair': PALETTES.humanHair,
+  'human.skin': [...PALETTES.humanSkin, ...CHARACTERS.map((c) => c.colors.skin)],
+  'human.gown': [...PALETTES.humanGown, ...CHARACTERS.map((c) => c.colors.gown)],
+  'human.hair': [...PALETTES.humanHair, ...CHARACTERS.map((c) => c.colors.hair)],
   'monster.skin': PALETTES.monsterSkin,
   'monster.eyes': PALETTES.monsterEyes,
   'monster.gown': PALETTES.monsterGown,
@@ -58,6 +59,8 @@ export const enforceOwned = (a: Appearance, owned: string[]): Appearance => {
     for (const key of Object.keys(part)) {
       const v = part[key];
       if (COSMETIC_KEYS.includes(key) && v === '') continue;
+      // Characters are free for everyone
+      if (key === 'char' && isCharacter(v)) continue;
       if (FREE[`${target}.${key}`]?.includes(v)) continue;
       const ok = CATALOG.some((x) => owned.includes(x.id) && x.target === target && x.slot === key && x.value === v);
       if (!ok) part[key] = def[key];
