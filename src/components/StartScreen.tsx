@@ -22,6 +22,8 @@ interface StartScreenProps {
   coins: number | null;
   /** the free daily gift is waiting in the shop */
   giftReady?: boolean;
+  /** shop not unlocked yet (escape once, Exploration is enough) */
+  shopLocked?: boolean;
   /** 🎄 / 🎃 event on */
   season?: Season | null;
   /** an advent calendar box can be opened */
@@ -60,6 +62,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onChangeDifficulty,
   coins,
   giftReady = false,
+  shopLocked = false,
   season = null,
   adventReady = false,
   onShop,
@@ -299,7 +302,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               className="px-8 py-3 bg-black/60 hover:bg-amber-950/40 text-amber-300 font-mono text-xs uppercase tracking-widest flex items-center gap-3 transition-all cursor-pointer border border-amber-700/70 hover:border-amber-400"
             >
               <ShoppingBag className="w-4 h-4" />
-              <span>Boutique — skins & boîtes mystère</span>
+              <span>{shopLocked ? '🔒 Boutique — finis une partie en Exploration' : 'Boutique — skins & boîtes mystère'}</span>
               {giftReady && <span className="normal-case tracking-normal text-emerald-300 animate-pulse">🎁 cadeau !</span>}
               {adventReady && <span className="normal-case tracking-normal text-red-300 animate-pulse">🎄 case du jour !</span>}
               {coins != null && (

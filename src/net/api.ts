@@ -26,6 +26,8 @@ export interface WalletView {
   newAch?: string[];
   /** today's challenge and whether this account already won it */
   challenge?: { id: string; done: boolean };
+  /** false until the player escapes once (Exploration is enough) */
+  shopUnlocked?: boolean;
   /** event currently on (Christmas / Halloween) */
   season?: Season | null;
   /** admins only: what the event switch is set to */

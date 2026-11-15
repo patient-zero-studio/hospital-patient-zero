@@ -69,6 +69,8 @@ interface User {
   lastRun?: number;
   /** Advent calendar boxes opened, for the Christmas of `year` */
   advent?: { year: number; days: number[] };
+  /** The shop opens after the first escape (Exploration is enough) */
+  shopUnlocked?: boolean;
 }
 
 const store = makeStore(DATA_DIR);
@@ -241,7 +243,12 @@ app.get('/api/season', (_req, res) => {
   res.json({ season: currentSeason() });
 });
 
+/** Shop locked until the player gets out once (accounts that already bought skins keep it). */
+const shopOpenFor = (u: User) => isAdmin(u) || !!u.shopUnlocked || walletOf(u).owned.length > 0;
+const SHOP_LOCKED = 'Boutique verrouillée : échappe-toi de l\'hôpital une fois (le mode Exploration suffit) pour la débloquer.';
+
 const walletView = (u: User) => ({
+  shopUnlocked: shopOpenFor(u),
   season: currentSeason(),
   seasonSetting: isAdmin(u) ? settings.season : undefined,
   seasonShop: seasonShop(currentSeason()).map((x) => x.id),
@@ -269,6 +276,7 @@ const nextStreak = (u: User) => {
 app.post('/api/shop/daily', (req, res) => {
   const user = authUser(req);
   if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  if (!shopOpenFor(user)) return res.status(403).json({ error: SHOP_LOCKED });
   if (user.lastGift === todayKey()) return res.status(400).json({ error: 'Déjà ouvert aujourd\'hui. Revenez demain !' });
   const streak = nextStreak(user);
   const result = rollDailyGift(walletOf(user), streak);
@@ -393,6 +401,7 @@ app.post('/api/admin/season', (req, res) => {
 app.post('/api/shop/advent', (req, res) => {
   const user = authUser(req);
   if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  if (!shopOpenFor(user)) return res.status(403).json({ error: SHOP_LOCKED });
   const view = adventView(user);
   if (!view) return res.status(400).json({ error: 'Le calendrier de l\'Avent n\'est ouvert que pendant Noël.' });
   const day = Math.floor(Number(req.body?.day));
@@ -417,6 +426,8 @@ app.get('/api/wallet', (req, res) => {
 app.post('/api/wallet/reward', (req, res) => {
   const user = authUser(req);
   if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  // Any escape (Exploration included) unlocks the shop
+  user.shopUnlocked = true;
   const now = Date.now();
   if (user.lastReward && now - user.lastReward < 20000) return res.json({ gained: 0, ...walletView(user) });
   const base = rewardFor(Number(req.body?.difficulty));
@@ -431,6 +442,7 @@ app.post('/api/wallet/reward', (req, res) => {
 app.post('/api/shop/buy', (req, res) => {
   const user = authUser(req);
   if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  if (!shopOpenFor(user)) return res.status(403).json({ error: SHOP_LOCKED });
   const err = buyCosmetic(walletOf(user), String(req.body?.id ?? ''), todayKey(), currentSeason());
   if (err) return res.status(400).json({ error: err });
   saveUsers();
@@ -440,6 +452,7 @@ app.post('/api/shop/buy', (req, res) => {
 app.post('/api/shop/box', (req, res) => {
   const user = authUser(req);
   if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  if (!shopOpenFor(user)) return res.status(403).json({ error: SHOP_LOCKED });
   const result = openBox(walletOf(user), String(req.body?.box ?? '') as BoxId);
   if (!result) return res.status(400).json({ error: 'Pas assez de pièces.' });
   const newAch = reportAch(user, [], {}, { boxes: 1 });

@@ -153,6 +153,8 @@ interface Props {
   onClaimAdvent?: (day: number) => Promise<BoxResult>;
   /** admin: start / stop an event for everyone */
   onSetSeason?: (s: SeasonSetting) => Promise<void>;
+  /** locked shop: go play in Exploration */
+  onExplore?: () => void;
   onLogin: () => void;
   onCustomize?: () => void;
   onClose: () => void;
@@ -248,7 +250,7 @@ const AdminPanel: React.FC<{ token: string }> = ({ token }) => {
 };
 
 /** Cosmetics shop: today's offers (change every day) and mystery boxes. */
-export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, onClaimDaily, onClaimAdvent, onSetSeason, onLogin, onCustomize, onClose, token }) => {
+export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, onClaimDaily, onClaimAdvent, onSetSeason, onExplore, onLogin, onCustomize, onClose, token }) => {
   const season: Season | null = wallet?.season ?? null;
   const [tab, setTab] = useState<'event' | 'shop' | 'boxes' | 'mine' | 'admin'>(season ? 'event' : 'shop');
   const [busy, setBusy] = useState<string | null>(null);
@@ -366,6 +368,26 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
         ) : !wallet ? (
           <div className="flex justify-center py-12 text-zinc-500">
             <Loader2 className="w-6 h-6 animate-spin" />
+          </div>
+        ) : wallet.shopUnlocked === false ? (
+          <div className="text-center py-8 space-y-4">
+            <div className="text-6xl">🔒</div>
+            <div className="font-serif font-black text-2xl tracking-widest text-zinc-100">BOUTIQUE VERROUILLÉE</div>
+            <p className="text-sm text-zinc-400 font-serif italic max-w-md mx-auto">
+              Le marchand n'ouvre qu'aux survivants. Échappe-toi de l'hôpital une première fois — le mode <span className="text-emerald-400 not-italic font-bold">Exploration</span>{' '}
+              suffit : pas de monstre qui te poursuit, tu peux tout découvrir tranquillement.
+            </p>
+            <div className="flex flex-wrap justify-center gap-2 text-[11px] font-mono text-zinc-500">
+              <span className="px-2 py-1 border border-zinc-800">👕 Skins</span>
+              <span className="px-2 py-1 border border-zinc-800">🎁 Boîtes mystère</span>
+              <span className="px-2 py-1 border border-zinc-800">🗓️ Cadeau du jour</span>
+              {season && <span className="px-2 py-1 border border-zinc-800">{SEASON_INFO[season].emoji} Événement {SEASON_INFO[season].name}</span>}
+            </div>
+            {onExplore && (
+              <button onClick={onExplore} className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-black font-mono text-xs uppercase tracking-widest font-bold">
+                Choisir le mode Exploration
+              </button>
+            )}
           </div>
         ) : (
           <>

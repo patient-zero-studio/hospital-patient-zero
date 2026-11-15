@@ -539,18 +539,18 @@ export default function App() {
   /** Coins for getting out (none in Exploration). */
   const grantReward = async (diff: number) => {
     const s = sessionRef.current;
-    if (diff <= 1) {
-      setRewardMsg('Mode Exploration : pas de pièces.');
-      return;
-    }
     if (!s) {
-      setRewardMsg('Connectez-vous (Multijoueur) pour gagner des pièces !');
+      setRewardMsg(diff <= 1 ? 'Mode Exploration : pas de pièces.' : 'Connectez-vous (Multijoueur) pour gagner des pièces !');
       return;
     }
     try {
-      const r = await api.reward(s.token, diff, engineRef.current?.state.runCoins ?? 0);
+      // Exploration gives no coins, but getting out unlocks the shop
+      const wasLocked = wallet ? !wallet.shopUnlocked : false;
+      const r = await api.reward(s.token, diff, diff <= 1 ? 0 : (engineRef.current?.state.runCoins ?? 0));
       setWallet(r);
-      if (r.admin) setRewardMsg('🪙 Admin : pièces infinies');
+      if (wasLocked && r.shopUnlocked) setRewardMsg('🛒 BOUTIQUE DÉBLOQUÉE ! Skins, boîtes mystère et cadeau du jour t\'attendent au menu.');
+      else if (diff <= 1) setRewardMsg('Mode Exploration : pas de pièces.');
+      else if (r.admin) setRewardMsg('🪙 Admin : pièces infinies');
       else if (r.gained > 0) setRewardMsg(`🪙 +${r.gained} pièces — total ${r.wallet.coins}`);
     } catch {
       /* offline */
@@ -906,9 +906,10 @@ export default function App() {
           menuMusic={menuMusic}
           onToggleMusic={() => setMenuMusic((m) => !m)}
           coins={wallet?.wallet.coins ?? null}
-          giftReady={!!wallet?.dailyAvailable}
+          shopLocked={!!wallet && !wallet.shopUnlocked}
+          giftReady={!!wallet?.dailyAvailable && !!wallet.shopUnlocked}
           season={season}
-          adventReady={!!wallet?.advent && wallet.advent.claimed.length < wallet.advent.open}
+          adventReady={!!wallet?.shopUnlocked && !!wallet.advent && wallet.advent.claimed.length < wallet.advent.open}
           onShop={() => {
             refreshWallet();
             setShopOpen(true);
@@ -985,6 +986,14 @@ export default function App() {
           onOpenBox={openBox}
           onClaimDaily={claimDaily}
           onClaimAdvent={claimAdvent}
+          onExplore={
+            isPlaying
+              ? undefined
+              : () => {
+                  setDifficulty(1 as Difficulty);
+                  setShopOpen(false);
+                }
+          }
           onSetSeason={adminSetSeason}
           token={session?.token ?? null}
           onLogin={() => {
