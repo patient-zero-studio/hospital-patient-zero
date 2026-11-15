@@ -36,8 +36,8 @@ const SeasonSwitch: React.FC<{ value: SeasonSetting; onSet: (s: SeasonSetting) =
         ))}
       </div>
       <p className="text-[10px] font-mono text-zinc-600 mt-2">
-        Automatique : Halloween du 1er octobre au 5 novembre, Noël du 1er décembre au 6 janvier. Les cases du calendrier s'ouvrent quand même jour par jour en décembre (les
-        admins peuvent toutes les ouvrir pour tester).
+        Automatique : Halloween du 1er octobre au 5 novembre, Noël du 1er décembre au 6 janvier. Les cases du calendrier s'ouvrent une par une : case 1 le 1er décembre, case 2 le
+        2 décembre… jusqu'à la case 25 le 25 décembre (pour tout le monde, admins compris).
       </p>
     </div>
   );
@@ -100,7 +100,8 @@ const AdventCalendar: React.FC<{
       })}
     </div>
     <p className="text-[10px] font-mono text-zinc-500 mt-1.5">
-      Une case par jour du 1er au 25 décembre. ⭐ = skin spécial qu'on ne trouve que dans le calendrier (le 25 : le costume de Père Noël !). Une case oubliée peut être
+      {open === 0 ? '🔒 Le calendrier commence le 1er décembre. ' : `Aujourd'hui, tu peux ouvrir jusqu'à la case ${open}. `}
+      Une case par jour : case 1 le 1er décembre, case 2 le 2… jusqu'à la case 25 le 25 décembre. ⭐ = skin spécial qu'on ne trouve que dans le calendrier (le 25 : le costume de Père Noël !). Une case oubliée peut être
       ouverte plus tard, jusqu'au 6 janvier.
     </p>
   </div>

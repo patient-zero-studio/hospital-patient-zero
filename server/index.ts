@@ -233,9 +233,9 @@ const adventOf = (u: User) => {
   if (!u.advent || u.advent.year !== year || !Array.isArray(u.advent.days)) u.advent = { year, days: [] };
   return u.advent;
 };
-/** Calendar state, only while Christmas is on. Admins can open every box (to try it). */
+/** Calendar state, only while Christmas is on. Box N opens on December N, for everyone (admins too). */
 const adventView = (u: User) =>
-  currentSeason() === 'noel' ? { open: isAdmin(u) ? 25 : adventDay(eventNow()), claimed: adventOf(u).days } : undefined;
+  currentSeason() === 'noel' ? { open: adventDay(eventNow()), claimed: adventOf(u).days } : undefined;
 
 app.get('/api/season', (_req, res) => {
   res.json({ season: currentSeason() });
