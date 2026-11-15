@@ -2,7 +2,7 @@
  * Coins, cosmetics shop and mystery boxes. Pure functions shared by the
  * server (authoritative for accounts) and the client (display).
  */
-import type { Season } from './seasons';
+import { SEASONS, type Season } from './seasons';
 
 export type Tier = 'petit' | 'moyen' | 'style' | 'exclusif';
 export type Target = 'human' | 'monster';
@@ -111,6 +111,33 @@ export const CATALOG: Cosmetic[] = [
   ev('halloween', 'm-hw-mummy', 'Momie', 'monster', 'outfit', 'mummy', 'style'),
   ev('halloween', 'h-hw-reaper', 'Faucheuse', 'human', 'outfit', 'reaper', 'exclusif'),
   ev('halloween', 'm-hw-pumpking', 'Roi Citrouille', 'monster', 'outfit', 'pumpking', 'exclusif'),
+
+  // ---- 🐰 Pâques (une semaine avant et après Pâques) ----
+  ev('paques', 'h-pq-gown-lemon', 'Blouse jaune poussin', 'human', 'gown', '#fde047', 'petit'),
+  ev('paques', 'h-pq-hair-mint', 'Cheveux menthe', 'human', 'hair', '#6ee7b7', 'petit'),
+  ev('paques', 'm-pq-skin-lilac', 'Peau lilas', 'monster', 'skin', '#c4b5fd', 'petit'),
+  ev('paques', 'h-pq-ears', 'Oreilles de lapin', 'human', 'acc', 'bunnyears', 'moyen'),
+  ev('paques', 'm-pq-ears', 'Oreilles de lapin', 'monster', 'acc', 'bunnyears', 'moyen'),
+  ev('paques', 'h-pq-bunny', 'Lapin de Pâques', 'human', 'outfit', 'bunny', 'style'),
+  ev('paques', 'm-pq-choco', 'Lapin en chocolat', 'monster', 'outfit', 'chocobunny', 'exclusif'),
+
+  // ---- 💘 Saint-Valentin (7 → 16 février) ----
+  ev('valentin', 'h-sv-gown-rose', 'Blouse rose tendre', 'human', 'gown', '#f9a8d4', 'petit'),
+  ev('valentin', 'h-sv-hair-red', 'Cheveux rouge passion', 'human', 'hair', '#be123c', 'petit'),
+  ev('valentin', 'm-sv-eyes-love', 'Yeux amoureux', 'monster', 'eyes', '#ff3a8a', 'petit'),
+  ev('valentin', 'h-sv-shades', 'Lunettes cœur', 'human', 'acc', 'heartshades', 'moyen'),
+  ev('valentin', 'm-sv-boppers', 'Serre-tête cœurs', 'monster', 'acc', 'heartboppers', 'moyen'),
+  ev('valentin', 'h-sv-cupid', 'Cupidon', 'human', 'outfit', 'cupid', 'style'),
+  ev('valentin', 'm-sv-lovebeast', 'Monstre amoureux', 'monster', 'outfit', 'lovebeast', 'exclusif'),
+
+  // ---- 🐟 Poisson d'avril (1er → 3 avril) ----
+  ev('poisson', 'h-pa-gown-sea', 'Blouse bleu océan', 'human', 'gown', '#0ea5e9', 'petit'),
+  ev('poisson', 'm-pa-skin-fish', "Peau d'écailles", 'monster', 'skin', '#2dd4bf', 'petit'),
+  ev('poisson', 'h-pa-fishhat', 'Poisson sur la tête', 'human', 'acc', 'fishhat', 'moyen'),
+  ev('poisson', 'm-pa-fishhat', 'Poisson sur la tête', 'monster', 'acc', 'fishhat', 'moyen'),
+  ev('poisson', 'h-pa-clownnose', 'Nez de clown', 'human', 'acc', 'clownnose', 'moyen'),
+  ev('poisson', 'h-pa-clown', 'Clown farceur', 'human', 'outfit', 'clown', 'style'),
+  ev('poisson', 'm-pa-clown', 'Clown maléfique', 'monster', 'outfit', 'clownm', 'exclusif'),
 ];
 
 export const cosmetic = (id: string) => CATALOG.find((x) => x.id === id);
@@ -129,6 +156,8 @@ export interface Wallet {
   owned: string[];
   /** Resources won in boxes, collected from the hobo in the warehouse */
   stash: Record<SupplyKind, number>;
+  /** Event treats picked up in the levels (bonbons, œufs…), per event */
+  treats: Partial<Record<Season, number>>;
 }
 
 /** Admin accounts have (practically) infinite coins. */
@@ -136,7 +165,7 @@ export const INFINITE_COINS = 1_000_000_000;
 /** Shows ∞ for an admin's bottomless purse. */
 export const fmtCoins = (n: number) => (n >= INFINITE_COINS / 10 ? '∞' : String(n));
 
-export const NEW_WALLET = (): Wallet => ({ coins: 100, owned: [], stash: { battery: 0, medkit: 0, sedative: 0, food: 0, alarm: 0 } });
+export const NEW_WALLET = (): Wallet => ({ coins: 100, owned: [], stash: { battery: 0, medkit: 0, sedative: 0, food: 0, alarm: 0 }, treats: {} });
 
 export const sanitizeWallet = (w: unknown): Wallet => {
   const src = (w ?? {}) as Partial<Wallet>;
@@ -146,10 +175,16 @@ export const sanitizeWallet = (w: unknown): Wallet => {
     const v = Number(src.stash?.[k]);
     if (Number.isFinite(v) && v > 0) stash[k] = Math.floor(v);
   }
+  const treats: Partial<Record<Season, number>> = {};
+  for (const k of SEASONS) {
+    const v = Number(src.treats?.[k]);
+    if (Number.isFinite(v) && v > 0) treats[k] = Math.floor(v);
+  }
   return {
     coins: Number.isFinite(Number(src.coins)) ? Math.max(0, Math.floor(Number(src.coins))) : base.coins,
     owned: Array.isArray(src.owned) ? src.owned.filter((id) => typeof id === 'string' && !!cosmetic(id)) : [],
     stash,
+    treats,
   };
 };
 
@@ -448,6 +483,45 @@ export const claimAdvent = (w: Wallet, day: number, rnd: () => number = Math.ran
   }
   result.text = parts.join(' + ');
   return result;
+};
+
+// ---------------------------------------------------------------------------
+// Event treats: picked up in the levels, 500 open an event box
+// ---------------------------------------------------------------------------
+export const EVENT_BOX_PRICE = 500;
+/** Most treats a single run can bring back (anti-abuse). */
+export const MAX_TREATS_PER_RUN = 60;
+
+/** Opens an event box with treats (mutates). Returns null if not enough treats. */
+export const openEventBox = (w: Wallet, season: Season, rnd: () => number = Math.random): BoxResult | null => {
+  const have = w.treats[season] ?? 0;
+  if (have < EVENT_BOX_PRICE) return null;
+  w.treats[season] = have - EVENT_BOX_PRICE;
+  const r = rnd();
+  if (r < 0.12) {
+    const n = Math.round(200 + rnd() * 300);
+    w.coins += n;
+    return { kind: 'coins', coins: n, text: `${n} pièces` };
+  }
+  // Event skins (not the advent calendar ones): rarer tiers less often
+  const weights: Record<Tier, number> = { petit: 40, moyen: 32, style: 20, exclusif: 8 };
+  const pool = CATALOG.filter((x) => x.season === season && !x.calendarOnly);
+  const total = pool.reduce((t, x) => t + weights[x.tier], 0);
+  let k = rnd() * total;
+  let skin = pool[pool.length - 1];
+  for (const x of pool) {
+    if ((k -= weights[x.tier]) <= 0) {
+      skin = x;
+      break;
+    }
+  }
+  if (w.owned.includes(skin.id)) {
+    const refund = Math.round(TIER_PRICE[skin.tier] * 0.6);
+    w.coins += refund;
+    return { kind: 'skin', skin: skin.id, refund, text: `${skin.name} (déjà possédé → +${refund} pièces)` };
+  }
+  w.owned.push(skin.id);
+  return { kind: 'skin', skin: skin.id, text: `${skin.name} — ${TIER_LABEL[skin.tier]} !` };
 };
 
 // ---------------------------------------------------------------------------

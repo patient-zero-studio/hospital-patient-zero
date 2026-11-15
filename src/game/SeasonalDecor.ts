@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { CollisionBox, MapData } from './MapBuilder';
-import type { Season } from '../seasons';
+import { SEASON_INFO, type Season } from '../seasons';
 
 /**
  * Event decorations scattered in the levels: Christmas trees, presents and
@@ -19,7 +19,7 @@ export const buildSeasonalDecor = (season: Season, map: MapData): { group: THREE
   };
 
   // Deterministic: everyone sees the same decorations
-  let seed = season === 'noel' ? 1225 : 1031;
+  let seed = { noel: 1225, halloween: 1031, paques: 420, valentin: 214, poisson: 401 }[season];
   const rnd = () => {
     seed = (seed * 16807) % 2147483647;
     return (seed - 1) / 2147483646;
@@ -29,7 +29,7 @@ export const buildSeasonalDecor = (season: Season, map: MapData): { group: THREE
   const mat = (color: number, opts: THREE.MeshStandardMaterialParameters = {}) => track(new THREE.MeshStandardMaterial({ color, roughness: 0.6, ...opts }));
   const glow = (color: number) => track(new THREE.MeshBasicMaterial({ color }));
   const bulbGeo = track(new THREE.SphereGeometry(0.035, 8, 6));
-  const bulbMats = (season === 'noel' ? [0xff2a2a, 0x2aff5a, 0xffd21a, 0x3a8aff, 0xff5ad8] : [0xff7a00, 0xa040ff, 0x7aff2a]).map(glow);
+  const bulbMats = SEASON_INFO[season].bulbs.map((c) => glow(new THREE.Color(c).getHex()));
 
   const mesh = (geo: THREE.BufferGeometry, m: THREE.Material, parent: THREE.Object3D, x = 0, y = 0, z = 0) => {
     const o = new THREE.Mesh(geo, m);
@@ -172,8 +172,106 @@ export const buildSeasonalDecor = (season: Season, map: MapData): { group: THREE
   const webMat = track(new THREE.MeshBasicMaterial({ map: webTex, transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 0.7 }));
   const webGeo = track(new THREE.PlaneGeometry(1.1, 1.1));
 
+  // ---- Easter: baskets of painted eggs ----
+  const eggGeo = track(new THREE.SphereGeometry(0.07, 14, 10));
+  const eggMats = [0xfde68a, 0xa7f3d0, 0xfbcfe8, 0xbfdbfe, 0xddd6fe, 0xfca5a5].map((c) => mat(c, { roughness: 0.4 }));
+  const basketGeo = track(new THREE.CylinderGeometry(0.26, 0.2, 0.16, 16, 1, true));
+  const basketMat = mat(0x9a6a30, { roughness: 1, side: THREE.DoubleSide });
+  const grassGeo = track(new THREE.CircleGeometry(0.25, 16));
+  const grassMat = mat(0x7ccf5a, { roughness: 1 });
+  const handleGeo = track(new THREE.TorusGeometry(0.24, 0.015, 6, 20, Math.PI));
+  const eggBasket = () => {
+    const g = new THREE.Group();
+    mesh(basketGeo, basketMat, g, 0, 0.08);
+    mesh(grassGeo, grassMat, g, 0, 0.13).rotation.x = -Math.PI / 2;
+    mesh(handleGeo, basketMat, g, 0, 0.15);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + rnd();
+      const e = mesh(eggGeo, eggMats[i % eggMats.length], g, Math.cos(a) * 0.12, 0.17, Math.sin(a) * 0.12);
+      e.scale.set(0.8, 1.1, 0.8);
+      e.rotation.z = (rnd() - 0.5) * 0.8;
+    }
+    return g;
+  };
+  const eggsAround = () => {
+    const g = new THREE.Group();
+    for (let i = 0; i < 3 + Math.floor(rnd() * 3); i++) {
+      const e = mesh(eggGeo, eggMats[Math.floor(rnd() * eggMats.length)], g, (rnd() - 0.5) * 0.6, 0.065, (rnd() - 0.5) * 0.4);
+      e.scale.set(0.85, 1.15, 0.85);
+      e.rotation.set((rnd() - 0.5) * 1.2, 0, (rnd() - 0.5) * 1.2);
+    }
+    return g;
+  };
+
+  // ---- Valentine's day: heart balloons and roses ----
+  const heartShape = (() => {
+    const sh = new THREE.Shape();
+    const r = 0.16;
+    sh.moveTo(0, -r);
+    sh.bezierCurveTo(r * 1.3, -r * 0.1, r * 1.1, r * 1.1, 0, r * 0.45);
+    sh.bezierCurveTo(-r * 1.1, r * 1.1, -r * 1.3, -r * 0.1, 0, -r);
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.06, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 3 });
+    geo.center();
+    return track(geo);
+  })();
+  const heartMats = [0xe11d48, 0xf472b6, 0xff2a6a].map((c) => mat(c, { roughness: 0.25, metalness: 0.3, emissive: c, emissiveIntensity: 0.15 }));
+  const stringGeo = track(new THREE.CylinderGeometry(0.003, 0.003, 1, 4));
+  const stringMat = mat(0xdddddd);
+  const balloons = () => {
+    const g = new THREE.Group();
+    for (let i = 0; i < 2 + Math.floor(rnd() * 2); i++) {
+      const h = 1.3 + rnd() * 0.6;
+      const x = (rnd() - 0.5) * 0.4;
+      const z = (rnd() - 0.5) * 0.3;
+      mesh(heartShape, heartMats[i % heartMats.length], g, x, h, z).rotation.y = (rnd() - 0.5) * 0.8;
+      mesh(stringGeo, stringMat, g, x * 0.5, (h - 0.16) / 2, z * 0.5).scale.y = h - 0.16;
+    }
+    mesh(giftGeo, mat(0x9d174d, { roughness: 0.7 }), g, 0, 0.04).scale.set(0.12, 0.08, 0.12);
+    return g;
+  };
+  const roseGeo = track(new THREE.SphereGeometry(0.04, 10, 8));
+  const roseStemGeo = track(new THREE.CylinderGeometry(0.006, 0.006, 0.35, 5));
+  const vaseGeo = track(new THREE.CylinderGeometry(0.07, 0.05, 0.25, 12));
+  const vaseMat = mat(0xe8f0f8, { roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.6 });
+  const roses = () => {
+    const g = new THREE.Group();
+    mesh(vaseGeo, vaseMat, g, 0, 0.125);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const st = mesh(roseStemGeo, stemMat, g, Math.cos(a) * 0.03, 0.35, Math.sin(a) * 0.03);
+      st.rotation.set(Math.sin(a) * 0.25, 0, -Math.cos(a) * 0.25);
+      mesh(roseGeo, heartMats[0], g, Math.cos(a) * 0.075, 0.52, Math.sin(a) * 0.075);
+    }
+    return g;
+  };
+
+  // ---- April fools: paper fish stuck on the walls, fishbowls ----
+  const fishShape = (() => {
+    const sh = new THREE.Shape();
+    sh.moveTo(0.22, 0);
+    sh.quadraticCurveTo(0.08, 0.13, -0.1, 0.02);
+    sh.lineTo(-0.2, 0.1);
+    sh.lineTo(-0.17, 0);
+    sh.lineTo(-0.2, -0.1);
+    sh.lineTo(-0.1, -0.02);
+    sh.quadraticCurveTo(0.08, -0.13, 0.22, 0);
+    return track(new THREE.ShapeGeometry(sh));
+  })();
+  const paperMats = [0x38bdf8, 0xfb923c, 0xfacc15, 0xa3e635, 0xf472b6].map((c) => track(new THREE.MeshStandardMaterial({ color: c, roughness: 1, side: THREE.DoubleSide })));
+  const bowlGeo = track(new THREE.SphereGeometry(0.2, 18, 14));
+  const bowlMat = track(new THREE.MeshStandardMaterial({ color: 0x9fd8ff, roughness: 0.05, transparent: true, opacity: 0.35, depthWrite: false }));
+  const fishbowl = () => {
+    const g = new THREE.Group();
+    mesh(bowlGeo, bowlMat, g, 0, 0.2);
+    mesh(fishShape, paperMats[1], g, 0, 0.18, 0).scale.setScalar(0.5);
+    const f2 = mesh(fishShape, paperMats[2], g, 0.06, 0.25, 0.05);
+    f2.scale.setScalar(0.35);
+    f2.rotation.y = 2.5;
+    return g;
+  };
+
   // ---- Garland of bulbs hanging along a wall ----
-  const wireMat = mat(season === 'noel' ? 0x1f4a1f : 0x111111, { roughness: 1 });
+  const wireMat = mat(season === 'noel' ? 0x1f4a1f : season === 'valentin' ? 0x8a1030 : 0x111111, { roughness: 1 });
   const garland = (len: number) => {
     const g = new THREE.Group();
     const n = Math.max(6, Math.round(len / 0.22));
@@ -242,7 +340,13 @@ export const buildSeasonalDecor = (season: Season, map: MapData): { group: THREE
       const wantWall = wallItems < MAX_WALL && (floorItems >= MAX_FLOOR || rnd() < 0.45);
       if (wantWall) {
         let deco: THREE.Object3D;
-        if (season === 'halloween' && rnd() < 0.4) {
+        if (season === 'poisson' && rnd() < 0.6) {
+          // April fools paper fish taped to the wall
+          deco = new THREE.Mesh(fishShape, paperMats[Math.floor(rnd() * paperMats.length)]);
+          deco.position.set(wx - dx * 0.02, p.y + 0.9 + rnd() * 1.1, wz - dz * 0.02);
+          deco.rotation.set(0, facing, (rnd() - 0.5) * 0.8);
+          deco.scale.setScalar(1.2 + rnd() * 0.6);
+        } else if (season === 'halloween' && rnd() < 0.4) {
           // Cobweb in the upper corner area of that wall
           deco = new THREE.Mesh(webGeo, webMat);
           deco.position.set(wx - dx * 0.03, p.y + 2.75, wz - dz * 0.03);
@@ -262,6 +366,9 @@ export const buildSeasonalDecor = (season: Season, map: MapData): { group: THREE
         if (near.some((b) => inside(b, fx, fz, 0.25))) continue;
         let deco: THREE.Object3D;
         if (season === 'noel') deco = rnd() < 0.45 ? tree(0.8 + rnd() * 0.5) : gifts();
+        else if (season === 'paques') deco = rnd() < 0.5 ? eggBasket() : eggsAround();
+        else if (season === 'valentin') deco = rnd() < 0.55 ? balloons() : roses();
+        else if (season === 'poisson') deco = rnd() < 0.5 ? fishbowl() : gifts();
         else {
           const r = rnd();
           if (r < 0.6) {
@@ -291,4 +398,77 @@ export const buildSeasonalDecor = (season: Season, map: MapData): { group: THREE
     }
   });
   return { group, disposables };
+};
+
+/** The event treat you pick up in the levels (bonbon, œuf, cœur…): a small glowing model. */
+export const buildTreatModel = (season: Season, track: <T extends { dispose: () => void }>(o: T) => T): THREE.Group => {
+  const g = new THREE.Group();
+  const m = (color: number, emissive = 0.35) => track(new THREE.MeshStandardMaterial({ color, roughness: 0.35, emissive: color, emissiveIntensity: emissive }));
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x = 0, y = 0, z = 0) => {
+    const o = new THREE.Mesh(track(geo), mat);
+    o.position.set(x, y, z);
+    g.add(o);
+    return o;
+  };
+  const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+  switch (season) {
+    case 'halloween': {
+      // Wrapped candy
+      const c = m(pick([0xff7a00, 0xa040ff, 0x7aff2a]));
+      add(new THREE.SphereGeometry(0.07, 14, 10), c).scale.set(1.3, 1, 1);
+      for (const side of [-1, 1]) add(new THREE.ConeGeometry(0.05, 0.08, 8), c, side * 0.12, 0, 0).rotation.z = (side * Math.PI) / 2;
+      break;
+    }
+    case 'noel': {
+      // Candy cane
+      const red = m(0xe11d48);
+      const white = m(0xffffff, 0.25);
+      for (let i = 0; i < 6; i++) add(new THREE.CylinderGeometry(0.022, 0.022, 0.045, 10), i % 2 ? red : white, 0, -0.12 + i * 0.045, 0);
+      add(new THREE.TorusGeometry(0.05, 0.022, 8, 16, Math.PI), red, -0.05, 0.135, 0);
+      break;
+    }
+    case 'paques': {
+      add(new THREE.SphereGeometry(0.075, 16, 12), m(pick([0xfde68a, 0xa7f3d0, 0xfbcfe8, 0xbfdbfe]))).scale.set(0.85, 1.15, 0.85);
+      add(new THREE.TorusGeometry(0.066, 0.008, 6, 20), m(0x7c3aed, 0.2)).rotation.x = Math.PI / 2;
+      break;
+    }
+    case 'valentin': {
+      const sh = new THREE.Shape();
+      const r = 0.08;
+      sh.moveTo(0, -r);
+      sh.bezierCurveTo(r * 1.3, -r * 0.1, r * 1.1, r * 1.1, 0, r * 0.45);
+      sh.bezierCurveTo(-r * 1.1, r * 1.1, -r * 1.3, -r * 0.1, 0, -r);
+      const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.04, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.015, bevelSegments: 2 });
+      geo.center();
+      add(geo, m(0xff2a6a, 0.5));
+      break;
+    }
+    case 'poisson': {
+      const c = m(0xfb923c, 0.4);
+      add(new THREE.SphereGeometry(0.06, 14, 10), c).scale.set(1.7, 0.8, 0.6);
+      const tail = add(new THREE.ConeGeometry(0.05, 0.08, 4), c, -0.13, 0, 0);
+      tail.rotation.z = -Math.PI / 2;
+      tail.scale.z = 0.3;
+      break;
+    }
+  }
+  return g;
+};
+
+/** Where to drop the treats: open floor next to the walk graph. */
+export const treatSpots = (map: MapData, count: number): THREE.Vector3[] => {
+  const boxes = map.collisionBoxes.filter((b) => !b.disabled);
+  const nodes = [...map.navNodes.values()];
+  const out: THREE.Vector3[] = [];
+  for (let tries = 0; tries < count * 15 && out.length < count && nodes.length; tries++) {
+    const n = nodes[Math.floor(Math.random() * nodes.length)];
+    const a = Math.random() * Math.PI * 2;
+    const r = 0.4 + Math.random() * 1.4;
+    const x = n.pos.x + Math.cos(a) * r;
+    const z = n.pos.z + Math.sin(a) * r;
+    if (boxes.some((b) => x > b.min.x - 0.35 && x < b.max.x + 0.35 && z > b.min.z - 0.35 && z < b.max.z + 0.35)) continue;
+    if (out.some((o) => (o.x - x) ** 2 + (o.z - z) ** 2 < 16)) continue;
+    out.push(new THREE.Vector3(x, n.pos.y + 0.45, z));
+  }
+  return out;
 };

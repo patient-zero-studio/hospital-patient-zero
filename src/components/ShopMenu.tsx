@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Coins, Crown, Gift, Loader2, ShoppingBag, Sparkles, X } from 'lucide-react';
-import { ADVENT, BOXES, BoxId, BoxResult, CATALOG, Cosmetic, TIER_COLOR, TIER_LABEL, TIER_PRICE, cosmetic, fmtCoins } from '../economy';
+import { ADVENT, BOXES, EVENT_BOX_PRICE, BoxId, BoxResult, CATALOG, Cosmetic, TIER_COLOR, TIER_LABEL, TIER_PRICE, cosmetic, fmtCoins } from '../economy';
 import { api, AdminUser, WalletView } from '../net/api';
 import { SEASON_INFO, Season, SeasonSetting } from '../seasons';
 
@@ -11,12 +11,15 @@ const SeasonSwitch: React.FC<{ value: SeasonSetting; onSet: (s: SeasonSetting) =
     ['auto', '📅 Automatique (dates)'],
     ['noel', '🎄 Noël maintenant'],
     ['halloween', '🎃 Halloween maintenant'],
+    ['paques', '🐰 Pâques maintenant'],
+    ['valentin', '💘 Saint-Valentin maintenant'],
+    ['poisson', "🐟 Poisson d'avril maintenant"],
     ['off', '⛔ Aucun événement'],
   ];
   return (
     <div className="mb-5 p-3 border border-zinc-800 bg-black/40">
       <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-2">Événement pour tous les joueurs</div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
         {opts.map(([v, label]) => (
           <button
             key={v}
@@ -36,7 +39,7 @@ const SeasonSwitch: React.FC<{ value: SeasonSetting; onSet: (s: SeasonSetting) =
         ))}
       </div>
       <p className="text-[10px] font-mono text-zinc-600 mt-2">
-        Automatique : Halloween du 1er octobre au 5 novembre, Noël du 1er décembre au 6 janvier. Les cases du calendrier s'ouvrent une par une : case 1 le 1er décembre, case 2 le
+        Automatique : Saint-Valentin 7 → 16 février, Poisson d'avril 1er → 3 avril, Pâques ± 7 jours, Halloween 1er octobre → 5 novembre, Noël 1er décembre → 6 janvier. Les cases du calendrier s'ouvrent une par une : case 1 le 1er décembre, case 2 le
         2 décembre… jusqu'à la case 25 le 25 décembre (pour tout le monde, admins compris).
       </p>
     </div>
@@ -117,6 +120,8 @@ export const CosmeticBadge: React.FC<{ c: Cosmetic; size?: number }> = ({ c, siz
     skeleton: '💀', zombie: '🧟', demon: '👹', inferno: '🔥', shadow: '🌑', goldm: '👑',
     santahat: '🎅', elfhat: '🧝', antlers: '🦌', sweater: '🧶', elf: '🧝', santa: '🎅',
     yeti: '❄️', gingerbread: '🍪', krampus: '👹',
+    bunnyears: '🐰', bunny: '🐰', chocobunny: '🍫', heartshades: '😍', heartboppers: '💕', cupid: '💘', lovebeast: '💗',
+    fishhat: '🐟', clownnose: '🔴', clown: '🤡', clownm: '🤡',
     witchhat: '🧙', pumpkinhead: '🎃', witch: '🧙', vampire: '🧛', reaper: '💀', mummy: '🧻', pumpking: '🎃',
   };
   return (
@@ -153,6 +158,8 @@ interface Props {
   onClaimAdvent?: (day: number) => Promise<BoxResult>;
   /** admin: start / stop an event for everyone */
   onSetSeason?: (s: SeasonSetting) => Promise<void>;
+  /** event box (500 treats) */
+  onOpenEventBox?: () => Promise<BoxResult>;
   /** locked shop: go play in Exploration */
   onExplore?: () => void;
   onLogin: () => void;
@@ -250,12 +257,12 @@ const AdminPanel: React.FC<{ token: string }> = ({ token }) => {
 };
 
 /** Cosmetics shop: today's offers (change every day) and mystery boxes. */
-export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, onClaimDaily, onClaimAdvent, onSetSeason, onExplore, onLogin, onCustomize, onClose, token }) => {
+export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, onClaimDaily, onClaimAdvent, onSetSeason, onExplore, onOpenEventBox, onLogin, onCustomize, onClose, token }) => {
   const season: Season | null = wallet?.season ?? null;
   const [tab, setTab] = useState<'event' | 'shop' | 'boxes' | 'mine' | 'admin'>(season ? 'event' : 'shop');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reveal, setReveal] = useState<{ box: BoxId | 'daily' | 'advent'; result: BoxResult | null } | null>(null);
+  const [reveal, setReveal] = useState<{ box: BoxId | 'daily' | 'advent' | 'event'; result: BoxResult | null } | null>(null);
   // The event can start / stop while the shop is open (admin switch)
   useEffect(() => {
     if (!season && tab === 'event') setTab('shop');
@@ -459,19 +466,68 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
                   className="mb-4 p-3 border text-center"
                   style={{ borderColor: SEASON_INFO[season].color + '88', background: `linear-gradient(90deg, ${SEASON_INFO[season].color}22, ${SEASON_INFO[season].accent}22)` }}
                 >
-                  <div className="text-2xl">{season === 'noel' ? '🎄 ❄️ 🎅 ❄️ 🎄' : '🎃 🦇 👻 🦇 🎃'}</div>
+                  <div className="text-2xl">{SEASON_INFO[season].banner}</div>
                   <div className="font-serif font-black text-lg tracking-widest" style={{ color: SEASON_INFO[season].color }}>
-                    {season === 'noel' ? 'JOYEUX NOËL À SAINT-AURORE' : 'HALLOWEEN À SAINT-AURORE'}
+                    {SEASON_INFO[season].title}
                   </div>
                   <div className="text-[11px] font-mono text-zinc-400">
                     Skins en édition limitée, en vente seulement pendant l'événement ({SEASON_INFO[season].dates}).
                   </div>
                 </div>
+                {/* Event box: opened with the treats picked up in the levels */}
+                {(() => {
+                  const t = SEASON_INFO[season].treat;
+                  const have = wallet.wallet.treats?.[season] ?? 0;
+                  const pct = Math.min(100, (have / EVENT_BOX_PRICE) * 100);
+                  return (
+                    <div className="mb-5 p-3 border flex flex-col sm:flex-row items-center gap-3" style={{ borderColor: SEASON_INFO[season].accent + '99', background: '#00000066' }}>
+                      <div
+                        className={`w-16 h-16 shrink-0 flex items-center justify-center text-3xl border-2 ${busy === 'eventbox' ? 'animate-bounce' : ''}`}
+                        style={{ borderColor: SEASON_INFO[season].color, boxShadow: `0 0 20px ${SEASON_INFO[season].color}66`, background: `linear-gradient(135deg, ${SEASON_INFO[season].color}44, #000)` }}
+                      >
+                        🎁
+                      </div>
+                      <div className="flex-1 min-w-0 w-full">
+                        <div className="text-sm font-bold text-zinc-100">Boîte {SEASON_INFO[season].name}</div>
+                        <div className="text-[11px] font-mono text-zinc-400 mb-1.5">
+                          Ramasse des {t.many} {t.emoji} dans l'hôpital et les égouts (gardés même si tu meurs). {EVENT_BOX_PRICE} {t.many} = une boîte avec un skin {SEASON_INFO[season].name} (ou des pièces).
+                        </div>
+                        <div className="h-2.5 bg-zinc-900 border border-zinc-800">
+                          <div className="h-full transition-all" style={{ width: `${pct}%`, background: SEASON_INFO[season].color }} />
+                        </div>
+                        <div className="text-[11px] font-mono mt-1" style={{ color: SEASON_INFO[season].color }}>
+                          {t.emoji} {fmtCoins(have)} / {EVENT_BOX_PRICE}
+                        </div>
+                      </div>
+                      <button
+                        disabled={!!busy || have < EVENT_BOX_PRICE || !onOpenEventBox}
+                        onClick={() =>
+                          onOpenEventBox &&
+                          run('eventbox', async () => {
+                            setReveal({ box: 'event', result: null });
+                            try {
+                              const r = await onOpenEventBox();
+                              await new Promise((ok) => setTimeout(ok, 900));
+                              setReveal({ box: 'event', result: r });
+                            } catch (e) {
+                              setReveal(null);
+                              throw e;
+                            }
+                          })
+                        }
+                        className="px-4 py-2 font-mono text-xs uppercase tracking-widest font-bold text-black disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ background: SEASON_INFO[season].color }}
+                      >
+                        Ouvrir
+                      </button>
+                    </div>
+                  );
+                })()}
                 {season === 'noel' && wallet.advent && (
                   <AdventCalendar open={wallet.advent.open} claimed={wallet.advent.claimed} busy={!!busy} onOpen={openAdvent} />
                 )}
                 <h3 className="font-mono uppercase tracking-[0.25em] text-xs mb-2" style={{ color: SEASON_INFO[season].accent }}>
-                  {SEASON_INFO[season].emoji} Boutique {season === 'noel' ? 'de Noël' : "d'Halloween"}
+                  {SEASON_INFO[season].emoji} Boutique {SEASON_INFO[season].name}
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{eventOffers.map(offerCard)}</div>
               </>
@@ -578,6 +634,8 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
                   ? { name: 'Cadeau du jour', color: '#34d399' }
                   : reveal.box === 'advent'
                     ? { name: "Calendrier de l'Avent", color: '#ef4444' }
+                    : reveal.box === 'event'
+                      ? { name: season ? `Boîte ${SEASON_INFO[season].name}` : 'Boîte', color: season ? SEASON_INFO[season].color : '#fbbf24' }
                     : BOXES.find((x) => x.id === reveal.box)!;
               const r = reveal.result;
               const skin = r?.skin ? cosmetic(r.skin) : undefined;

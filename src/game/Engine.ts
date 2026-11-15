@@ -27,8 +27,8 @@ import { NoiseMarkers } from './NoiseMarkers';
 import { VentCrawler, CRAWLER_STATES, CrawlerHuman } from './VentCrawler';
 import { buildItemModel } from './ItemModels';
 import type { SupplyKind } from '../economy';
-import { getActiveSeason } from '../seasons';
-import { buildSeasonalDecor } from './SeasonalDecor';
+import { SEASON_INFO, Season, getActiveSeason } from '../seasons';
+import { buildSeasonalDecor, buildTreatModel, treatSpots } from './SeasonalDecor';
 
 /** Anything that can kill the player (and play the death lunge). */
 type Killer = { poseLunge: (camPos: THREE.Vector3, t: number) => void; headWorld: THREE.Vector3 };
@@ -190,6 +190,9 @@ export interface HudSnapshot {
   blindLeft: number;
   /** Coins found this run (banked when you get out). */
   runCoins: number;
+  /** Event treats picked up this run (bonbons, œufs…) + their emoji */
+  runTreats: number;
+  treatEmoji: string | null;
   /** Selected hotbar slot ([X] drops it, mouse wheel changes it). */
   selectedSlot: number;
   /** Online proximity voice chat (null solo / turned off). */
@@ -1142,6 +1145,7 @@ export class GameEngine {
     this.map.disposables.forEach((d) => d.dispose());
     this.decor?.disposables.forEach((d) => d.dispose());
     this.decor = null;
+    this.clearTreats();
     for (const m of this.monsters) {
       this.scene.remove(m.mesh);
       m.dispose();
@@ -1401,6 +1405,7 @@ export class GameEngine {
       );
     if (sewers) this.queueChapterToast('CHAPITRE 2 — LES ÉGOUTS. L\'escalier s\'est effondré derrière vous. Quelque chose respire dans le noir… Il n\'a pas d\'yeux : il ÉCOUTE.');
     this.player.lowZones = this.map.lowZones;
+    this.spawnTreats();
     // Daily challenge modifiers
     const ch = this.challenge;
     this.player.batteryDrainMul = ch === 'dim' ? 3 : ch === 'dive' ? 2 : 1;
@@ -2644,6 +2649,7 @@ export class GameEngine {
     this.updateScreamer(delta);
     this.cans.update(delta, boxes);
     this.updateWorldItems(delta);
+    this.updateTreats(delta);
     this.vendCooldown = Math.max(0, this.vendCooldown - delta);
     if (this.flipCharging) this.flipT += delta;
     if (this.flipMsgTimer > 0) {
@@ -2912,6 +2918,8 @@ export class GameEngine {
       canBlind: this.canBlind(),
       blindLeft: this.blindTimer,
       runCoins: this.state.runCoins,
+      runTreats: this.runTreats,
+      treatEmoji: this.treatSeason ? SEASON_INFO[this.treatSeason].treat.emoji : null,
       selectedSlot: this.selectedSlot,
       intro: !!this.intro,
       introText: this.introTextTimer > 0 ? this.introText : null,
@@ -4072,6 +4080,57 @@ export class GameEngine {
           this.alertAll(pos.clone().setY(1.2), 30);
           setTimeout(() => this.running && this.alertAll(pos.clone().setY(1.2), 25), 1500);
         }
+      }
+    }
+  }
+
+  // ---- 🍬 Event treats (bonbons, œufs, cœurs…) lying around the hospital ----
+  public runTreats = 0;
+  private treatSeason: Season | null = null;
+  private treats: { mesh: THREE.Group; y: number; taken: boolean }[] = [];
+  private treatDisposables: { dispose: () => void }[] = [];
+  private clearTreats() {
+    for (const t of this.treats) t.mesh.removeFromParent();
+    this.treatDisposables.forEach((d) => d.dispose());
+    this.treats = [];
+    this.treatDisposables = [];
+  }
+  /** During an event, ~40 treats are scattered in the hospital / sewers (chapters 1-2). */
+  private spawnTreats() {
+    this.clearTreats();
+    this.runTreats = 0;
+    this.treatSeason = getActiveSeason();
+    if (!this.treatSeason || this.maze || this.forest || this.site) return;
+    const track = <T extends { dispose: () => void }>(o: T) => {
+      this.treatDisposables.push(o);
+      return o;
+    };
+    for (const pos of treatSpots(this.map, 40)) {
+      const mesh = buildTreatModel(this.treatSeason, track);
+      mesh.position.copy(pos);
+      mesh.rotation.y = Math.random() * Math.PI * 2;
+      this.scene.add(mesh);
+      this.treats.push({ mesh, y: pos.y, taken: false });
+    }
+  }
+  private updateTreats(delta: number) {
+    if (!this.treats.length || !this.treatSeason) return;
+    const t = performance.now() / 1000;
+    const p = this.player.position;
+    for (let i = 0; i < this.treats.length; i++) {
+      const tr = this.treats[i];
+      if (tr.taken) continue;
+      tr.mesh.rotation.y += delta * 1.6;
+      tr.mesh.position.y = tr.y + Math.sin(t * 2.2 + i) * 0.06;
+      const dx = tr.mesh.position.x - p.x;
+      const dz = tr.mesh.position.z - p.z;
+      if (dx * dx + dz * dz < 0.8 && Math.abs(p.y - tr.y) < 2.2) {
+        tr.taken = true;
+        tr.mesh.removeFromParent();
+        this.runTreats++;
+        sound.playItemPickup();
+        const info = SEASON_INFO[this.treatSeason].treat;
+        this.state.showToast(`${info.emoji} ${this.runTreats} ${this.runTreats > 1 ? info.many : info.one} — gardés même si vous mourez`);
       }
     }
   }

@@ -29,8 +29,11 @@ import {
   ADVENT,
   claimAdvent,
   seasonShop,
+  EVENT_BOX_PRICE,
+  MAX_TREATS_PER_RUN,
+  openEventBox,
 } from '../src/economy.ts';
-import { SeasonSetting, adventDay, adventYear, isSeasonSetting, resolveSeason } from '../src/seasons.ts';
+import { SEASONS, SeasonSetting, adventDay, adventYear, isSeasonSetting, resolveSeason } from '../src/seasons.ts';
 import { AchDef, AchState, StatKey, applyAchReport, sanitizeAch } from '../src/achievements.ts';
 import { challengeMet, dailyChallenge } from '../src/challenges.ts';
 import { debouncedSaver, makeStore } from './storage.ts';
@@ -71,6 +74,11 @@ interface User {
   advent?: { year: number; days: number[] };
   /** The shop opens after the first escape (Exploration is enough) */
   shopUnlocked?: boolean;
+  /** last treats banked (anti-spam) */
+  lastTreats?: number;
+  /** Friends (lower-case names) and friend requests received */
+  friends?: string[];
+  friendReqs?: string[];
 }
 
 const store = makeStore(DATA_DIR);
@@ -197,6 +205,8 @@ const walletOf = (u: User) => {
   u.wallet = u.wallet ? sanitizeWallet(u.wallet) : NEW_WALLET();
   // Admins never run out
   if (isAdmin(u)) u.wallet.coins = INFINITE_COINS;
+  // …and never run out of event treats either (to try the event boxes)
+  if (isAdmin(u)) for (const k of SEASONS) u.wallet.treats[k] = INFINITE_COINS;
   return u.wallet;
 };
 const authUser = (req: express.Request) => {
@@ -395,6 +405,35 @@ app.post('/api/admin/season', (req, res) => {
   settingsSaver.save();
   console.log(`[admin] ${user.username} règle l'événement sur « ${s} »`);
   res.json(walletView(user));
+});
+
+// 🍬 Event treats picked up in a run (kept even if you die)
+app.post('/api/event/treats', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const season = currentSeason();
+  const now = Date.now();
+  const n = Math.min(MAX_TREATS_PER_RUN, Math.max(0, Math.floor(Number(req.body?.count) || 0)));
+  if (!season || n <= 0 || (user.lastTreats && now - user.lastTreats < 15000)) return res.json({ added: 0, ...walletView(user) });
+  user.lastTreats = now;
+  const w = walletOf(user);
+  w.treats[season] = (w.treats[season] ?? 0) + n;
+  saveUsers();
+  res.json({ added: n, ...walletView(user) });
+});
+
+// 🎁 Event box: 500 treats → an event skin (or coins)
+app.post('/api/event/box', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  if (!shopOpenFor(user)) return res.status(403).json({ error: SHOP_LOCKED });
+  const season = currentSeason();
+  if (!season) return res.status(400).json({ error: 'Aucun événement en cours.' });
+  const result = openEventBox(walletOf(user), season);
+  if (!result) return res.status(400).json({ error: `Il faut ${EVENT_BOX_PRICE} pour ouvrir la boîte.` });
+  const newAch = reportAch(user, [], {}, { boxes: 1 });
+  saveUsers();
+  res.json({ result, newAch, ...walletView(user) });
 });
 
 // 🎄 Advent calendar: one box per day, December 1 → 25
@@ -670,6 +709,139 @@ setInterval(() => {
     c.ws.ping();
   }
 }, 20000);
+
+
+// ---------------------------------------------------------------------------
+// Friends: requests by pseudo, who is online, invitations to your room
+// ---------------------------------------------------------------------------
+/** Last time each account was seen (any friends request), lower-case name → ms */
+const lastSeen = new Map<string, number>();
+/** Pending invitations to a room, by invited player (lower case) */
+const invites = new Map<string, { from: string; code: string; at: number }[]>();
+const MAX_FRIENDS = 100;
+
+const friendsOf = (u: User) => (u.friends = Array.isArray(u.friends) ? u.friends.filter((f) => users.has(f)) : []);
+const requestsOf = (u: User) => (u.friendReqs = Array.isArray(u.friendReqs) ? u.friendReqs.filter((f) => users.has(f)) : []);
+const clientsOf = (name: string) => [...clients].filter((c) => c.username.toLowerCase() === name);
+const statusOf = (name: string): 'playing' | 'online' | 'offline' => {
+  const cs = clientsOf(name);
+  if (cs.some((c) => c.room?.started)) return 'playing';
+  if (cs.length || Date.now() - (lastSeen.get(name) ?? 0) < 75000) return 'online';
+  return 'offline';
+};
+/** The room this player hosts and that still waits for a partner */
+const openRoomOf = (name: string) => clientsOf(name).find((c) => c.room && c.room.host === c && !c.room.guest && !c.room.started)?.room ?? null;
+
+const friendsView = (u: User) => {
+  const me = u.username.toLowerCase();
+  lastSeen.set(me, Date.now());
+  const now = Date.now();
+  const mine = (invites.get(me) ?? []).filter((i) => now - i.at < 5 * 60000 && rooms.get(i.code)?.host.username.toLowerCase() === i.from.toLowerCase());
+  if (mine.length) invites.set(me, mine);
+  else invites.delete(me);
+  const order = { playing: 0, online: 1, offline: 2 };
+  return {
+    friends: friendsOf(u)
+      .map((f) => ({ username: users.get(f)!.username, status: statusOf(f) }))
+      .sort((a, b) => order[a.status] - order[b.status] || a.username.localeCompare(b.username)),
+    requests: requestsOf(u).map((f) => users.get(f)!.username),
+    invites: mine.map((i) => {
+      const r = rooms.get(i.code)!;
+      return { from: i.from, code: i.code, mode: r.mode, chapter: r.chapter, difficulty: r.difficulty };
+    }),
+    /** you host a room waiting for a partner: you can invite */
+    canInvite: !!openRoomOf(me),
+  };
+};
+
+app.get('/api/friends', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  res.json(friendsView(user));
+});
+
+app.post('/api/friends/add', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const name = String(req.body?.username ?? '').trim().toLowerCase();
+  const me = user.username.toLowerCase();
+  const other = users.get(name);
+  if (!other) return res.status(404).json({ error: 'Aucun joueur avec ce pseudo.' });
+  if (name === me) return res.status(400).json({ error: 'C\'est toi !' });
+  if (friendsOf(user).includes(name)) return res.status(400).json({ error: 'Vous êtes déjà amis.' });
+  if (friendsOf(user).length >= MAX_FRIENDS) return res.status(400).json({ error: `${MAX_FRIENDS} amis maximum.` });
+  // They already asked you: you become friends right away
+  if (requestsOf(user).includes(name)) {
+    user.friendReqs = requestsOf(user).filter((f) => f !== name);
+    user.friends = [...friendsOf(user), name];
+    other.friends = [...friendsOf(other).filter((f) => f !== me), me];
+    saveUsers();
+    return res.json({ message: `🤝 ${other.username} et toi êtes maintenant amis !`, ...friendsView(user) });
+  }
+  const theirs = requestsOf(other);
+  if (!theirs.includes(me)) {
+    if (theirs.length >= 50) return res.status(400).json({ error: 'Ce joueur a trop de demandes en attente.' });
+    other.friendReqs = [...theirs, me];
+    saveUsers();
+  }
+  res.json({ message: `📨 Demande envoyée à ${other.username}.`, ...friendsView(user) });
+});
+
+app.post('/api/friends/accept', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const name = String(req.body?.username ?? '').trim().toLowerCase();
+  const me = user.username.toLowerCase();
+  const other = users.get(name);
+  if (!other || !requestsOf(user).includes(name)) return res.status(404).json({ error: 'Plus de demande de ce joueur.' });
+  user.friendReqs = requestsOf(user).filter((f) => f !== name);
+  if (!friendsOf(user).includes(name)) user.friends = [...friendsOf(user), name];
+  if (!friendsOf(other).includes(me)) other.friends = [...friendsOf(other), me];
+  saveUsers();
+  res.json({ message: `🤝 ${other.username} et toi êtes maintenant amis !`, ...friendsView(user) });
+});
+
+/** Declines a request, or removes a friend (for both). */
+app.post('/api/friends/remove', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const name = String(req.body?.username ?? '').trim().toLowerCase();
+  const me = user.username.toLowerCase();
+  user.friendReqs = requestsOf(user).filter((f) => f !== name);
+  user.friends = friendsOf(user).filter((f) => f !== name);
+  const other = users.get(name);
+  if (other) other.friends = friendsOf(other).filter((f) => f !== me);
+  saveUsers();
+  res.json(friendsView(user));
+});
+
+app.post('/api/friends/invite', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const name = String(req.body?.username ?? '').trim().toLowerCase();
+  const me = user.username.toLowerCase();
+  if (!friendsOf(user).includes(name)) return res.status(400).json({ error: 'Ce joueur n\'est pas ton ami.' });
+  const room = openRoomOf(me);
+  if (!room) return res.status(400).json({ error: 'Crée d\'abord une partie (Multijoueur → Créer), puis invite ton ami.' });
+  const list = (invites.get(name) ?? []).filter((i) => i.from.toLowerCase() !== me);
+  list.push({ from: user.username, code: room.code, at: Date.now() });
+  invites.set(name, list.slice(-5));
+  // Instant if they are connected to the game server
+  for (const c of clientsOf(name)) send(c, { t: 'invite', from: user.username, code: room.code });
+  res.json({ message: `🎮 Invitation envoyée à ${users.get(name)!.username}.`, ...friendsView(user) });
+});
+
+app.post('/api/friends/invite/dismiss', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const me = user.username.toLowerCase();
+  const code = String(req.body?.code ?? '');
+  invites.set(
+    me,
+    (invites.get(me) ?? []).filter((i) => i.code !== code)
+  );
+  res.json(friendsView(user));
+});
 
 // ---------------------------------------------------------------------------
 // Front-end

@@ -31,6 +31,8 @@ interface HUDProps {
   maxSlots: number;
   /** Coins found this run */
   runCoins?: number;
+  runTreats?: number;
+  treatEmoji?: string | null;
   /** Hotbar slot [X] drops */
   selectedSlot?: number;
   /** phone: on-screen controls */
@@ -90,6 +92,8 @@ export const HUD: React.FC<HUDProps> = ({
   items,
   maxSlots,
   runCoins = 0,
+  runTreats = 0,
+  treatEmoji = null,
   selectedSlot = 0,
   touch = false,
   screamer,
@@ -272,6 +276,13 @@ export const HUD: React.FC<HUDProps> = ({
       {runCoins > 0 && (
         <div className="absolute bottom-[100px] left-1/2 -translate-x-1/2 px-2 py-0.5 bg-black/60 border border-amber-700/60 text-amber-300 font-mono text-[11px]">
           🪙 {runCoins} pièce{runCoins > 1 ? 's' : ''} trouvée{runCoins > 1 ? 's' : ''}
+        </div>
+      )}
+
+      {/* Event treats picked up this run */}
+      {runTreats > 0 && treatEmoji && (
+        <div className="absolute bottom-[124px] left-1/2 -translate-x-1/2 px-2 py-0.5 bg-black/60 border border-pink-700/60 text-pink-200 font-mono text-[11px]">
+          {treatEmoji} {runTreats}
         </div>
       )}
 

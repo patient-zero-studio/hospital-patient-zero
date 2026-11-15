@@ -22,6 +22,11 @@ interface StartScreenProps {
   coins: number | null;
   /** the free daily gift is waiting in the shop */
   giftReady?: boolean;
+  /** friends list (null online count = not logged in) */
+  onFriends?: () => void;
+  friendsOnline?: number | null;
+  /** friend requests + invitations waiting */
+  friendsAlert?: number;
   /** shop not unlocked yet (escape once, Exploration is enough) */
   shopLocked?: boolean;
   /** 🎄 / 🎃 event on */
@@ -63,6 +68,9 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   coins,
   giftReady = false,
   shopLocked = false,
+  onFriends,
+  friendsOnline = null,
+  friendsAlert = 0,
   season = null,
   adventReady = false,
   onShop,
@@ -141,7 +149,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               className="absolute -top-[0.45em] -left-[0.35em] text-[0.6em] -rotate-[25deg] select-none"
               aria-hidden
             >
-              {season === 'noel' ? '🎅' : '🎃'}
+              {season === 'noel' ? '🎅' : SEASON_INFO[season].emoji}
             </span>
           )}
         </h1>
@@ -312,6 +320,19 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               )}
             </button>
             <div className="flex gap-2 flex-wrap justify-center">
+            {onFriends && (
+              <button
+                onClick={onFriends}
+                className="relative px-6 py-2.5 bg-black/60 hover:bg-zinc-900 text-zinc-200 font-mono text-xs uppercase tracking-widest flex items-center gap-3 transition-all cursor-pointer border border-zinc-700 hover:border-emerald-400"
+              >
+                <Users className="w-4 h-4 text-emerald-400" />
+                <span>Amis</span>
+                {friendsOnline != null && friendsOnline > 0 && <span className="normal-case tracking-normal text-emerald-400">{friendsOnline} en ligne</span>}
+                {friendsAlert > 0 && (
+                  <span className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1 rounded-full bg-red-600 text-white text-[11px] flex items-center justify-center animate-pulse">{friendsAlert}</span>
+                )}
+              </button>
+            )}
             {onLeaderboard && (
               <button
                 onClick={onLeaderboard}

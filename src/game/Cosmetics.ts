@@ -27,7 +27,7 @@ export interface HumanOutfit {
   /** extra material tweaks */
   gownFx?: 'gold' | 'neon' | 'white' | 'ghost';
   hairFx?: 'neon';
-  extras?: ('stethoscope' | 'mohawk' | 'stripes' | 'belt' | 'xmasbands' | 'cape')[];
+  extras?: ('stethoscope' | 'mohawk' | 'stripes' | 'belt' | 'xmasbands' | 'cape' | 'wings')[];
 }
 
 export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
@@ -45,6 +45,12 @@ export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
   witch: { gown: '#1e1430', hair: '#7c3aed', accs: ['witchhat'] },
   vampire: { gown: '#0c0c0e', hair: '#0a0a0a', accs: ['fangs'], extras: ['cape'] },
   reaper: { gown: '#08080a', hair: '#08080a', accs: ['hood'], gownFx: 'ghost', extras: ['cape'] },
+  // 🐰 Pâques
+  bunny: { gown: '#f4f4f0', hair: '#f4f4f0', accs: ['bunnyears'] },
+  // 💘 Saint-Valentin
+  cupid: { gown: '#fff1f5', hair: '#f5d36a', accs: ['heartshades'], gownFx: 'white', extras: ['wings'] },
+  // 🐟 Poisson d'avril
+  clown: { gown: '#facc15', hair: '#f97316', accs: ['clownnose', 'fishhat'], extras: ['xmasbands'] },
 };
 
 /** Size of a head, so the event hats fit both the human and the creature. */
@@ -59,7 +65,18 @@ interface HeadSpec {
 const HUMAN_HEAD: HeadSpec = { cy: 0.125, top: 0.235, rx: 0.09, rz: 0.106, s: 1 };
 const MONSTER_HEAD: HeadSpec = { cy: 0.1, top: 0.29, rx: 0.135, rz: 0.16, s: 1.45 };
 
-/** Event hats & heads (Christmas / Halloween), shared by both models. Returns false if unknown. */
+/** A little heart, standing in the XY plane, centred on the origin. */
+const heartGeo = (track: Track, r: number) => {
+  const sh = new THREE.Shape();
+  sh.moveTo(0, -r);
+  sh.bezierCurveTo(r * 1.3, -r * 0.1, r * 1.1, r * 1.1, 0, r * 0.45);
+  sh.bezierCurveTo(-r * 1.1, r * 1.1, -r * 1.3, -r * 0.1, 0, -r);
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: r * 0.5, bevelEnabled: true, bevelThickness: r * 0.2, bevelSize: r * 0.15, bevelSegments: 2 });
+  geo.center();
+  return track(geo);
+};
+
+/** Event hats & heads (Christmas / Halloween…), shared by both models. Returns false if unknown. */
 const buildFestive = (id: string, h: HeadSpec, track: Track, g: THREE.Group): boolean => {
   const { s } = h;
   const cone = (color: number, rimColor: number, height: number, tip: number, tipEmissive = 0) => {
@@ -177,6 +194,61 @@ const buildFestive = (id: string, h: HeadSpec, track: Track, g: THREE.Group): bo
       }
       return true;
     }
+    case 'bunnyears': {
+      const fur = std(track, 0xf4f4f0, { roughness: 1 });
+      const pink = std(track, 0xf9a8d4, { roughness: 0.9 });
+      for (const side of [-1, 1]) {
+        const ear = new THREE.Group();
+        ear.position.set(side * h.rx * 0.45, h.top - 0.02 * s, -0.01 * s);
+        ear.rotation.set(-0.15, 0, -side * 0.18);
+        g.add(ear);
+        const outer = add(track, ear, new THREE.CapsuleGeometry(0.026 * s, 0.13 * s, 6, 12), fur, 0, 0.09 * s, 0);
+        outer.scale.z = 0.45;
+        const inner = add(track, ear, new THREE.CapsuleGeometry(0.015 * s, 0.1 * s, 4, 10), pink, 0, 0.09 * s, 0.009 * s);
+        inner.scale.z = 0.3;
+        if (side === 1) ear.rotation.x = 0.55; // one ear flops forward
+      }
+      return true;
+    }
+    case 'heartshades': {
+      const red = std(track, 0xff2a6a, { roughness: 0.3, emissive: 0x600010, emissiveIntensity: 0.4 });
+      for (const side of [-1, 1]) {
+        const lens = add(track, g, heartGeo(track, 0.022 * s), red, side * 0.032 * s, h.cy + 0.012 * s, h.rz + 0.004 * s);
+        lens.scale.z = 0.4;
+      }
+      add(track, g, new THREE.BoxGeometry(0.02 * s, 0.004 * s, 0.004 * s), red, 0, h.cy + 0.016 * s, h.rz + 0.006 * s);
+      return true;
+    }
+    case 'heartboppers': {
+      const band = std(track, 0xff2a6a, { roughness: 0.4 });
+      const ring = add(track, g, new THREE.TorusGeometry(h.rx * 1.02, 0.007 * s, 6, 24, Math.PI), band, 0, h.top - 0.07 * s, 0);
+      ring.rotation.y = Math.PI / 2;
+      ring.scale.set(h.rz / h.rx, 1, 1);
+      for (const side of [-1, 1]) {
+        const stick = add(track, g, new THREE.CylinderGeometry(0.003 * s, 0.003 * s, 0.11 * s, 5), std(track, 0x222222), side * h.rx * 0.6, h.top + 0.03 * s, 0);
+        stick.rotation.z = -side * 0.3;
+        const heart = add(track, g, heartGeo(track, 0.03 * s), std(track, 0xff2a6a, { emissive: 0x800020, emissiveIntensity: 0.6 }), side * h.rx * 0.85, h.top + 0.09 * s, 0);
+        heart.scale.z = 0.5;
+      }
+      return true;
+    }
+    case 'fishhat': {
+      const scales = std(track, 0xfb923c, { roughness: 0.45 });
+      const pivot = new THREE.Group();
+      pivot.position.set(0, h.top + 0.02 * s, 0);
+      pivot.rotation.y = Math.PI / 2;
+      g.add(pivot);
+      const body = add(track, pivot, new THREE.SphereGeometry(0.06 * s, 16, 10), scales, 0, 0, 0);
+      body.scale.set(1.8, 0.75, 0.55);
+      const tail = add(track, pivot, new THREE.ConeGeometry(0.045 * s, 0.07 * s, 4), scales, -0.13 * s, 0, 0);
+      tail.rotation.z = -Math.PI / 2;
+      tail.scale.z = 0.3;
+      for (const side of [-1, 1]) add(track, pivot, new THREE.SphereGeometry(0.009 * s, 8, 6), std(track, 0x111111), 0.075 * s, 0.012 * s, side * 0.03 * s);
+      return true;
+    }
+    case 'clownnose':
+      add(track, g, new THREE.SphereGeometry(0.024 * s, 16, 12), std(track, 0xff1a1a, { roughness: 0.25, emissive: 0x500000, emissiveIntensity: 0.5 }), 0, h.cy - 0.01 * s, h.rz + 0.016 * s);
+      return true;
     case 'hood': {
       const cloth = std(track, 0x08080a, { roughness: 1, side: THREE.DoubleSide });
       const hood = add(
@@ -330,6 +402,20 @@ export const buildHumanBodyExtra = (id: string, track: Track): THREE.Group => {
     // High collar
     const collar = add(track, g, new THREE.CylinderGeometry(0.2, 0.13, 0.2, 24, 1, true, Math.PI / 2, Math.PI), black, 0, 0.62, -0.01);
     collar.scale.z = 0.9;
+  } else if (id === 'wings') {
+    // Cupid's little wings on the back
+    const feather = std(track, 0xfffaff, { roughness: 0.8, side: THREE.DoubleSide, emissive: 0x302028, emissiveIntensity: 0.3 });
+    for (const side of [-1, 1]) {
+      const sh = new THREE.Shape();
+      sh.moveTo(0, 0);
+      sh.quadraticCurveTo(0.12, 0.2, 0.3, 0.16);
+      sh.quadraticCurveTo(0.24, 0.06, 0.26, -0.02);
+      sh.quadraticCurveTo(0.16, -0.02, 0.18, -0.12);
+      sh.quadraticCurveTo(0.08, -0.08, 0, 0);
+      const wing = add(track, g, new THREE.ShapeGeometry(sh), feather, side * 0.05, 0.42, -0.19);
+      wing.scale.x = side;
+      wing.rotation.y = side * 0.5;
+    }
   } else if (id === 'stripes') {
     const black = std(track, 0x151515, { roughness: 0.9, side: THREE.DoubleSide });
     for (let i = 0; i < 6; i++) {
@@ -365,6 +451,12 @@ export const MONSTER_OUTFITS: Record<string, MonsterOutfit> = {
   // 🎃 Halloween
   mummy: { skin: '#d6cba8', eyes: '#ffd21a', gown: '#c8bc98', accs: ['bandages'] },
   pumpking: { skin: '#1a1208', eyes: '#ff9a00', gown: '#2a1a0a', accs: ['pumpkinhead'], skinFx: 'inferno' },
+  // 🐰 Pâques
+  chocobunny: { skin: '#5a3018', eyes: '#fde047', gown: '#3a1e0e', accs: ['bunnyears'] },
+  // 💘 Saint-Valentin
+  lovebeast: { skin: '#f472b6', eyes: '#ff3a8a', gown: '#9d174d', accs: ['heartboppers'] },
+  // 🐟 Poisson d'avril
+  clownm: { skin: '#f4f4f0', eyes: '#22d3ee', gown: '#7c3aed', accs: ['clownnose'] },
 };
 
 export const buildMonsterAccessory = (id: string, track: Track): THREE.Group => {

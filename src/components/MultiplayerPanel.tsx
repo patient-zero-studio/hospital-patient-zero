@@ -39,6 +39,8 @@ interface Props {
   onStart: () => void;
   onLeave: () => void;
   onClose: () => void;
+  /** opens the friends list (to invite one) */
+  onFriends?: () => void;
 }
 
 const input =
@@ -325,6 +327,11 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
                     {copied ? <Check className="w-5 h-5 text-emerald-400" /> : <Copy className="w-5 h-5 text-zinc-400" />}
                   </button>
                 </div>
+                {!p.lobby.partner && p.onFriends && (
+                  <button onClick={p.onFriends} className="w-full py-2 border border-emerald-700 bg-emerald-950/30 text-emerald-300 hover:border-emerald-400 font-mono text-xs uppercase tracking-widest">
+                    👥 Inviter un ami
+                  </button>
+                )}
                 <SettingsEditor value={p.lobby} onChange={p.onUpdateSettings} iAm="host" />
                 <div className="text-sm font-mono text-center min-h-[1.5em]">
                   {p.lobby.partner ? (

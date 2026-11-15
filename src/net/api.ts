@@ -38,6 +38,15 @@ export interface WalletView {
   advent?: { open: number; claimed: number[] };
 }
 
+export interface FriendsView {
+  friends: { username: string; status: 'playing' | 'online' | 'offline' }[];
+  requests: string[];
+  invites: { from: string; code: string; mode: string; chapter: number; difficulty: number }[];
+  /** you host a room waiting for a partner */
+  canInvite: boolean;
+  message?: string;
+}
+
 export interface BoardEntry {
   username: string;
   time: number;
@@ -146,6 +155,9 @@ export const api = {
   reward: (token: string, difficulty: number, found: number): Promise<WalletView & { gained: number }> =>
     post('/api/wallet/reward', { difficulty, found }, token),
   claimDaily: (token: string): Promise<WalletView & { result: BoxResult }> => post('/api/shop/daily', {}, token),
+  /** Event treats picked up during a run (sent when it ends, win or lose). */
+  addTreats: (token: string, count: number): Promise<WalletView & { added: number }> => post('/api/event/treats', { count }, token),
+  openEventBox: (token: string): Promise<WalletView & { result: BoxResult }> => post('/api/event/box', {}, token),
   claimAdvent: (token: string, day: number): Promise<WalletView & { result: BoxResult }> => post('/api/shop/advent', { day }, token),
   /** Event on for everyone (null = none, undefined = server unreachable). */
   async season(): Promise<Season | null | undefined> {
@@ -173,6 +185,19 @@ export const api = {
   },
   reportAch: (token: string, unlock: string[], stats: Partial<Record<StatKey, number>>): Promise<WalletView> =>
     post('/api/achievements', { unlock, stats }, token),
+
+  // ---- Friends ----
+  async friends(token: string): Promise<FriendsView> {
+    const res = await fetch('/api/friends', { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Serveur injoignable.');
+    return data;
+  },
+  friendAdd: (token: string, username: string): Promise<FriendsView> => post('/api/friends/add', { username }, token),
+  friendAccept: (token: string, username: string): Promise<FriendsView> => post('/api/friends/accept', { username }, token),
+  friendRemove: (token: string, username: string): Promise<FriendsView> => post('/api/friends/remove', { username }, token),
+  friendInvite: (token: string, username: string): Promise<FriendsView> => post('/api/friends/invite', { username }, token),
+  inviteDismiss: (token: string, code: string): Promise<FriendsView> => post('/api/friends/invite/dismiss', { code }, token),
 
   // ---- Admin ----
   async adminUsers(token: string): Promise<AdminUser[]> {

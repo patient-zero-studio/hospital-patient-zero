@@ -18,7 +18,8 @@ import { MultiplayerPanel, LobbyState, MatchSettings } from './components/Multip
 import { VersusResultModal } from './components/VersusResultModal';
 import { CustomizeMenu } from './components/CustomizeMenu';
 import { Appearance, DEFAULT_APPEARANCE } from './appearance';
-import { api, Session, WalletView } from './net/api';
+import { api, FriendsView, Session, WalletView } from './net/api';
+import { FriendsPanel, InviteToast } from './components/FriendsPanel';
 import { ShopMenu } from './components/ShopMenu';
 import { HoboShop } from './components/HoboShop';
 import { IS_TOUCH, RotateHint, TouchControls, enterMobileFullscreen } from './components/TouchControls';
@@ -110,6 +111,8 @@ const EMPTY_HUD: HudSnapshot = {
   canBlind: false,
   blindLeft: 0,
   runCoins: 0,
+  runTreats: 0,
+  treatEmoji: null,
   selectedSlot: 0,
   voice: null,
   intro: false,
@@ -230,12 +233,14 @@ export default function App() {
           // Campaign: a failed attempt still counts in the total time
           const cp = campaignRef.current;
           if (cp && !onlineRef.current) cp.time += engineRef.current?.runTime ?? 0;
+          bankTreatsRef.current();
           setIsGameOver(true);
         },
         onVictory: (ending) => victoryRef.current(ending),
         onVersusEnd: (won, text) => {
           document.exitPointerLock?.();
           if (won) grantRewardRef.current(2);
+          bankTreatsRef.current();
           setVersusResult({ won, reason: text });
         },
         onHobo: () => {
@@ -365,6 +370,7 @@ export default function App() {
     document.exitPointerLock?.();
     const e = engineRef.current!;
     grantRewardRef.current(e.builtDifficulty ?? 2);
+    bankTreatsRef.current();
     const cp = campaignRef.current;
     if (cp && !onlineRef.current) {
       cp.time += e.runTime;
@@ -556,6 +562,22 @@ export default function App() {
       /* offline */
     }
   };
+  /** Event treats picked up this run go to the account (win or lose). */
+  const bankTreats = async () => {
+    const s = sessionRef.current;
+    const e = engineRef.current;
+    const n = e?.runTreats ?? 0;
+    if (!e || n <= 0 || !s) return;
+    e.runTreats = 0;
+    try {
+      await new Promise((r) => setTimeout(r, 900)); // after the coin reward
+      setWallet(await api.addTreats(s.token, n));
+    } catch {
+      /* offline */
+    }
+  };
+  const bankTreatsRef = useRef(bankTreats);
+  bankTreatsRef.current = bankTreats;
   const grantRewardRef = useRef(grantReward);
   grantRewardRef.current = grantReward;
 
@@ -672,6 +694,50 @@ export default function App() {
     showNewAch(r.newAch);
     return r.result;
   };
+  const openEventBox = async () => {
+    const r = await api.openEventBox(tokenOrThrow());
+    setWallet(r);
+    showNewAch(r.newAch);
+    return r.result;
+  };
+  // ---- Friends -----------------------------------------------------------
+  const [friendsOpen, setFriendsOpen] = useState(false);
+  const [friends, setFriends] = useState<FriendsView | null>(null);
+  const refreshFriends = useCallback(async () => {
+    const s = sessionRef.current;
+    if (!s) return setFriends(null);
+    try {
+      setFriends(await api.friends(s.token));
+    } catch {
+      /* offline */
+    }
+  }, []);
+  // Polled while in the menus: who is online, requests, invitations
+  useEffect(() => {
+    if (!session || isPlaying) return;
+    refreshFriends();
+    const t = setInterval(refreshFriends, friendsOpen || mpOpen ? 5000 : 10000);
+    return () => clearInterval(t);
+  }, [session, isPlaying, friendsOpen, mpOpen, lobby.status, refreshFriends]);
+  const friendAct = async (fn: (t: string) => Promise<FriendsView>) => {
+    const r = await fn(tokenOrThrow());
+    setFriends(r);
+    return r.message;
+  };
+  const acceptInvite = (code: string) => {
+    const s = sessionRef.current;
+    if (s) api.inviteDismiss(s.token, code).then(setFriends).catch(() => {});
+    setFriendsOpen(false);
+    setShopOpen(false);
+    setMpOpen(true);
+    joinRoom(code);
+  };
+  const declineInvite = (code: string) => {
+    const s = sessionRef.current;
+    setFriends((f) => (f ? { ...f, invites: f.invites.filter((i) => i.code !== code) } : f));
+    if (s) api.inviteDismiss(s.token, code).then(setFriends).catch(() => {});
+  };
+
   const adminSetSeason = async (s: SeasonSetting) => setWallet(await api.adminSeason(tokenOrThrow(), s));
   const hoboBuy = async (kind: string) => {
     const e = engineRef.current;
@@ -907,6 +973,16 @@ export default function App() {
           onToggleMusic={() => setMenuMusic((m) => !m)}
           coins={wallet?.wallet.coins ?? null}
           shopLocked={!!wallet && !wallet.shopUnlocked}
+          onFriends={
+            session
+              ? () => {
+                  refreshFriends();
+                  setFriendsOpen(true);
+                }
+              : () => setMpOpen(true)
+          }
+          friendsOnline={friends ? friends.friends.filter((f) => f.status !== 'offline').length : null}
+          friendsAlert={friends ? friends.requests.length + friends.invites.length : 0}
           giftReady={!!wallet?.dailyAvailable && !!wallet.shopUnlocked}
           season={season}
           adventReady={!!wallet?.shopUnlocked && !!wallet.advent && wallet.advent.claimed.length < wallet.advent.open}
@@ -948,6 +1024,7 @@ export default function App() {
           onRegister={(u, p) => doAuth('register', u, p)}
           onLogout={logout}
           onCustomize={() => setCustomize('edit')}
+          onFriends={() => setFriendsOpen(true)}
           onCreate={createRoom}
           onJoin={joinRoom}
           ch2Unlocked={ch2Unlocked}
@@ -978,6 +1055,34 @@ export default function App() {
         />
       )}
 
+      {friendsOpen && session && !isPlaying && (
+        <FriendsPanel
+          view={friends}
+          onAdd={(n) => friendAct((t) => api.friendAdd(t, n))}
+          onAccept={(n) => friendAct((t) => api.friendAccept(t, n))}
+          onRemove={async (n) => {
+            await friendAct((t) => api.friendRemove(t, n));
+          }}
+          onInvite={(n) => friendAct((t) => api.friendInvite(t, n))}
+          onCreateRoom={
+            lobby.status === 'idle'
+              ? () => {
+                  setFriendsOpen(false);
+                  setMpOpen(true);
+                }
+              : undefined
+          }
+          onClose={() => setFriendsOpen(false)}
+        />
+      )}
+      {session && !isPlaying && friends?.invites[0] && lobby.status !== 'joined' && (
+        <InviteToast
+          invite={friends.invites[0]}
+          onJoin={() => acceptInvite(friends.invites[0].code)}
+          onDecline={() => declineInvite(friends.invites[0].code)}
+        />
+      )}
+
       {shopOpen && (
         <ShopMenu
           username={session?.username ?? null}
@@ -986,6 +1091,7 @@ export default function App() {
           onOpenBox={openBox}
           onClaimDaily={claimDaily}
           onClaimAdvent={claimAdvent}
+          onOpenEventBox={openEventBox}
           onExplore={
             isPlaying
               ? undefined
@@ -1079,6 +1185,8 @@ export default function App() {
           items={hud.items}
           maxSlots={hud.maxSlots}
           runCoins={hud.runCoins}
+          runTreats={hud.runTreats}
+          treatEmoji={hud.treatEmoji}
           selectedSlot={hud.selectedSlot}
           voice={hud.voice}
         />
