@@ -106,7 +106,12 @@ export type GameMsg =
   /** Versus anti-camping: survivor → creature player, blinded and moved by an AI for s seconds */
   | { k: 'blind'; s: number }
   /** Race: host → guest, someone reached the exit first */
-  | { k: 'raceEnd'; winner: 'host' | 'guest'; ending: GameEnding };
+  | { k: 'raceEnd'; winner: 'host' | 'guest'; ending: GameEnding }
+  /** 👋 emote (keys 6-9), shown above the player's head */
+  | { k: 'emote'; e: number };
+
+/** Emotes, keys 6 → 9 */
+export const EMOTES = ['👋 Salut !', '👉 Par ici !', '😱 Au secours !', '🤫 Chut !'];
 
 /** Link between the engine and the other player. */
 export interface GameLink {

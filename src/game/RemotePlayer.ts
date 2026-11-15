@@ -477,6 +477,48 @@ export class RemotePlayer {
   /** Player customisation: colours, accessory and outfit. */
   private hairMesh: THREE.Mesh | null = null;
 
+  /** 👋 Emote bubble above the head for a few seconds. */
+  private emote: { sprite: THREE.Sprite; tex: THREE.CanvasTexture; mat: THREE.SpriteMaterial; timer: ReturnType<typeof setTimeout> } | null = null;
+  public showEmote(text: string) {
+    if (this.emote) {
+      clearTimeout(this.emote.timer);
+      this.emote.sprite.removeFromParent();
+      this.emote.tex.dispose();
+      this.emote.mat.dispose();
+    }
+    const c = document.createElement('canvas');
+    c.width = 512;
+    c.height = 128;
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.beginPath();
+    ctx.roundRect(8, 8, 496, 100, 30);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(52,211,153,0.9)';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    ctx.font = 'bold 56px sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 256, 60);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(1.2, 0.3, 1);
+    sprite.position.y = 2.4;
+    sprite.renderOrder = 11;
+    this.group.add(sprite);
+    const timer = setTimeout(() => {
+      sprite.removeFromParent();
+      tex.dispose();
+      mat.dispose();
+      if (this.emote?.sprite === sprite) this.emote = null;
+    }, 3000);
+    this.emote = { sprite, tex, mat, timer };
+  }
+
   /** Character hairstyle / beard pieces (hair-coloured), in the head's space. */
   private buildCharacter(c: CharacterDef, track: <T extends { dispose: () => void }>(o: T) => T) {
     const hair = this.mats.hair;

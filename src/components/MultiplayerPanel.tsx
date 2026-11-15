@@ -14,7 +14,9 @@ export interface MatchSettings {
 }
 
 export interface LobbyState extends MatchSettings {
-  status: 'idle' | 'connecting' | 'hosting' | 'joined';
+  status: 'idle' | 'connecting' | 'hosting' | 'joined' | 'searching';
+  /** searching: players waiting in that mode */
+  waiting?: number;
   code?: string;
   partner?: string | null;
   error?: string | null;
@@ -31,6 +33,9 @@ interface Props {
   onCustomize: () => void;
   onCreate: (s: MatchSettings) => void;
   onJoin: (code: string) => void;
+  /** 🔎 random partner */
+  onFindMatch?: (s: MatchSettings) => void;
+  onCancelSearch?: () => void;
   onUpdateSettings: (s: Partial<MatchSettings>) => void;
   /** chapter 2 unlocked for this account (got out of the hospital once) */
   ch2Unlocked?: boolean;
@@ -278,6 +283,21 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
 
             {p.lobby.error && <p className="text-xs font-mono text-red-400">{p.lobby.error}</p>}
 
+            {p.lobby.status === 'searching' && (
+              <div className="text-center space-y-4 py-4">
+                <div className="text-4xl animate-pulse">🔎</div>
+                <div className="text-sm font-mono text-zinc-200 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Recherche d'un partenaire…
+                </div>
+                <p className="text-[11px] font-mono text-zinc-500">
+                  Dès qu'un autre joueur cherche le même mode, vous êtes mis ensemble et la partie démarre toute seule. Tu peux attendre ici.
+                </p>
+                <button onClick={p.onCancelSearch} className={`${btn} w-full border border-zinc-700 text-zinc-400 hover:text-zinc-100`}>
+                  Annuler la recherche
+                </button>
+              </div>
+            )}
+
             {p.lobby.status === 'connecting' && (
               <div className="flex items-center gap-2 text-sm font-mono text-zinc-400">
                 <Loader2 className="w-4 h-4 animate-spin" /> Connexion au serveur…
@@ -293,6 +313,14 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
                     Créer et obtenir un code
                   </button>
                 </div>
+                {p.onFindMatch && (
+                  <button
+                    onClick={() => p.onFindMatch!(draft)}
+                    className={`${btn} w-full bg-emerald-700 hover:bg-emerald-600 text-white flex items-center justify-center gap-2`}
+                  >
+                    🔎 Trouver un partenaire au hasard ({draft.mode === 'versus' ? 'Chasse' : draft.mode === 'race' ? 'Course' : 'Coop'})
+                  </button>
+                )}
                 <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-600">
                   <div className="flex-1 h-px bg-zinc-800" /> OU <div className="flex-1 h-px bg-zinc-800" />
                 </div>

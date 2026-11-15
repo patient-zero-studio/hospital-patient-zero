@@ -14,6 +14,7 @@ export interface Store {
   readonly kind: 'files' | 'upstash';
   load(name: string): Promise<string | null>;
   save(name: string, data: string): Promise<void>;
+  remove(name: string): Promise<void>;
 }
 
 class FileStore implements Store {
@@ -35,6 +36,9 @@ class FileStore implements Store {
     const f = this.file(name);
     fs.writeFileSync(f + '.tmp', data);
     fs.renameSync(f + '.tmp', f);
+  }
+  async remove(name: string) {
+    fs.rmSync(this.file(name), { force: true });
   }
 }
 
@@ -71,6 +75,13 @@ class UpstashStore implements Store {
       body: data,
     });
     if (!res.ok) throw new Error(`Upstash SET ${name}: HTTP ${res.status}`);
+  }
+  async remove(name: string) {
+    const res = await fetch(`${this.url}/del/${encodeURIComponent(this.prefix + name)}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.token}` },
+    });
+    if (!res.ok) throw new Error(`Upstash DEL ${name}: HTTP ${res.status}`);
   }
 }
 

@@ -57,10 +57,27 @@ export interface WalletView {
 export interface FriendsView {
   friends: { username: string; status: 'playing' | 'online' | 'offline'; level?: number }[];
   requests: string[];
+  /** requests you sent, still waiting */
+  sent?: string[];
   invites: { from: string; code: string; mode: string; chapter: number; difficulty: number }[];
   /** you host a room waiting for a partner */
   canInvite: boolean;
   message?: string;
+}
+
+export interface PlayerProfileView {
+  username: string;
+  level: LevelInfo;
+  admin: boolean;
+  since?: string;
+  status: 'playing' | 'online' | 'offline';
+  stats: Partial<Record<StatKey, number>>;
+  achievements: number;
+  skins: number;
+  records: { board: string; time: number; rank: number }[];
+  look: Appearance;
+  friend: boolean;
+  me: boolean;
 }
 
 export interface BoardEntry {
@@ -235,6 +252,12 @@ export const api = {
   reportAch: (token: string, unlock: string[], stats: Partial<Record<StatKey, number>>): Promise<WalletView> =>
     post('/api/achievements', { unlock, stats }, token),
 
+  async player(token: string, name: string): Promise<PlayerProfileView> {
+    const res = await fetch(`/api/player/${encodeURIComponent(name)}`, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Serveur injoignable.');
+    return { ...data, look: sanitizeAppearance(data.look) };
+  },
   // ---- Friends ----
   async friends(token: string): Promise<FriendsView> {
     const res = await fetch('/api/friends', { headers: { Authorization: `Bearer ${token}` } });

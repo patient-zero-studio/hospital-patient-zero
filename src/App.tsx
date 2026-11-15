@@ -25,6 +25,7 @@ import { ProgressionMenu, progressionAlerts } from './components/ProgressionMenu
 import { TUTO_STEPS, TutorialOverlay, markTutorialDone, tutorialDone } from './components/Tutorial';
 import { levelReward } from './levels';
 import { FriendsPanel, InviteToast } from './components/FriendsPanel';
+import { PlayerProfile } from './components/PlayerProfile';
 import { ShopMenu } from './components/ShopMenu';
 import { HoboShop } from './components/HoboShop';
 import { IS_TOUCH, RotateHint, TouchControls, enterMobileFullscreen } from './components/TouchControls';
@@ -862,6 +863,8 @@ export default function App() {
   };
   // ---- Friends -----------------------------------------------------------
   const [friendsOpen, setFriendsOpen] = useState(false);
+  /** 👤 public profile being viewed */
+  const [profileOf, setProfileOf] = useState<string | null>(null);
   const [friends, setFriends] = useState<FriendsView | null>(null);
   const refreshFriends = useCallback(async () => {
     const s = sessionRef.current;
@@ -1011,6 +1014,12 @@ export default function App() {
         }));
         if (e.t === 'disconnected') netRef.current = null;
         break;
+      case 'queued':
+        setLobby((l) => ({ ...l, status: 'searching', waiting: e.waiting, error: null }));
+        break;
+      case 'unqueued':
+        setLobby((l) => (l.status === 'searching' ? { ...l, status: 'idle' } : l));
+        break;
       case 'error':
         setLobby((l) => ({ ...l, status: l.status === 'connecting' ? 'idle' : l.status, error: e.error }));
         break;
@@ -1068,6 +1077,16 @@ export default function App() {
     sound.init();
     const net = await ensureNet().catch(() => null);
     net?.join(code);
+  };
+  /** 🔎 Random partner */
+  const findMatch = async (s: MatchSettings) => {
+    sound.init();
+    const net = await ensureNet().catch(() => null);
+    net?.queue(s);
+  };
+  const cancelSearch = () => {
+    netRef.current?.unqueue();
+    setLobby((l) => ({ ...l, status: 'idle' }));
   };
   const leaveRoom = () => {
     netRef.current?.leave();
@@ -1216,6 +1235,8 @@ export default function App() {
           onFriends={() => setFriendsOpen(true)}
           onCreate={createRoom}
           onJoin={joinRoom}
+          onFindMatch={findMatch}
+          onCancelSearch={cancelSearch}
           ch2Unlocked={ch2Unlocked}
           ch4Unlocked={ch4Unlocked}
           ch5Unlocked={ch5Unlocked}
@@ -1276,6 +1297,7 @@ export default function App() {
             await friendAct((t) => api.friendRemove(t, n));
           }}
           onInvite={(n) => friendAct((t) => api.friendInvite(t, n))}
+          onProfile={setProfileOf}
           onCreateRoom={
             lobby.status === 'idle'
               ? () => {
@@ -1348,7 +1370,15 @@ export default function App() {
       )}
 
       <AchievementToast queue={achPopups} onDone={nextAchPopup} />
-      {boardOpen && <LeaderboardMenu me={session?.username ?? null} onClose={() => setBoardOpen(false)} />}
+      {boardOpen && <LeaderboardMenu me={session?.username ?? null} onProfile={session ? setProfileOf : undefined} onClose={() => setBoardOpen(false)} />}
+      {profileOf && session && (
+        <PlayerProfile
+          name={profileOf}
+          token={session.token}
+          onAddFriend={(n) => friendAct((t) => api.friendAdd(t, n))}
+          onClose={() => setProfileOf(null)}
+        />
+      )}
       {runMsg && victory && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[90] px-5 py-2 border border-emerald-600 bg-black/90 text-emerald-300 font-mono text-xs shadow-[0_0_30px_rgba(16,185,129,0.3)] text-center max-w-[92vw]">
           {runMsg}

@@ -109,6 +109,23 @@ const users = new Map<string, User>(); // key = lowercase username
   const raw = await store.load('users');
   if (raw) for (const u of JSON.parse(raw) as User[]) users.set(u.username.toLowerCase(), u);
 }
+/** 💾 One copy of the accounts per day, the last 7 days are kept. */
+const backupUsers = async () => {
+  try {
+    const day = new Date().toISOString().slice(0, 10);
+    const index: string[] = JSON.parse((await store.load('backups')) ?? '[]');
+    if (index.includes(day)) return;
+    await store.save(`backup-users-${day}`, JSON.stringify([...users.values()]));
+    index.push(day);
+    while (index.length > 7) await store.remove(`backup-users-${index.shift()}`);
+    await store.save('backups', JSON.stringify(index));
+    console.log(`[storage] sauvegarde du jour : ${users.size} comptes`);
+  } catch (e) {
+    console.error('[storage] sauvegarde impossible :', (e as Error).message);
+  }
+};
+setTimeout(backupUsers, 60000);
+setInterval(backupUsers, 3 * 3600000);
 const usersSaver = debouncedSaver(store, 'users', () => JSON.stringify([...users.values()], null, remote ? 0 : 2), remote ? 1500 : 200);
 const saveUsers = () => usersSaver.save();
 
@@ -746,6 +763,36 @@ app.post('/api/pass/claim', (req, res) => {
   res.json({ result, ...walletView(user) });
 });
 
+// 👤 Public profile of a player (anyone logged in can look)
+app.get('/api/player/:name', (req, res) => {
+  const me = authUser(req);
+  if (!me) return res.status(401).json({ error: 'Session expirée.' });
+  const u = users.get(String(req.params.name).toLowerCase());
+  if (!u || u.banned) return res.status(404).json({ error: 'Ce joueur n\'existe pas.' });
+  const ach = achOf(u);
+  const records: { board: string; time: number; rank: number }[] = [];
+  for (const [k, list] of Object.entries(boards)) {
+    const i = list.findIndex((e) => e.username.toLowerCase() === u.username.toLowerCase());
+    if (i >= 0) records.push({ board: k, time: list[i].time, rank: i + 1 });
+  }
+  const look = u.profile ? enforceOwned(sanitizeAppearance(u.profile), walletOf(u).owned) : DEFAULT_APPEARANCE;
+  const key = u.username.toLowerCase();
+  res.json({
+    username: u.username,
+    level: levelOf(u.xp ?? 0),
+    admin: isAdmin(u),
+    since: u.createdAt,
+    status: statusOf(key),
+    stats: ach.stats,
+    achievements: Object.keys(ach.done).length,
+    skins: walletOf(u).owned.length,
+    records: records.sort((a, b) => a.rank - b.rank).slice(0, 8),
+    look,
+    friend: friendsOf(me).includes(key),
+    me: key === me.username.toLowerCase(),
+  });
+});
+
 // ⚡ Admin: surprise event for everyone (double coins / treats / XP) for a while
 app.post('/api/admin/boost', (req, res) => {
   const user = authUser(req);
@@ -903,6 +950,18 @@ const parseMode = (v: unknown): GameMode => (v === 'versus' || v === 'race' ? v 
 const parseSide = (v: unknown): 'host' | 'guest' => (v === 'guest' ? 'guest' : 'host');
 
 const rooms = new Map<string, Room>();
+/** 🔎 Players waiting for a random partner */
+const matchQueue: { client: Client; mode: GameMode; difficulty: number; chapter: 1 | 2 | 4 | 5 }[] = [];
+const unqueue = (c: Client) => {
+  for (let i = matchQueue.length - 1; i >= 0; i--) if (matchQueue[i].client === c) matchQueue.splice(i, 1);
+};
+const startRoom = (room: Room) => {
+  room.started = true;
+  // One random seed for both players: same forest / lab layout
+  const start = { t: 'start', ...roomSettings(room), seed: crypto.randomInt(1, 2 ** 31) / 2 ** 31 };
+  send(room.host, start);
+  send(room.guest, start);
+};
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I confusion
 const newCode = () => {
   for (;;) {
@@ -953,6 +1012,7 @@ server.on('upgrade', (req, socket, head) => {
     ws.on('pong', () => (client.alive = true));
     ws.on('close', () => {
       clients.delete(client);
+      unqueue(client);
       leaveRoom(client);
     });
     ws.on('message', (raw, isBinary) => {
@@ -1020,13 +1080,49 @@ server.on('upgrade', (req, socket, head) => {
           const room = client.room;
           if (!room || room.host !== client) return;
           if (!room.guest) return send(client, { t: 'error', error: 'Attendez que votre ami rejoigne la partie.' });
-          room.started = true;
-          // One random seed for both players: same forest / lab layout
-          const start = { t: 'start', ...roomSettings(room), seed: crypto.randomInt(1, 2 ** 31) / 2 ** 31 };
-          send(room.host, start);
-          send(room.guest, start);
+          startRoom(room);
           break;
         }
+        case 'queue': {
+          // 🔎 Find a random partner with the same mode
+          leaveRoom(client);
+          unqueue(client);
+          const mode = parseMode(msg.mode);
+          const wait = { client, mode, difficulty: Math.min(5, Math.max(1, Number(msg.difficulty) || 2)), chapter: parseChapter(msg.chapter) };
+          const other = matchQueue.find((q) => q.mode === mode && q.client.username.toLowerCase() !== client.username.toLowerCase() && q.client.ws.readyState === WebSocket.OPEN);
+          if (!other) {
+            matchQueue.push(wait);
+            send(client, { t: 'queued', waiting: matchQueue.filter((q) => q.mode === mode).length });
+            break;
+          }
+          unqueue(other.client);
+          // The one who waited hosts, with their settings
+          const room: Room = {
+            code: newCode(),
+            host: other.client,
+            guest: client,
+            difficulty: other.difficulty,
+            mode,
+            monster: crypto.randomInt(2) ? 'host' : 'guest',
+            chapter: other.chapter,
+            started: false,
+          };
+          rooms.set(room.code, room);
+          other.client.room = room;
+          client.room = room;
+          send(other.client, { t: 'created', code: room.code, ...roomSettings(room) });
+          send(other.client, { t: 'peer-joined', username: client.username });
+          send(client, { t: 'joined', code: room.code, host: other.client.username, ...roomSettings(room) });
+          // Starts by itself after a few seconds (time to see who you got)
+          setTimeout(() => {
+            if (rooms.get(room.code) === room && room.guest && !room.started) startRoom(room);
+          }, 5000);
+          break;
+        }
+        case 'unqueue':
+          unqueue(client);
+          send(client, { t: 'unqueued' });
+          break;
         case 'leave':
           leaveRoom(client);
           break;
@@ -1089,6 +1185,8 @@ const friendsView = (u: User) => {
       .map((f) => ({ username: users.get(f)!.username, status: statusOf(f), level: levelOf(users.get(f)!.xp ?? 0).level }))
       .sort((a, b) => order[a.status] - order[b.status] || a.username.localeCompare(b.username)),
     requests: requestsOf(u).map((f) => users.get(f)!.username),
+    /** requests you sent that are still waiting */
+    sent: [...users.values()].filter((o) => (o.friendReqs ?? []).includes(me)).map((o) => o.username),
     invites: mine.map((i) => {
       const r = rooms.get(i.code)!;
       return { from: i.from, code: i.code, mode: r.mode, chapter: r.chapter, difficulty: r.difficulty };
@@ -1154,7 +1252,11 @@ app.post('/api/friends/remove', (req, res) => {
   user.friendReqs = requestsOf(user).filter((f) => f !== name);
   user.friends = friendsOf(user).filter((f) => f !== name);
   const other = users.get(name);
-  if (other) other.friends = friendsOf(other).filter((f) => f !== me);
+  if (other) {
+    other.friends = friendsOf(other).filter((f) => f !== me);
+    // …and cancels a request you sent
+    other.friendReqs = requestsOf(other).filter((f) => f !== me);
+  }
   saveUsers();
   res.json(friendsView(user));
 });

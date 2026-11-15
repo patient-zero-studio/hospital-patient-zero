@@ -39,7 +39,7 @@ import { Appearance, DEFAULT_APPEARANCE } from '../appearance';
 /** Versus: the survivor has this long to escape. */
 const VERSUS_TIME = 12 * 60;
 import type { MonsterSenses } from './MonsterAI';
-import { GameLink, GameMsg, InteractRequest, MONSTER_STATES, PlayerNetState, WorldSnapshot } from '../net/protocol';
+import { EMOTES, GameLink, GameMsg, InteractRequest, MONSTER_STATES, PlayerNetState, WorldSnapshot } from '../net/protocol';
 
 /** Voice level above which the creature can hear you. */
 export const MIC_THRESHOLD = 0.3;
@@ -618,6 +618,8 @@ export class GameEngine {
       if (e.code === 'KeyX' && !e.repeat) this.dropSlot(this.selectedSlot);
       if (e.code === 'KeyV' && !e.repeat) this.toggleVoiceMute();
       if (e.code === 'KeyR' && !e.repeat) this.drawChalk();
+      const em = ['Digit6', 'Digit7', 'Digit8', 'Digit9'].indexOf(e.code);
+      if (em >= 0 && !e.repeat) this.sendEmote(em);
       if ((e.code === 'Space' || e.code === 'Enter') && this.intro) this.skipIntro();
     }) as EventListener);
     this.mic.onPcm = (s, r) => this.voice.onMic(s, r);
@@ -2036,6 +2038,17 @@ export class GameEngine {
     this.cb.onGameOver();
   }
 
+  /** 👋 Emotes (keys 6-9) in co-op and race: shown above your head on the partner's screen. */
+  private emoteCooldown = 0;
+  private sendEmote(i: number) {
+    if (!this.running || !this.net || this.net.mode === 'versus' || this.partnerGone) return;
+    const now = performance.now();
+    if (now < this.emoteCooldown) return;
+    this.emoteCooldown = now + 1200;
+    this.net.send({ k: 'emote', e: i });
+    this.state.showToast(`Vous : ${EMOTES[i]}`);
+  }
+
   private onNetMsg(msg: GameMsg) {
     const host = this.net?.role === 'host';
     switch (msg.k) {
@@ -2077,6 +2090,12 @@ export class GameEngine {
         break;
       case 'ach':
         this.ach(msg.id);
+        break;
+      case 'emote':
+        if (msg.e >= 0 && msg.e < EMOTES.length) {
+          this.remote?.showEmote(EMOTES[msg.e]);
+          this.state.showToast(`${this.net?.partnerName ?? 'Partenaire'} : ${EMOTES[msg.e]}`);
+        }
         break;
       case 'coins':
         this.state.runCoins += msg.n;

@@ -15,13 +15,15 @@ interface Props {
   onAccept: (name: string) => Promise<string | undefined>;
   onRemove: (name: string) => Promise<void>;
   onInvite: (name: string) => Promise<string | undefined>;
+  /** 👤 open a player's profile */
+  onProfile?: (name: string) => void;
   /** no room yet: open the multiplayer panel to create one */
   onCreateRoom?: () => void;
   onClose: () => void;
 }
 
 /** Friends: add by pseudo, accept requests, see who is online, invite them to your game. */
-export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove, onInvite, onCreateRoom, onClose }) => {
+export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove, onInvite, onProfile, onCreateRoom, onClose }) => {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -117,6 +119,28 @@ export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove,
               </div>
             )}
 
+            {/* Requests sent, still waiting */}
+            {(view.sent?.length ?? 0) > 0 && (
+              <div className="mb-4">
+                <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-1.5">Demandes envoyées ({view.sent!.length})</div>
+                <div className="space-y-1">
+                  {view.sent!.map((r) => (
+                    <div key={r} className="flex items-center gap-2 px-3 py-1.5 border border-zinc-800 bg-black/30">
+                      <span className="flex-1 text-sm text-zinc-300 truncate">{r}</span>
+                      <span className="text-[10px] font-mono text-zinc-500">en attente…</span>
+                      <button
+                        disabled={!!busy}
+                        onClick={() => run('cancel-' + r, () => onRemove(r))}
+                        className="px-2 py-0.5 border border-zinc-700 text-zinc-400 text-[10px] font-mono uppercase hover:text-red-300"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Invite hint */}
             {view.friends.length > 0 && !view.canInvite && onCreateRoom && (
               <button
@@ -142,7 +166,13 @@ export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove,
                             Niv {f.level}
                           </span>
                         )}
-                        {f.username}
+                        {onProfile ? (
+                          <button onClick={() => onProfile(f.username)} className="hover:underline" title="Voir le profil">
+                            {f.username}
+                          </button>
+                        ) : (
+                          f.username
+                        )}
                       </div>
                       <div className="text-[10px] font-mono" style={{ color: DOT[f.status].color }}>
                         {DOT[f.status].label}

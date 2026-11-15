@@ -486,6 +486,7 @@ export const HUD: React.FC<HUDProps> = ({
           <span className={`w-2 h-2 rounded-full ${partnerDead ? 'bg-red-600' : 'bg-emerald-400 animate-pulse'}`} />
           <span className="text-zinc-300">{partnerName}</span>
           <span className={partnerDead ? 'text-red-400' : 'text-zinc-500'}>{partnerDead ? 'ATTRAPÉ' : 'en vie'}</span>
+          {!touch && <span className="text-zinc-600">· [6-9] emotes</span>}
         </div>
       )}
 

@@ -6,7 +6,7 @@ import { fmtTime } from '../challenges';
 import { DIFFICULTIES } from '../game/Difficulty';
 
 /** Fastest escapes, per chapter and difficulty (one line per player: their best). */
-export const LeaderboardMenu: React.FC<{ me: string | null; onClose: () => void }> = ({ me, onClose }) => {
+export const LeaderboardMenu: React.FC<{ me: string | null; onProfile?: (name: string) => void; onClose: () => void }> = ({ me, onProfile, onClose }) => {
   const [boards, setBoards] = useState<Record<string, BoardEntry[]> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chapter, setChapter] = useState<0 | 1 | 2 | 3 | 4 | 5>(1);
@@ -98,7 +98,13 @@ export const LeaderboardMenu: React.FC<{ me: string | null; onClose: () => void 
                         {e.level}
                       </span>
                     )}
-                    {e.username}
+                    {onProfile ? (
+                      <button onClick={() => onProfile(e.username)} className="hover:underline" title="Voir le profil">
+                        {e.username}
+                      </button>
+                    ) : (
+                      e.username
+                    )}
                     {mine && ' (vous)'}
                   </span>
                   <span className="text-[10px] text-zinc-600">{new Date(e.date).toLocaleDateString('fr-FR')}</span>

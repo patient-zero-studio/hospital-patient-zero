@@ -22,6 +22,8 @@ export type LobbyEvent =
   | ({ t: 'settings' } & RoomSettings)
   | ({ t: 'start'; seed?: number } & RoomSettings)
   | { t: 'error'; error: string }
+  | { t: 'queued'; waiting: number }
+  | { t: 'unqueued' }
   | { t: 'disconnected' };
 
 export class NetClient {
@@ -96,6 +98,13 @@ export class NetClient {
   }
   public leave() {
     this.raw({ t: 'leave' });
+  }
+  /** 🔎 Wait for a random partner with these settings */
+  public queue(settings: RoomSettings) {
+    this.raw({ t: 'queue', ...settings });
+  }
+  public unqueue() {
+    this.raw({ t: 'unqueue' });
   }
 
   /** In-game messages to the partner. */
