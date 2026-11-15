@@ -37,6 +37,7 @@ import { SEASONS, SeasonSetting, adventDay, adventYear, isSeasonSetting, resolve
 import { AchDef, AchState, StatKey, applyAchReport, sanitizeAch } from '../src/achievements.ts';
 import { challengeMet, dailyChallenge } from '../src/challenges.ts';
 import { debouncedSaver, makeStore } from './storage.ts';
+import { DAILY_XP, DEATH_XP, ESCAPE_XP, levelOf, levelReward } from '../src/levels.ts';
 
 /** Admin accounts (lower case): infinite coins, can gift coins to anyone. */
 const ADMINS = new Set(['corrupted_wolf', ...(process.env.PZ_ADMINS ?? '').toLowerCase().split(',').filter(Boolean)]);
@@ -76,6 +77,10 @@ interface User {
   shopUnlocked?: boolean;
   /** last treats banked (anti-spam) */
   lastTreats?: number;
+  /** Experience points (player level) */
+  xp?: number;
+  /** last XP for a lost run (anti-spam) */
+  lastDeathXp?: number;
   /** Friends (lower-case names) and friend requests received */
   friends?: string[];
   friendReqs?: string[];
@@ -223,21 +228,33 @@ const achOf = (u: User) => (u.ach = sanitizeAch(u.ach));
 const reportAch = (u: User, unlock: unknown, stats: unknown, trusted: Partial<Record<StatKey, number>> = {}) => {
   const newly = applyAchReport(achOf(u), unlock, stats, trusted);
   const coins = newly.reduce((s, a) => s + a.reward, 0);
-  if (coins > 0) walletOf(u).coins += coins;
+  if (coins > 0) {
+    walletOf(u).coins += coins;
+    addXp(u, coins / 2);
+  }
   return newly.map((a: AchDef) => a.id);
 };
 // ---- Events (Christmas / Halloween): follows the calendar unless an admin forces one ----
 /** PZ_FAKE_DATE (tests only) pretends today is another day for the events. */
 const eventNow = () => (process.env.PZ_FAKE_DATE ? new Date(process.env.PZ_FAKE_DATE) : new Date());
-const settings: { season: SeasonSetting } = await (async () => {
+type BoostKind = 'coins2' | 'treats2' | 'xp2' | 'all2';
+const BOOST_KINDS: BoostKind[] = ['coins2', 'treats2', 'xp2', 'all2'];
+const settings: { season: SeasonSetting; boost?: { kind: BoostKind; until: number } } = await (async () => {
   try {
     const raw = await store.load('settings');
     const s = raw ? JSON.parse(raw) : {};
-    return { season: isSeasonSetting(s.season) ? s.season : 'auto' };
+    const boost = s.boost && BOOST_KINDS.includes(s.boost.kind) && Number(s.boost.until) > Date.now() ? { kind: s.boost.kind, until: Number(s.boost.until) } : undefined;
+    return { season: isSeasonSetting(s.season) ? s.season : 'auto', boost };
   } catch {
     return { season: 'auto' as SeasonSetting };
   }
 })();
+/** ⚡ Surprise event started by an admin (double coins / treats / XP), while it lasts */
+const activeBoost = () => (settings.boost && settings.boost.until > Date.now() ? settings.boost : undefined);
+const boostMul = (what: 'coins' | 'treats' | 'xp') => {
+  const b = activeBoost();
+  return b && (b.kind === 'all2' || b.kind === `${what}2`) ? 2 : 1;
+};
 const settingsSaver = debouncedSaver(store, 'settings', () => JSON.stringify(settings), 300);
 const currentSeason = () => resolveSeason(settings.season, eventNow());
 const adventOf = (u: User) => {
@@ -250,14 +267,24 @@ const adventView = (u: User) =>
   currentSeason() === 'noel' ? { open: adventDay(eventNow()), claimed: adventOf(u).days } : undefined;
 
 app.get('/api/season', (_req, res) => {
-  res.json({ season: currentSeason() });
+  res.json({ season: currentSeason(), boost: activeBoost() ?? null });
 });
+
+/** Adds XP (doubled during an XP surprise event) and pays the coins of every level reached. */
+const addXp = (u: User, amount: number) => {
+  const before = levelOf(u.xp ?? 0).level;
+  u.xp = (u.xp ?? 0) + Math.max(0, Math.floor(amount * boostMul('xp')));
+  const after = levelOf(u.xp).level;
+  for (let l = before + 1; l <= after; l++) walletOf(u).coins += levelReward(l);
+};
 
 /** Shop locked until the player gets out once (accounts that already bought skins keep it). */
 const shopOpenFor = (u: User) => isAdmin(u) || !!u.shopUnlocked || walletOf(u).owned.length > 0;
 const SHOP_LOCKED = 'Boutique verrouillée : échappe-toi de l\'hôpital une fois (le mode Exploration suffit) pour la débloquer.';
 
 const walletView = (u: User) => ({
+  level: levelOf(u.xp ?? 0),
+  boost: activeBoost() ?? null,
   shopUnlocked: shopOpenFor(u),
   season: currentSeason(),
   seasonSetting: isAdmin(u) ? settings.season : undefined,
@@ -292,6 +319,7 @@ app.post('/api/shop/daily', (req, res) => {
   const result = rollDailyGift(walletOf(user), streak);
   user.lastGift = todayKey();
   user.giftStreak = streak;
+  addXp(user, DAILY_XP);
   const newAch = reportAch(user, [], {}, { boxes: 1 });
   saveUsers();
   res.json({ result, newAch, ...walletView(user) });
@@ -318,7 +346,8 @@ const saveBoards = () => boardsSaver.save();
 
 app.get('/api/leaderboard', (_req, res) => {
   const out: Record<string, BoardEntry[]> = {};
-  for (const [k, list] of Object.entries(boards)) out[k] = list.slice(0, 10);
+  for (const [k, list] of Object.entries(boards))
+    out[k] = list.slice(0, 10).map((e) => ({ ...e, level: levelOf(users.get(e.username.toLowerCase())?.xp ?? 0).level }));
   res.json({ boards: out });
 });
 
@@ -417,9 +446,10 @@ app.post('/api/event/treats', (req, res) => {
   if (!season || n <= 0 || (user.lastTreats && now - user.lastTreats < 15000)) return res.json({ added: 0, ...walletView(user) });
   user.lastTreats = now;
   const w = walletOf(user);
-  w.treats[season] = (w.treats[season] ?? 0) + n;
+  const added = n * boostMul('treats');
+  w.treats[season] = (w.treats[season] ?? 0) + added;
   saveUsers();
-  res.json({ added: n, ...walletView(user) });
+  res.json({ added, ...walletView(user) });
 });
 
 // 🎁 Event box: 500 treats → an event skin (or coins)
@@ -434,6 +464,22 @@ app.post('/api/event/box', (req, res) => {
   const newAch = reportAch(user, [], {}, { boxes: 1 });
   saveUsers();
   res.json({ result, newAch, ...walletView(user) });
+});
+
+// ⚡ Admin: surprise event for everyone (double coins / treats / XP) for a while
+app.post('/api/admin/boost', (req, res) => {
+  const user = authUser(req);
+  if (!user || !isAdmin(user)) return res.status(403).json({ error: 'Réservé aux admins.' });
+  const kind = req.body?.kind as BoostKind;
+  const hours = Number(req.body?.hours);
+  if (hours === 0) settings.boost = undefined;
+  else {
+    if (!BOOST_KINDS.includes(kind) || !(hours > 0 && hours <= 168)) return res.status(400).json({ error: 'Événement surprise inconnu.' });
+    settings.boost = { kind, until: Date.now() + hours * 3600000 };
+  }
+  settingsSaver.save();
+  console.log(`[admin] ${user.username} : événement surprise ${settings.boost ? `${kind} ${hours} h` : 'arrêté'}`);
+  res.json(walletView(user));
 });
 
 // 🎄 Advent calendar: one box per day, December 1 → 25
@@ -468,14 +514,29 @@ app.post('/api/wallet/reward', (req, res) => {
   // Any escape (Exploration included) unlocks the shop
   user.shopUnlocked = true;
   const now = Date.now();
-  if (user.lastReward && now - user.lastReward < 20000) return res.json({ gained: 0, ...walletView(user) });
-  const base = rewardFor(Number(req.body?.difficulty));
+  if (user.lastReward && now - user.lastReward < 20000) return res.json({ gained: 0, xp: 0, ...walletView(user) });
+  const diff = Math.min(5, Math.max(1, Math.floor(Number(req.body?.difficulty)) || 1));
+  const base = rewardFor(diff);
   const found = base > 0 ? Math.min(MAX_FOUND_COINS, Math.max(0, Math.floor(Number(req.body?.found) || 0))) : 0;
-  const gained = base + found;
+  const gained = (base + found) * boostMul('coins');
   walletOf(user).coins += gained;
-  if (gained > 0) user.lastReward = now;
+  const xp = ESCAPE_XP[diff] * boostMul('xp');
+  addXp(user, ESCAPE_XP[diff]);
+  user.lastReward = now;
   saveUsers();
-  res.json({ gained, ...walletView(user) });
+  res.json({ gained, xp, ...walletView(user) });
+});
+
+// A lost run still gives a little XP
+app.post('/api/xp/death', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const now = Date.now();
+  if (user.lastDeathXp && now - user.lastDeathXp < 30000) return res.json({ xp: 0, ...walletView(user) });
+  user.lastDeathXp = now;
+  addXp(user, DEATH_XP);
+  saveUsers();
+  res.json({ xp: DEATH_XP * boostMul('xp'), ...walletView(user) });
 });
 
 app.post('/api/shop/buy', (req, res) => {
@@ -742,7 +803,7 @@ const friendsView = (u: User) => {
   const order = { playing: 0, online: 1, offline: 2 };
   return {
     friends: friendsOf(u)
-      .map((f) => ({ username: users.get(f)!.username, status: statusOf(f) }))
+      .map((f) => ({ username: users.get(f)!.username, status: statusOf(f), level: levelOf(users.get(f)!.xp ?? 0).level }))
       .sort((a, b) => order[a.status] - order[b.status] || a.username.localeCompare(b.username)),
     requests: requestsOf(u).map((f) => users.get(f)!.username),
     invites: mine.map((i) => {

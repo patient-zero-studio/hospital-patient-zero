@@ -18,7 +18,11 @@ import { MultiplayerPanel, LobbyState, MatchSettings } from './components/Multip
 import { VersusResultModal } from './components/VersusResultModal';
 import { CustomizeMenu } from './components/CustomizeMenu';
 import { Appearance, DEFAULT_APPEARANCE } from './appearance';
-import { api, FriendsView, Session, WalletView } from './net/api';
+import { api, Boost, BoostKind, FriendsView, Session, WalletView } from './net/api';
+import { LevelUpToast } from './components/LevelUpToast';
+import { WakeScreen } from './components/WakeScreen';
+import { TUTO_STEPS, TutorialOverlay, markTutorialDone, tutorialDone } from './components/Tutorial';
+import { levelReward } from './levels';
 import { FriendsPanel, InviteToast } from './components/FriendsPanel';
 import { ShopMenu } from './components/ShopMenu';
 import { HoboShop } from './components/HoboShop';
@@ -132,6 +136,8 @@ export default function App() {
   /** Campaign: the black screen between two chapters */
   const [campaignCard, setCampaignCard] = useState<{ done: string; next: Chapter; time: number; items: number } | null>(null);
   const [hud, setHud] = useState<HudSnapshot>(EMPTY_HUD);
+  const hudRef = useRef(hud);
+  hudRef.current = hud;
   const [inventoryVersion, setInventoryVersion] = useState(0);
 
   const initial = useRef(loadSettings());
@@ -185,13 +191,54 @@ export default function App() {
       }),
     []
   );
+  const [boost, setBoost] = useState<Boost | null>(null);
+  // The free host sleeps after 15 min: if the server takes a while, show the "waking up" screen
+  const [wakingSince, setWakingSince] = useState<number | null>(null);
   useEffect(() => {
-    api.season().then((s) => {
-      if (s !== undefined) setActiveSeason(s);
-    });
+    let done = false;
+    const t0 = Date.now();
+    const slow = setTimeout(() => {
+      if (!done && navigator.onLine !== false) setWakingSince(t0);
+    }, 2000);
+    const attempt = async () => {
+      const s = await api.status();
+      if (s) {
+        done = true;
+        setWakingSince(null);
+        setActiveSeason(s.season);
+        setBoost(s.boost);
+        return;
+      }
+      // Still asleep (or no network): retry for up to 4 minutes, then let solo play go on
+      if (navigator.onLine === false || Date.now() - t0 > 240000) {
+        done = true;
+        setWakingSince(null);
+        return;
+      }
+      setTimeout(attempt, 3000);
+    };
+    attempt();
+    return () => {
+      done = true;
+      clearTimeout(slow);
+    };
   }, []);
   useEffect(() => {
     if (wallet && wallet.season !== undefined) setActiveSeason(wallet.season ?? null);
+    if (wallet && wallet.boost !== undefined) setBoost(wallet.boost ?? null);
+  }, [wallet]);
+  // 🎉 Level up: compare with the last level seen
+  const lastLevel = useRef<number | null>(null);
+  const [levelUp, setLevelUp] = useState<{ level: number; coins: number } | null>(null);
+  useEffect(() => {
+    const lv = wallet?.level?.level;
+    if (lv == null) return;
+    if (lastLevel.current != null && lv > lastLevel.current) {
+      let coins = 0;
+      for (let l = lastLevel.current + 1; l <= lv; l++) coins += levelReward(l);
+      setLevelUp({ level: lv, coins });
+    }
+    lastLevel.current = lv;
   }, [wallet]);
   const [shopOpen, setShopOpen] = useState(false);
   /** Talking to the hobo in the warehouse */
@@ -234,6 +281,7 @@ export default function App() {
           const cp = campaignRef.current;
           if (cp && !onlineRef.current) cp.time += engineRef.current?.runTime ?? 0;
           bankTreatsRef.current();
+          deathXpRef.current();
           setIsGameOver(true);
         },
         onVictory: (ending) => victoryRef.current(ending),
@@ -472,6 +520,64 @@ export default function App() {
     hasStartedOnce.current = true;
   };
 
+  // ---- 🎓 Tutorial: Exploration, chapter 1, steps checked from the game state ----
+  const [tutorial, setTutorial] = useState<{ step: number; start: { x: number; z: number } | null; items: number; lamp?: boolean } | null>(null);
+  const [tutoSeen, setTutoSeen] = useState(tutorialDone());
+  const startTutorial = () => {
+    campaignRef.current = null;
+    engineRef.current?.setNet(null);
+    if (engineRef.current) engineRef.current.levelSeed = null;
+    setDifficulty(1 as Difficulty);
+    setChapter(1);
+    setTutorial({ step: 0, start: null, items: 0 });
+    beginRun(hasStartedOnce.current, 1 as Difficulty, 1);
+    hasStartedOnce.current = true;
+  };
+  const finishTutorial = () => {
+    markTutorialDone();
+    setTutoSeen(true);
+  };
+  useEffect(() => {
+    if (!tutorial || tutorial.step >= TUTO_STEPS.length) return;
+    const t = setInterval(() => {
+      const e = engineRef.current;
+      const h = hudRef.current;
+      if (!e || h.intro) return;
+      setTutorial((tu) => {
+        if (!tu) return tu;
+        const p = e.player.position;
+        if (!tu.start) return { ...tu, start: { x: p.x, z: p.z }, items: h.items.length };
+        // Lamp step: the lamp may already be on, so wait for a press of F
+        if (tu.step === 1 && tu.lamp === undefined) return { ...tu, lamp: h.flashlightOn };
+        const ok = [
+          () => Math.hypot(p.x - tu.start!.x, p.z - tu.start!.z) > 4,
+          () => h.flashlightOn !== tu.lamp,
+          () => h.crouching,
+          () => e.tut.interacts > 0,
+          () => h.hidden,
+          () => e.tut.cans > 0,
+        ][tu.step];
+        if (!ok?.()) return tu;
+        sound.playItemPickup();
+        const step = tu.step + 1;
+        if (step >= TUTO_STEPS.length) finishTutorial();
+        return { ...tu, step };
+      });
+    }, 300);
+    return () => clearInterval(t);
+  }, [tutorial?.step]);
+  // The "well done" card goes away by itself
+  useEffect(() => {
+    if (tutorial && tutorial.step >= TUTO_STEPS.length) {
+      const t = setTimeout(() => setTutorial(null), 12000);
+      return () => clearTimeout(t);
+    }
+  }, [tutorial?.step]);
+  // Back to the menu: the tutorial stops
+  useEffect(() => {
+    if (!isPlaying) setTutorial(null);
+  }, [isPlaying]);
+
   const handleRestart = () => {
     const on = onlineRef.current;
     if (on) {
@@ -555,9 +661,12 @@ export default function App() {
       const r = await api.reward(s.token, diff, diff <= 1 ? 0 : (engineRef.current?.state.runCoins ?? 0));
       setWallet(r);
       if (wasLocked && r.shopUnlocked) setRewardMsg('🛒 BOUTIQUE DÉBLOQUÉE ! Skins, boîtes mystère et cadeau du jour t\'attendent au menu.');
-      else if (diff <= 1) setRewardMsg('Mode Exploration : pas de pièces.');
-      else if (r.admin) setRewardMsg('🪙 Admin : pièces infinies');
-      else if (r.gained > 0) setRewardMsg(`🪙 +${r.gained} pièces — total ${r.wallet.coins}`);
+      else {
+        const xp = r.xp ? `  ·  ⭐ +${r.xp} XP` : '';
+        if (diff <= 1) setRewardMsg(`Mode Exploration : pas de pièces.${xp}`);
+        else if (r.admin) setRewardMsg(`🪙 Admin : pièces infinies${xp}`);
+        else if (r.gained > 0) setRewardMsg(`🪙 +${r.gained} pièces — total ${r.wallet.coins}${xp}`);
+      }
     } catch {
       /* offline */
     }
@@ -576,6 +685,19 @@ export default function App() {
       /* offline */
     }
   };
+  /** A lost run still gives a little XP. */
+  const deathXp = async () => {
+    const s = sessionRef.current;
+    if (!s || onlineRef.current?.mode === 'versus') return;
+    try {
+      await new Promise((r) => setTimeout(r, 1500));
+      setWallet(await api.xpDeath(s.token));
+    } catch {
+      /* offline */
+    }
+  };
+  const deathXpRef = useRef(deathXp);
+  deathXpRef.current = deathXp;
   const bankTreatsRef = useRef(bankTreats);
   bankTreatsRef.current = bankTreats;
   const grantRewardRef = useRef(grantReward);
@@ -738,6 +860,7 @@ export default function App() {
     if (s) api.inviteDismiss(s.token, code).then(setFriends).catch(() => {});
   };
 
+  const adminBoost = async (kind: BoostKind | null, hours: number) => setWallet(await api.adminBoost(tokenOrThrow(), kind, hours));
   const adminSetSeason = async (s: SeasonSetting) => setWallet(await api.adminSeason(tokenOrThrow(), s));
   const hoboBuy = async (kind: string) => {
     const e = engineRef.current;
@@ -758,9 +881,12 @@ export default function App() {
   };
 
   // ---- Accounts ---------------------------------------------------------
+  // (again once the server has woken up, if it was asleep the first time)
+  const awake = wakingSince == null;
   useEffect(() => {
+    if (!awake || sessionRef.current) return;
     api.restore().then((s) => s && setSession(s));
-  }, []);
+  }, [awake]);
 
   // Load the account's colours, and give them to the engine
   useEffect(() => {
@@ -973,6 +1099,8 @@ export default function App() {
           onToggleMusic={() => setMenuMusic((m) => !m)}
           coins={wallet?.wallet.coins ?? null}
           shopLocked={!!wallet && !wallet.shopUnlocked}
+          level={wallet?.level ?? null}
+          boost={boost}
           onFriends={
             session
               ? () => {
@@ -996,6 +1124,8 @@ export default function App() {
           ch4Unlocked={ch4Unlocked}
           ch5Unlocked={ch5Unlocked}
           onCampaign={startCampaign}
+          onTutorial={startTutorial}
+          tutorialDone={tutoSeen}
           challenge={todayChallenge}
           challengeOn={challengeOn}
           challengeDone={!!wallet?.challenge?.done}
@@ -1055,6 +1185,26 @@ export default function App() {
         />
       )}
 
+      {wakingSince != null && <WakeScreen since={wakingSince} />}
+      {tutorial && isPlaying && (
+        <TutorialOverlay
+          step={tutorial.step}
+          touch={IS_TOUCH}
+          onSkip={() =>
+            setTutorial((tu) => {
+              if (!tu) return tu;
+              const step = tu.step + 1;
+              if (step >= TUTO_STEPS.length) finishTutorial();
+              return { ...tu, step };
+            })
+          }
+          onQuit={() => {
+            finishTutorial();
+            setTutorial(null);
+          }}
+        />
+      )}
+      {levelUp && <LevelUpToast level={levelUp.level} coins={levelUp.coins} onDone={() => setLevelUp(null)} />}
       {friendsOpen && session && !isPlaying && (
         <FriendsPanel
           view={friends}
@@ -1101,6 +1251,7 @@ export default function App() {
                 }
           }
           onSetSeason={adminSetSeason}
+          onBoost={adminBoost}
           token={session?.token ?? null}
           onLogin={() => {
             setShopOpen(false);

@@ -4,7 +4,7 @@
  * once it has been opened online. Accounts, coins, leaderboard and multiplayer
  * (/api, /ws) always need the network and are never cached.
  */
-const CACHE = 'pz-v1';
+const CACHE = 'pz-v2';
 const CORE = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -32,16 +32,20 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api') || url.pathname.startsWith('/ws')) return;
 
-  // The page itself: always try the network first (new versions show up at once)
+  // The page itself: network first (new versions show up at once). If the
+  // server is asleep and slow to answer, show the saved page after 4 s: the
+  // game then displays its own "waking up" screen instead of a blank page.
   if (req.mode === 'navigate') {
+    const net = fetch(req).then((res) => {
+      if (res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put('/', copy));
+      }
+      return res;
+    });
+    const slow = new Promise((ok) => setTimeout(ok, 4000)).then(() => caches.match('/'));
     e.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put('/', copy));
-          return res;
-        })
-        .catch(() => caches.match('/'))
+      Promise.race([net.catch(() => caches.match('/')), slow.then((hit) => hit || net)]).then((r) => r || net)
     );
     return;
   }

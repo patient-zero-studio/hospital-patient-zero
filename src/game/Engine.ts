@@ -1243,6 +1243,7 @@ export class GameEngine {
   }
 
   private throwCan(item: GameItem) {
+    this.tut.cans++;
     this.state.removeItem(item.id);
     const p = this.player;
     const fwd = new THREE.Vector3(-Math.sin(p.yaw), 0, -Math.cos(p.yaw));
@@ -1406,6 +1407,7 @@ export class GameEngine {
     if (sewers) this.queueChapterToast('CHAPITRE 2 — LES ÉGOUTS. L\'escalier s\'est effondré derrière vous. Quelque chose respire dans le noir… Il n\'a pas d\'yeux : il ÉCOUTE.');
     this.player.lowZones = this.map.lowZones;
     this.spawnTreats();
+    this.tut = { cans: 0, interacts: 0 };
     // Daily challenge modifiers
     const ch = this.challenge;
     this.player.batteryDrainMul = ch === 'dim' ? 3 : ch === 'dive' ? 2 : 1;
@@ -3615,6 +3617,7 @@ export class GameEngine {
   }
 
   private performInteraction(t: InteractTarget) {
+    this.tut.interacts++;
     const p = this.player;
     const gs = this.state;
     // Versus safety net: the creature only opens / closes doors
@@ -4086,6 +4089,8 @@ export class GameEngine {
 
   // ---- 🍬 Event treats (bonbons, œufs, cœurs…) lying around the hospital ----
   public runTreats = 0;
+  /** Tutorial: what the player has done this run */
+  public tut = { cans: 0, interacts: 0 };
   private treatSeason: Season | null = null;
   private treats: { mesh: THREE.Group; y: number; taken: boolean }[] = [];
   private treatDisposables: { dispose: () => void }[] = [];

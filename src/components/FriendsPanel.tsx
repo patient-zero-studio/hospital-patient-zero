@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Check, Loader2, UserMinus, UserPlus, Users, X } from 'lucide-react';
 import type { FriendsView } from '../net/api';
+import { levelColor } from '../levels';
 
 const DOT: Record<string, { color: string; label: string }> = {
   playing: { color: '#f59e0b', label: 'En partie' },
@@ -135,7 +136,14 @@ export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove,
                   <div key={f.username} className="flex items-center gap-2 px-3 py-2 border border-zinc-800 bg-black/40">
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: DOT[f.status].color, boxShadow: f.status !== 'offline' ? `0 0 8px ${DOT[f.status].color}` : undefined }} />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-zinc-100 truncate">{f.username}</div>
+                      <div className="text-sm text-zinc-100 truncate">
+                        {f.level != null && (
+                          <span className="mr-1.5 text-[10px] px-1 border font-mono" style={{ color: levelColor(f.level), borderColor: levelColor(f.level) + '88' }}>
+                            Niv {f.level}
+                          </span>
+                        )}
+                        {f.username}
+                      </div>
                       <div className="text-[10px] font-mono" style={{ color: DOT[f.status].color }}>
                         {DOT[f.status].label}
                       </div>

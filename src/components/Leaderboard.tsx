@@ -1,3 +1,4 @@
+import { levelColor } from '../levels';
 import React, { useEffect, useState } from 'react';
 import { Loader2, Medal, X } from 'lucide-react';
 import { api, BoardEntry } from '../net/api';
@@ -92,6 +93,11 @@ export const LeaderboardMenu: React.FC<{ me: string | null; onClose: () => void 
                     {i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}
                   </span>
                   <span className={`flex-1 truncate ${mine ? 'text-emerald-300' : 'text-zinc-200'}`}>
+                    {e.level != null && (
+                      <span className="mr-1.5 text-[10px] px-1 border" style={{ color: levelColor(e.level), borderColor: levelColor(e.level) + '88' }}>
+                        {e.level}
+                      </span>
+                    )}
                     {e.username}
                     {mine && ' (vous)'}
                   </span>

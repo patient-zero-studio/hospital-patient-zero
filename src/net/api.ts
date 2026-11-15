@@ -4,6 +4,13 @@ import { Appearance, DEFAULT_APPEARANCE, sanitizeAppearance } from '../appearanc
 import type { BoxId, BoxResult, SupplyKind, Wallet } from '../economy';
 import type { AchState, StatKey } from '../achievements';
 import type { Season, SeasonSetting } from '../seasons';
+import type { LevelInfo } from '../levels';
+
+export type BoostKind = 'coins2' | 'treats2' | 'xp2' | 'all2';
+export interface Boost {
+  kind: BoostKind;
+  until: number;
+}
 
 const TOKEN_KEY = 'hospital-pz-token';
 
@@ -26,6 +33,10 @@ export interface WalletView {
   newAch?: string[];
   /** today's challenge and whether this account already won it */
   challenge?: { id: string; done: boolean };
+  /** player level (XP) */
+  level?: LevelInfo;
+  /** ⚡ surprise event on (double coins / treats / XP) */
+  boost?: Boost | null;
   /** false until the player escapes once (Exploration is enough) */
   shopUnlocked?: boolean;
   /** event currently on (Christmas / Halloween) */
@@ -39,7 +50,7 @@ export interface WalletView {
 }
 
 export interface FriendsView {
-  friends: { username: string; status: 'playing' | 'online' | 'offline' }[];
+  friends: { username: string; status: 'playing' | 'online' | 'offline'; level?: number }[];
   requests: string[];
   invites: { from: string; code: string; mode: string; chapter: number; difficulty: number }[];
   /** you host a room waiting for a partner */
@@ -51,6 +62,7 @@ export interface BoardEntry {
   username: string;
   time: number;
   date: string;
+  level?: number;
 }
 
 export interface AdminUser {
@@ -152,13 +164,26 @@ export const api = {
     if (!res.ok) throw new Error(data.error || 'Serveur injoignable.');
     return data;
   },
-  reward: (token: string, difficulty: number, found: number): Promise<WalletView & { gained: number }> =>
+  reward: (token: string, difficulty: number, found: number): Promise<WalletView & { gained: number; xp?: number }> =>
     post('/api/wallet/reward', { difficulty, found }, token),
   claimDaily: (token: string): Promise<WalletView & { result: BoxResult }> => post('/api/shop/daily', {}, token),
   /** Event treats picked up during a run (sent when it ends, win or lose). */
   addTreats: (token: string, count: number): Promise<WalletView & { added: number }> => post('/api/event/treats', { count }, token),
   openEventBox: (token: string): Promise<WalletView & { result: BoxResult }> => post('/api/event/box', {}, token),
   claimAdvent: (token: string, day: number): Promise<WalletView & { result: BoxResult }> => post('/api/shop/advent', { day }, token),
+  /** Event + surprise boost on for everyone (undefined = server unreachable). */
+  async status(): Promise<{ season: Season | null; boost: Boost | null } | undefined> {
+    try {
+      const res = await fetch('/api/season');
+      if (!res.ok) return undefined;
+      const d = await res.json();
+      return { season: d.season ?? null, boost: d.boost ?? null };
+    } catch {
+      return undefined;
+    }
+  },
+  xpDeath: (token: string): Promise<WalletView & { xp: number }> => post('/api/xp/death', {}, token),
+  adminBoost: (token: string, kind: BoostKind | null, hours: number): Promise<WalletView> => post('/api/admin/boost', { kind, hours }, token),
   /** Event on for everyone (null = none, undefined = server unreachable). */
   async season(): Promise<Season | null | undefined> {
     try {

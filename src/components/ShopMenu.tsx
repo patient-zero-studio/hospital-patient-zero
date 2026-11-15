@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Coins, Crown, Gift, Loader2, ShoppingBag, Sparkles, X } from 'lucide-react';
 import { ADVENT, BOXES, EVENT_BOX_PRICE, BoxId, BoxResult, CATALOG, Cosmetic, TIER_COLOR, TIER_LABEL, TIER_PRICE, cosmetic, fmtCoins } from '../economy';
-import { api, AdminUser, WalletView } from '../net/api';
+import { api, AdminUser, Boost, BoostKind, WalletView } from '../net/api';
 import { SEASON_INFO, Season, SeasonSetting } from '../seasons';
 
 /** Admin: start or stop an event (Christmas / Halloween) for every player. */
@@ -42,6 +42,70 @@ const SeasonSwitch: React.FC<{ value: SeasonSetting; onSet: (s: SeasonSetting) =
         Automatique : Saint-Valentin 7 → 16 février, Poisson d'avril 1er → 3 avril, Pâques ± 7 jours, Halloween 1er octobre → 5 novembre, Noël 1er décembre → 6 janvier. Les cases du calendrier s'ouvrent une par une : case 1 le 1er décembre, case 2 le
         2 décembre… jusqu'à la case 25 le 25 décembre (pour tout le monde, admins compris).
       </p>
+    </div>
+  );
+};
+
+/** Admin: ⚡ surprise event for everyone (double coins / treats / XP) for a while. */
+const BoostSwitch: React.FC<{ boost: Boost | null | undefined; onBoost: (kind: BoostKind | null, hours: number) => Promise<void> }> = ({ boost, onBoost }) => {
+  const [kind, setKind] = useState<BoostKind>('coins2');
+  const [busy, setBusy] = useState(false);
+  const go = async (k: BoostKind | null, h: number) => {
+    setBusy(true);
+    try {
+      await onBoost(k, h);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const on = boost && boost.until > Date.now();
+  const kinds: [BoostKind, string][] = [
+    ['coins2', '🪙 Pièces x2'],
+    ['treats2', '🍬 Friandises x2'],
+    ['xp2', '⭐ XP x2'],
+    ['all2', '⚡ Tout x2'],
+  ];
+  return (
+    <div className="mb-5 p-3 border border-zinc-800 bg-black/40">
+      <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-2">⚡ Événement surprise (pour tous les joueurs)</div>
+      {on && (
+        <div className="flex items-center justify-between gap-2 mb-2 p-2 border border-amber-500/70 bg-amber-950/30 text-[11px] font-mono text-amber-200">
+          <span>
+            En cours : {kinds.find((k) => k[0] === boost!.kind)?.[1]} jusqu'à {new Date(boost!.until).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+          </span>
+          <button disabled={busy} onClick={() => go(null, 0)} className="px-2 py-1 border border-red-700 text-red-300 uppercase">
+            Arrêter
+          </button>
+        </div>
+      )}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 mb-2">
+        {kinds.map(([k, label]) => (
+          <button
+            key={k}
+            onClick={() => setKind(k)}
+            className={`px-2 py-2 border text-[11px] font-mono ${kind === k ? 'border-amber-400 text-amber-200 bg-amber-950/40' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {[
+          [1, '1 heure'],
+          [3, '3 heures'],
+          [24, '24 heures'],
+          [48, 'Week-end (48 h)'],
+        ].map(([h, label]) => (
+          <button
+            key={h}
+            disabled={busy}
+            onClick={() => go(kind, h as number)}
+            className="flex-1 px-2 py-2 bg-amber-600 hover:bg-amber-500 text-black text-[11px] font-mono uppercase font-bold disabled:opacity-40"
+          >
+            Lancer {label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 };
@@ -158,6 +222,8 @@ interface Props {
   onClaimAdvent?: (day: number) => Promise<BoxResult>;
   /** admin: start / stop an event for everyone */
   onSetSeason?: (s: SeasonSetting) => Promise<void>;
+  /** admin: ⚡ surprise event */
+  onBoost?: (kind: BoostKind | null, hours: number) => Promise<void>;
   /** event box (500 treats) */
   onOpenEventBox?: () => Promise<BoxResult>;
   /** locked shop: go play in Exploration */
@@ -257,7 +323,7 @@ const AdminPanel: React.FC<{ token: string }> = ({ token }) => {
 };
 
 /** Cosmetics shop: today's offers (change every day) and mystery boxes. */
-export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, onClaimDaily, onClaimAdvent, onSetSeason, onExplore, onOpenEventBox, onLogin, onCustomize, onClose, token }) => {
+export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, onClaimDaily, onClaimAdvent, onSetSeason, onExplore, onOpenEventBox, onBoost, onLogin, onCustomize, onClose, token }) => {
   const season: Season | null = wallet?.season ?? null;
   const [tab, setTab] = useState<'event' | 'shop' | 'boxes' | 'mine' | 'admin'>(season ? 'event' : 'shop');
   const [busy, setBusy] = useState<string | null>(null);
@@ -618,6 +684,7 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
             )}
             {tab === 'admin' && wallet.admin && token && (
               <>
+                {onBoost && <BoostSwitch boost={wallet.boost} onBoost={onBoost} />}
                 {onSetSeason && <SeasonSwitch value={wallet.seasonSetting ?? 'auto'} onSet={onSetSeason} />}
                 <AdminPanel token={token} />
               </>

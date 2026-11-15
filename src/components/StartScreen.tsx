@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Coins, Medal, Music, Play, ShoppingBag, Sliders, Trophy, Users, VolumeX } from 'lucide-react';
 import type { ChallengeDef } from '../challenges';
 import { ACHIEVEMENTS } from '../achievements';
@@ -9,9 +9,39 @@ import { fmtCoins } from '../economy';
 import { InstallButton } from './InstallButton';
 import { SeasonalOverlay } from './SeasonalOverlay';
 import { SEASON_INFO, Season } from '../seasons';
+import { LevelInfo, levelColor } from '../levels';
+import type { Boost } from '../net/api';
+
+export const BOOST_LABEL: Record<string, string> = {
+  coins2: '🪙 PIÈCES DOUBLÉES',
+  treats2: '🍬 FRIANDISES DOUBLÉES',
+  xp2: '⭐ XP DOUBLÉE',
+  all2: '⚡ TOUT EST DOUBLÉ (pièces, XP, friandises)',
+};
+
+/** "⚡ PIÈCES DOUBLÉES — encore 5 h 12" */
+const BoostBanner: React.FC<{ boost: Boost }> = ({ boost }) => {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, []);
+  const left = Math.max(0, boost.until - now);
+  if (left <= 0) return null;
+  const h = Math.floor(left / 3600000);
+  const m = Math.floor((left % 3600000) / 60000);
+  return (
+    <div className="relative z-10 mx-auto -mb-1 px-4 py-1.5 border border-amber-400 bg-amber-500/15 text-amber-200 font-mono text-[11px] sm:text-xs uppercase tracking-[0.2em] text-center animate-pulse shadow-[0_0_24px_rgba(251,191,36,0.35)]">
+      ⚡ Événement surprise : {BOOST_LABEL[boost.kind]} — encore {h > 0 ? `${h} h ` : ''}{String(m).padStart(2, '0')} min
+    </div>
+  );
+};
 
 interface StartScreenProps {
   onStartGame: () => void;
+  /** 🎓 guided first game */
+  onTutorial?: () => void;
+  tutorialDone?: boolean;
   /** Campaign: chapters 1 → 5 in one run */
   onCampaign?: () => void;
   onMultiplayer: () => void;
@@ -22,6 +52,10 @@ interface StartScreenProps {
   coins: number | null;
   /** the free daily gift is waiting in the shop */
   giftReady?: boolean;
+  /** player level (null = not logged in) */
+  level?: LevelInfo | null;
+  /** ⚡ surprise event on */
+  boost?: Boost | null;
   /** friends list (null online count = not logged in) */
   onFriends?: () => void;
   friendsOnline?: number | null;
@@ -61,6 +95,8 @@ interface StartScreenProps {
 export const StartScreen: React.FC<StartScreenProps> = ({
   onStartGame,
   onCampaign,
+  onTutorial,
+  tutorialDone = true,
   onMultiplayer,
   username,
   difficulty,
@@ -68,6 +104,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   coins,
   giftReady = false,
   shopLocked = false,
+  level = null,
+  boost = null,
   onFriends,
   friendsOnline = null,
   friendsAlert = 0,
@@ -116,6 +154,22 @@ export const StartScreen: React.FC<StartScreenProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+        {level && (
+          <div
+            className="flex items-center gap-2 px-3 py-1.5 border bg-zinc-950/80 font-mono text-xs"
+            style={{ borderColor: levelColor(level.level) + '99' }}
+            title={level.need ? `${level.into} / ${level.need} XP avant le niveau ${level.level + 1}` : 'Niveau maximum !'}
+          >
+            <span style={{ color: levelColor(level.level) }} className="font-bold">
+              ⭐ Niv {level.level}
+            </span>
+            {level.need > 0 && (
+              <span className="hidden sm:block w-16 h-1.5 bg-zinc-800">
+                <span className="block h-full" style={{ width: `${(level.into / level.need) * 100}%`, background: levelColor(level.level) }} />
+              </span>
+            )}
+          </div>
+        )}
         {onToggleMusic && (
           <button
             onClick={onToggleMusic}
@@ -135,6 +189,9 @@ export const StartScreen: React.FC<StartScreenProps> = ({
         </button>
         </div>
       </div>
+
+      {/* ⚡ Surprise event */}
+      {boost && boost.until > Date.now() && <BoostBanner boost={boost} />}
 
       {/* Center Hero */}
       <div className="relative z-10 max-w-2xl mx-auto text-center flex flex-col items-center">
@@ -278,6 +335,15 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               </button>
             )}
 
+            {onTutorial && !tutorialDone && (
+              <button
+                onClick={onTutorial}
+                className="px-8 py-3 bg-emerald-700/90 hover:bg-emerald-600 text-white font-mono text-xs uppercase tracking-widest flex items-center gap-3 transition-all cursor-pointer border border-emerald-400 shadow-[0_0_24px_rgba(16,185,129,0.45)] animate-pulse"
+              >
+                <span>🎓</span>
+                <span>Nouveau ? Commence par le tutoriel (2 min)</span>
+              </button>
+            )}
             <button
               onClick={onStartGame}
               className="px-10 py-4 bg-red-700 hover:bg-red-600 text-white font-mono text-sm uppercase tracking-widest flex items-center gap-3 transition-all shadow-[0_0_30px_rgba(220,38,38,0.5)] cursor-pointer font-bold border border-red-500"
@@ -320,6 +386,15 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               )}
             </button>
             <div className="flex gap-2 flex-wrap justify-center">
+            {onTutorial && tutorialDone && (
+              <button
+                onClick={onTutorial}
+                className="px-6 py-2.5 bg-black/60 hover:bg-zinc-900 text-zinc-200 font-mono text-xs uppercase tracking-widest flex items-center gap-3 transition-all cursor-pointer border border-zinc-700 hover:border-emerald-400"
+              >
+                <span>🎓</span>
+                <span>Tutoriel</span>
+              </button>
+            )}
             {onFriends && (
               <button
                 onClick={onFriends}
