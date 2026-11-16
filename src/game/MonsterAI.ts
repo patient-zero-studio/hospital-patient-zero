@@ -84,6 +84,8 @@ export class MonsterAI {
   private lastPos = new THREE.Vector3();
   private disposables: { dispose: () => void }[] = [];
 
+  /** Daily mutator: faster monsters */
+  public speedMul = 1;
   private patrolSpeed = 1.5;
   private investigateSpeed = 2.4;
   private chaseSpeed = 4.5;
@@ -547,6 +549,8 @@ export class MonsterAI {
   }
 
   public alertNoise(origin: THREE.Vector3, loudness: number, boxes: CollisionBox[], fromHiding = false) {
+    // Daily mutator "Géants": they hear from further away
+    loudness *= this.mesh.scale.x > 1.1 ? 1.3 : 1;
     if (this.state === 'STUNNED') return;
     if (this.state === 'CHASE' && !this.blind) return;
     const dist = this.position.distanceTo(origin);
@@ -819,7 +823,7 @@ export class MonsterAI {
       this.footstepTimer = 0.62;
     }
 
-    this.followPath(delta, speed, boxes);
+    this.followPath(delta, speed * this.speedMul, boxes);
     this.animate(delta);
     this.head.getWorldPosition(this.headWorld);
   }

@@ -120,6 +120,7 @@ const EMPTY_HUD: HudSnapshot = {
   runCoins: 0,
   runTreats: 0,
   presents: null,
+  survival: null,
   treatEmoji: null,
   selectedSlot: 0,
   voice: null,
@@ -285,7 +286,8 @@ export default function App() {
           const cp = campaignRef.current;
           if (cp && !onlineRef.current) cp.time += engineRef.current?.runTime ?? 0;
           bankTreatsRef.current();
-          deathXpRef.current();
+          if (engineRef.current?.survival) survivalScoreRef.current();
+          else deathXpRef.current();
           setIsGameOver(true);
         },
         onVictory: (ending) => victoryRef.current(ending),
@@ -449,6 +451,7 @@ export default function App() {
 
   const startCampaign = () => {
     xmasRef.current = false;
+    survivalRef.current = false;
     engineRef.current?.setNet(null);
     if (engineRef.current) engineRef.current.levelSeed = null;
     campaignRef.current = { ch: 1, diff: difficulty, time: 0, carry: null };
@@ -501,6 +504,12 @@ export default function App() {
       engine.xmasNight = xmas;
       fresh = true;
     }
+    // 🧟 Endless survival is another mode of chapter 1
+    const surv = survivalRef.current && ch === 1 && !onlineRef.current;
+    if (engine.survival !== surv) {
+      engine.survival = surv;
+      fresh = true;
+    }
     // The daily challenge is a solo thing
     const wantChallenge = !onlineRef.current && challengeOnRef.current ? dailyChallenge().id : null;
     if (engine.challenge !== wantChallenge) fresh = true;
@@ -521,7 +530,18 @@ export default function App() {
 
   const hasStartedOnce = useRef(false);
   const xmasRef = useRef(false);
+  const survivalRef = useRef(false);
+  const startSurvival = () => {
+    survivalRef.current = true;
+    xmasRef.current = false;
+    campaignRef.current = null;
+    engineRef.current?.setNet(null);
+    if (engineRef.current) engineRef.current.levelSeed = null;
+    beginRun(true, difficulty < 2 ? (2 as Difficulty) : difficulty, 1);
+    hasStartedOnce.current = true;
+  };
   const startXmasNight = () => {
+    survivalRef.current = false;
     xmasRef.current = true;
     campaignRef.current = null;
     engineRef.current?.setNet(null);
@@ -531,6 +551,7 @@ export default function App() {
   };
   const handleStartGame = () => {
     xmasRef.current = false;
+    survivalRef.current = false;
     campaignRef.current = null;
     engineRef.current?.setNet(null);
     if (engineRef.current) engineRef.current.levelSeed = null;
@@ -547,6 +568,7 @@ export default function App() {
   const [tutoSeen, setTutoSeen] = useState(tutorialDone());
   const startTutorial = () => {
     xmasRef.current = false;
+    survivalRef.current = false;
     campaignRef.current = null;
     engineRef.current?.setNet(null);
     if (engineRef.current) engineRef.current.levelSeed = null;
@@ -724,6 +746,25 @@ export default function App() {
     }
   };
   const deathXpRef = useRef(deathXp);
+  /** 🧟 Survival: time + wave go to the survival leaderboard (and coins / XP) */
+  const survivalScore = async () => {
+    const s = sessionRef.current;
+    const e = engineRef.current;
+    if (!e) return;
+    const time = e.runTime;
+    const wave = e.survivalWave;
+    const t = `🧟 ${fmtTime(time)} · vague ${wave}`;
+    if (!s) return setRunMsg(t);
+    try {
+      const r = await api.submitSurvival(s.token, time, wave);
+      setWallet(r);
+      setRewardMsg(`${t}${r.coins ? `  ·  🪙 +${r.coins}` : ''}${r.xp ? `  ·  ⭐ +${r.xp} XP` : ''}${r.record ? `  ·  🏆 Record perso${r.rank ? ` (${r.rank}${r.rank === 1 ? 'er' : 'e'})` : ''}` : ''}`);
+    } catch {
+      setRewardMsg(t);
+    }
+  };
+  const survivalScoreRef = useRef(survivalScore);
+  survivalScoreRef.current = survivalScore;
   deathXpRef.current = deathXp;
   /** 🎄 Christmas night: coins per present, the unique skin for all 12. */
   const xmasReward = async (presents: number) => {
@@ -1244,7 +1285,12 @@ export default function App() {
           ch5Unlocked={ch5Unlocked}
           onCampaign={startCampaign}
           onTutorial={startTutorial}
+          onSurvival={startSurvival}
           onXmasNight={season === 'noel' ? startXmasNight : undefined}
+          onFindOpponent={() => {
+            setMpOpen(true);
+            if (session) findMatch({ mode: 'versus', difficulty: 2 as Difficulty, chapter: 1, monster: 'host' });
+          }}
           tutorialDone={tutoSeen}
           challenge={todayChallenge}
           challengeOn={challengeOn}
@@ -1497,6 +1543,7 @@ export default function App() {
           runCoins={hud.runCoins}
           runTreats={hud.runTreats}
           presents={hud.presents}
+          survival={hud.survival}
           treatEmoji={hud.treatEmoji}
           selectedSlot={hud.selectedSlot}
           voice={hud.voice}

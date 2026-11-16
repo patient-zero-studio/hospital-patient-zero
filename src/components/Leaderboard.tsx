@@ -13,6 +13,7 @@ export const LeaderboardMenu: React.FC<{ me: string | null; onProfile?: (name: s
   const [chapter, setChapter] = useState<0 | 1 | 2 | 3 | 4 | 5>(1);
   const [diff, setDiff] = useState(2);
   const [week, setWeek] = useState(false);
+  const [surv, setSurv] = useState(false);
 
   useEffect(() => {
     api
@@ -47,29 +48,57 @@ export const LeaderboardMenu: React.FC<{ me: string | null; onProfile?: (name: s
 
         <div className="p-4 space-y-2">
           <div className="flex gap-2 flex-wrap">
-            <button className={tab(week)} onClick={() => setWeek(true)}>
+            <button className={tab(week)} onClick={() => (setWeek(true), setSurv(false))}>
               🏅 Semaine
             </button>
-            <button className={tab(!week && chapter === 1)} onClick={() => (setWeek(false), setChapter(1))}>
+            <button className={tab(surv)} onClick={() => (setSurv(true), setWeek(false))}>
+              🧟 Survie
+            </button>
+            <button className={tab(!week && !surv && chapter === 1)} onClick={() => (setWeek(false), setSurv(false), setChapter(1))}>
               🏥 Chapitre 1
             </button>
-            <button className={tab(!week && chapter === 2)} onClick={() => (setWeek(false), setChapter(2))}>
+            <button className={tab(!week && !surv && chapter === 2)} onClick={() => (setWeek(false), setSurv(false), setChapter(2))}>
               🐀 Chapitre 2
             </button>
-            <button className={tab(!week && chapter === 3)} onClick={() => (setWeek(false), setChapter(3))}>
+            <button className={tab(!week && !surv && chapter === 3)} onClick={() => (setWeek(false), setSurv(false), setChapter(3))}>
               🌀 Chapitre 3
             </button>
-            <button className={tab(!week && chapter === 4)} onClick={() => (setWeek(false), setChapter(4))}>
+            <button className={tab(!week && !surv && chapter === 4)} onClick={() => (setWeek(false), setSurv(false), setChapter(4))}>
               🌲 Chapitre 4
             </button>
-            <button className={tab(!week && chapter === 5)} onClick={() => (setWeek(false), setChapter(5))}>
+            <button className={tab(!week && !surv && chapter === 5)} onClick={() => (setWeek(false), setSurv(false), setChapter(5))}>
               🟣 Chapitre 5
             </button>
-            <button className={tab(!week && chapter === 0)} onClick={() => (setWeek(false), setChapter(0))}>
+            <button className={tab(!week && !surv && chapter === 0)} onClick={() => (setWeek(false), setSurv(false), setChapter(0))}>
               🏆 Campagne
             </button>
           </div>
-          {week ? (
+          {surv ? (
+            <div className="mt-3 border border-zinc-800">
+              {(boards?.survival ?? []).length === 0 ? (
+                <div className="p-6 text-center text-zinc-500 text-xs font-mono">Personne n'a encore joué la Survie infinie. Lance-toi !</div>
+              ) : (
+                (boards?.survival ?? []).slice(0, 10).map((e, i) => (
+                  <div key={e.username} className={`flex items-center gap-3 px-3 py-2 font-mono text-sm border-b border-zinc-900 last:border-b-0 ${me && e.username.toLowerCase() === me.toLowerCase() ? 'bg-emerald-950/30' : i % 2 ? 'bg-black/30' : ''}`}>
+                    <span className="w-7 text-center font-black" style={{ color: medal[i] ?? '#71717a' }}>
+                      {i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}
+                    </span>
+                    <span className="flex-1 truncate text-zinc-200">
+                      {onProfile ? (
+                        <button onClick={() => onProfile(e.username)} className="hover:underline">
+                          {e.username}
+                        </button>
+                      ) : (
+                        e.username
+                      )}
+                    </span>
+                    <span className="text-[11px] text-red-300">vague {e.wave ?? '?'}</span>
+                    <span className="w-14 text-right text-amber-300 font-bold">{fmtTime(e.time)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : week ? (
             <div className="mt-3">
               <WeeklyBoard me={me} onProfile={onProfile} />
             </div>

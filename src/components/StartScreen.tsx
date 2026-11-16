@@ -40,6 +40,10 @@ const BoostBanner: React.FC<{ boost: Boost }> = ({ boost }) => {
 
 interface StartScreenProps {
   onStartGame: () => void;
+  /** 🧟 endless survival */
+  onSurvival?: () => void;
+  /** ⚔️ find a random opponent right away */
+  onFindOpponent?: () => void;
   /** 🎄 Christmas night special chapter (December only) */
   onXmasNight?: () => void;
   /** 🎓 guided first game */
@@ -106,6 +110,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onCampaign,
   onTutorial,
   onXmasNight,
+  onFindOpponent,
+  onSurvival,
   tutorialDone = true,
   onMultiplayer,
   username,
@@ -401,6 +407,15 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               <Play className="w-4 h-4 fill-white" />
               <span>Jouer en Solo (Activer le Son)</span>
             </button>
+            {onSurvival && (
+              <button
+                onClick={onSurvival}
+                className="px-8 py-3 bg-black/60 hover:bg-red-950/50 text-red-200 font-mono text-xs uppercase tracking-widest flex items-center gap-3 transition-all cursor-pointer border border-red-800 hover:border-red-400"
+              >
+                <span>🧟</span>
+                <span>Survie infinie — tiens le plus longtemps</span>
+              </button>
+            )}
             {onCampaign && (
               <button
                 onClick={ch5Unlocked ? onCampaign : undefined}
@@ -421,6 +436,16 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               <span>Multijoueur à 2 — Coop / Chasse / Course</span>
               {username && <span className="text-emerald-400 normal-case tracking-normal">({username})</span>}
             </button>
+            {onFindOpponent && (
+              <button
+                onClick={onFindOpponent}
+                className="px-8 py-2.5 bg-red-950/60 hover:bg-red-900/60 text-red-100 font-mono text-xs uppercase tracking-widest flex items-center gap-3 transition-all cursor-pointer border border-red-700 hover:border-red-400"
+              >
+                <span>⚔️</span>
+                <span>Chercher un adversaire</span>
+                <span className="normal-case tracking-normal text-red-300/80">(Chasse : l'un est le monstre)</span>
+              </button>
+            )}
             <button
               onClick={onShop}
               className="px-8 py-3 bg-black/60 hover:bg-amber-950/40 text-amber-300 font-mono text-xs uppercase tracking-widest flex items-center gap-3 transition-all cursor-pointer border border-amber-700/70 hover:border-amber-400"

@@ -326,6 +326,22 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
                     🔎 Trouver un partenaire au hasard ({draft.mode === 'versus' ? 'Chasse' : draft.mode === 'race' ? 'Course' : 'Coop'})
                   </button>
                 )}
+                {p.onFindMatch && (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      onClick={() => p.onFindMatch!({ ...draft, mode: 'versus', chapter: 1 })}
+                      className={`${btn} bg-red-900 hover:bg-red-800 text-white border border-red-600`}
+                    >
+                      ⚔️ Chercher un adversaire (Chasse)
+                    </button>
+                    <button
+                      onClick={() => p.onFindMatch!({ ...draft, mode: 'race', chapter: 1 })}
+                      className={`${btn} bg-amber-900/80 hover:bg-amber-800 text-white border border-amber-600`}
+                    >
+                      🏁 Chercher un adversaire (Course)
+                    </button>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-600">
                   <div className="flex-1 h-px bg-zinc-800" /> OU <div className="flex-1 h-px bg-zinc-800" />
                 </div>

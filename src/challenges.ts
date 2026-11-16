@@ -4,7 +4,7 @@
  */
 import { todayKey } from './economy';
 
-export type ChallengeId = 'dim' | 'pack3' | 'nosprint' | 'horde' | 'clock' | 'dive';
+export type ChallengeId = 'dim' | 'pack3' | 'nosprint' | 'horde' | 'clock' | 'dive' | 'fast' | 'inverted' | 'fog' | 'nohide' | 'nolamp' | 'giant';
 
 export interface ChallengeDef {
   id: ChallengeId;
@@ -25,6 +25,13 @@ export const CHALLENGES: ChallengeDef[] = [
   { id: 'horde', name: 'La Horde', desc: 'Un monstre de plus vous traque.', icon: '☠️', reward: 175 },
   { id: 'clock', name: 'Contre la montre', desc: 'Sortez en moins de 6 minutes.', icon: '⏱️', reward: 150, timeLimit: 360 },
   { id: 'dive', name: 'Plongée', desc: 'Chapitre 2 obligatoire, et la lampe se vide 2 fois plus vite.', icon: '🐀', reward: 200, chapter: 2 },
+  // --- Mutators: weird rules ---
+  { id: 'fast', name: 'Monstres sous adrénaline', desc: 'Les monstres sont 40 % plus rapides.', icon: '⚡', reward: 225 },
+  { id: 'inverted', name: 'Tête à l\'envers', desc: 'Gauche et droite sont inversées.', icon: '🙃', reward: 200 },
+  { id: 'fog', name: 'Brouillard', desc: 'Un brouillard épais : on voit à peine à 5 mètres.', icon: '🌫️', reward: 175 },
+  { id: 'nohide', name: 'Nulle part où se cacher', desc: 'Impossible de se cacher dans les casiers et les lits.', icon: '🚫', reward: 225 },
+  { id: 'nolamp', name: 'Pile à plat', desc: 'La lampe démarre à 15 % et les piles ne rechargent que 25 %.', icon: '🪫', reward: 200 },
+  { id: 'giant', name: 'Géants', desc: 'Les monstres sont immenses… et vous entendent de plus loin.', icon: '🗿', reward: 175 },
 ];
 
 export const CHALLENGE_BY_ID = new Map(CHALLENGES.map((c) => [c.id, c]));

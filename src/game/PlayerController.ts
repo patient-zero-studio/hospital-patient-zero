@@ -66,6 +66,8 @@ export class PlayerController {
   /** Daily challenge modifiers (set by the engine on every reset). */
   public batteryDrainMul = 1;
   public noSprint = false;
+  /** Daily mutator: left and right swapped */
+  public invertStrafe = false;
 
   /**
    * Versus: the local player IS the creature (no flashlight, no hiding,
@@ -258,7 +260,8 @@ export class PlayerController {
     const active = this.inputEnabled && !this.isHidden;
     const tm = this.touchMove;
     const fwd = active ? THREE.MathUtils.clamp((k['KeyW'] || k['KeyZ'] || k['ArrowUp'] ? 1 : 0) - (k['KeyS'] || k['ArrowDown'] ? 1 : 0) + tm.y, -1, 1) : 0;
-    const strafe = active ? THREE.MathUtils.clamp((k['KeyD'] || k['ArrowRight'] ? 1 : 0) - (k['KeyA'] || k['KeyQ'] || k['ArrowLeft'] ? 1 : 0) + tm.x, -1, 1) : 0;
+    const strafe0 = active ? THREE.MathUtils.clamp((k['KeyD'] || k['ArrowRight'] ? 1 : 0) - (k['KeyA'] || k['KeyQ'] || k['ArrowLeft'] ? 1 : 0) + tm.x, -1, 1) : 0;
+    const strafe = this.invertStrafe ? -strafe0 : strafe0;
     // Analog stick: push it a little to walk slowly
     const stick = Math.min(1, Math.hypot(fwd, strafe));
     const moving = stick > 0.08;

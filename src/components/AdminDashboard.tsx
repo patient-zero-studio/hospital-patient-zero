@@ -133,6 +133,7 @@ export const AdminDashboard: React.FC<{ token: string }> = ({ token }) => {
         </>
       )}
 
+      <ReportsPanel token={token} />
       <BackupsPanel token={token} />
 
       {/* Moderation */}
@@ -274,6 +275,46 @@ const BackupsPanel: React.FC<{ token: string }> = ({ token }) => {
           </p>
         </div>
       )}
+    </div>
+  );
+};
+
+/** 🚩 Players reported by others. */
+const ReportsPanel: React.FC<{ token: string }> = ({ token }) => {
+  const [list, setList] = useState<Awaited<ReturnType<typeof api.adminReports>> | null>(null);
+  const load = () => api.adminReports(token).then(setList).catch(() => setList([]));
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+  return (
+    <div className="p-2.5 border border-zinc-800 bg-black/40">
+      <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-zinc-500 mb-1.5">🚩 Signalements ({list?.length ?? '…'})</div>
+      {list && list.length === 0 && <p className="text-[11px] font-mono text-zinc-600">Aucun signalement. 👍</p>}
+      <div className="space-y-1 max-h-60 overflow-y-auto">
+        {list?.map((r) => (
+          <div key={r.id} className="flex items-start gap-2 px-2 py-1.5 border border-zinc-800 text-xs font-mono">
+            <div className="flex-1 min-w-0">
+              <div>
+                <span className={r.banned ? 'text-red-400 line-through' : 'text-zinc-100'}>{r.target}</span>
+                <span className="text-red-300"> · {r.reason}</span>
+              </div>
+              {r.note && <div className="text-zinc-400 italic truncate">« {r.note} »</div>}
+              <div className="text-[10px] text-zinc-600">
+                par {r.by} · {new Date(r.at).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </div>
+            </div>
+            <button
+              onClick={() => api.adminReportDone(token, r.id).then(load)}
+              title="Marquer comme traité"
+              className="px-2 py-0.5 border border-zinc-700 text-[10px] uppercase text-zinc-400 hover:text-emerald-300"
+            >
+              Traité
+            </button>
+          </div>
+        ))}
+      </div>
+      <p className="text-[10px] font-mono text-zinc-600 mt-1">Pour agir : cherche le pseudo dans « Modération » ci-dessous (renommer / bannir).</p>
     </div>
   );
 };

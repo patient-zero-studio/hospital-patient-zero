@@ -91,6 +91,8 @@ interface User {
   lastDeathXp?: number;
   /** last Christmas night reward (anti-spam) */
   lastXmas?: number;
+  /** last survival score (anti-spam) */
+  lastSurvival?: number;
   /** Banned by an admin: can't log in any more */
   banned?: boolean;
   /** XP earned this week (weekly leaderboard) + podiums won */
@@ -483,6 +485,8 @@ interface BoardEntry {
   username: string;
   time: number;
   date: string;
+  /** survival: wave reached */
+  wave?: number;
 }
 const boards: Record<string, BoardEntry[]> = await (async () => {
   try {
@@ -683,6 +687,40 @@ app.post('/api/admin/season', (req, res) => {
   settingsSaver.save();
   console.log(`[admin] ${user.username} règle l'événement sur « ${s} »`);
   res.json(walletView(user));
+});
+
+// 🧟 Endless survival: best time per player
+app.post('/api/survival', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const now = Date.now();
+  const time = Math.round(Number(req.body?.time) * 10) / 10;
+  const wave = Math.floor(Number(req.body?.wave));
+  // A wave every 22-40 s at most: anything faster is not a real run
+  if (!(time >= 20 && time <= 4 * 3600) || !(wave >= 1 && wave <= time / 20 + 2) || (user.lastSurvival && now - user.lastSurvival < 20000))
+    return res.json({ record: false, rank: null, coins: 0, xp: 0, ...walletView(user) });
+  user.lastSurvival = now;
+  const list = (boards.survival ??= []);
+  const mine = list.find((e) => e.username === user.username);
+  const record = !mine || time > mine.time;
+  if (record) {
+    if (mine) {
+      mine.time = time;
+      mine.wave = wave;
+      mine.date = todayKey();
+    } else list.push({ username: user.username, time, wave, date: todayKey() });
+    list.sort((a, b) => b.time - a.time);
+    list.splice(50);
+    saveBoards();
+  }
+  const rank = list.findIndex((e) => e.username === user.username);
+  const coins = Math.min(300, wave * 15) * boostMul('coins');
+  walletOf(user).coins += coins;
+  const xp = 20 + wave * 15;
+  addXp(user, xp);
+  bumpStat('deaths');
+  saveUsers();
+  res.json({ record, rank: rank >= 0 ? rank + 1 : null, coins, xp: xp * boostMul('xp'), ...walletView(user) });
 });
 
 // 🎄 Christmas night: coins per present found, the unique skin for all of them
@@ -1003,6 +1041,58 @@ app.post('/api/admin/restore', async (req, res) => {
   await usersSaver.flush();
   console.log(`[admin] ${user.username} restaure la sauvegarde du ${day} (${users.size} comptes)`);
   res.json({ message: `💾 Comptes remis comme le ${day} (${users.size} comptes). Une copie de l'état d'avant a été gardée.` });
+});
+
+// ---------------------------------------------------------------------------
+// 🚩 Reports: players flag someone, admins see the list
+// ---------------------------------------------------------------------------
+interface Report {
+  id: string;
+  target: string;
+  by: string;
+  reason: string;
+  note: string;
+  at: number;
+}
+const REPORT_REASONS = ['Pseudo insultant', 'Triche', 'Comportement toxique', 'Autre'];
+const reports: Report[] = await (async () => {
+  try {
+    return JSON.parse((await store.load('reports')) ?? '[]');
+  } catch {
+    return [];
+  }
+})();
+const reportsSaver = debouncedSaver(store, 'reports', () => JSON.stringify(reports), 1000);
+app.post('/api/report', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const target = users.get(String(req.body?.username ?? '').toLowerCase());
+  if (!target || target === user) return res.status(400).json({ error: 'Joueur introuvable.' });
+  const reason = String(req.body?.reason ?? '');
+  if (!REPORT_REASONS.includes(reason)) return res.status(400).json({ error: 'Choisis une raison.' });
+  const note = String(req.body?.note ?? '').slice(0, 200);
+  const dayAgo = Date.now() - 86400000;
+  const mine = reports.filter((r) => r.by === user.username && r.at > dayAgo);
+  if (mine.length >= 5) return res.status(429).json({ error: '5 signalements par jour maximum.' });
+  if (mine.some((r) => r.target === target.username)) return res.status(400).json({ error: 'Tu as déjà signalé ce joueur aujourd\'hui.' });
+  reports.push({ id: crypto.randomBytes(6).toString('hex'), target: target.username, by: user.username, reason, note, at: Date.now() });
+  while (reports.length > 300) reports.shift();
+  reportsSaver.save();
+  res.json({ message: '🚩 Merci, un admin va regarder.' });
+});
+app.get('/api/admin/reports', (req, res) => {
+  const user = authUser(req);
+  if (!user || !isAdmin(user)) return res.status(403).json({ error: 'Réservé aux admins.' });
+  res.json([...reports].reverse().map((r) => ({ ...r, banned: !!users.get(r.target.toLowerCase())?.banned })));
+});
+app.post('/api/admin/reports/done', (req, res) => {
+  const user = authUser(req);
+  if (!user || !isAdmin(user)) return res.status(403).json({ error: 'Réservé aux admins.' });
+  const id = String(req.body?.id ?? '');
+  const i = reports.findIndex((r) => r.id === id);
+  if (i >= 0) reports.splice(i, 1);
+  reportsSaver.save();
+  res.json({ ok: true });
 });
 
 // ⚡ Admin: surprise event for everyone (double coins / treats / XP) for a while

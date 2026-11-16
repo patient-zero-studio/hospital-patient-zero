@@ -33,6 +33,7 @@ interface HUDProps {
   runCoins?: number;
   runTreats?: number;
   presents?: number | null;
+  survival?: { wave: number; time: number } | null;
   treatEmoji?: string | null;
   /** Hotbar slot [X] drops */
   selectedSlot?: number;
@@ -95,6 +96,7 @@ export const HUD: React.FC<HUDProps> = ({
   runCoins = 0,
   runTreats = 0,
   presents = null,
+  survival = null,
   treatEmoji = null,
   selectedSlot = 0,
   touch = false,
@@ -278,6 +280,16 @@ export const HUD: React.FC<HUDProps> = ({
       {runCoins > 0 && (
         <div className="absolute bottom-[100px] left-1/2 -translate-x-1/2 px-2 py-0.5 bg-black/60 border border-amber-700/60 text-amber-300 font-mono text-[11px]">
           🪙 {runCoins} pièce{runCoins > 1 ? 's' : ''} trouvée{runCoins > 1 ? 's' : ''}
+        </div>
+      )}
+
+      {/* 🧟 Survival */}
+      {survival && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 px-4 py-1 bg-black/70 border border-red-700 text-red-100 font-mono text-sm flex items-center gap-3">
+          <span>🧟 Vague {survival.wave}</span>
+          <span className="text-amber-300 font-bold">
+            {Math.floor(survival.time / 60)}:{String(Math.floor(survival.time % 60)).padStart(2, '0')}
+          </span>
         </div>
       )}
 

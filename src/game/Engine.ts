@@ -26,6 +26,7 @@ import { RemotePlayer } from './RemotePlayer';
 import { NoiseMarkers } from './NoiseMarkers';
 import { VentCrawler, CRAWLER_STATES, CrawlerHuman } from './VentCrawler';
 import { buildItemModel } from './ItemModels';
+import { GamepadInput } from './Gamepad';
 import type { SupplyKind } from '../economy';
 import { SEASON_INFO, Season, getActiveSeason } from '../seasons';
 import { buildChestModel, buildPresentModel, buildSeasonalDecor, buildTreatModel, treatSpots } from './SeasonalDecor';
@@ -195,6 +196,8 @@ export interface HudSnapshot {
   runTreats: number;
   /** 🎄 Christmas night: presents found (null = not that mode) */
   presents: number | null;
+  /** 🧟 Survival: wave + seconds survived (null = not that mode) */
+  survival: { wave: number; time: number } | null;
   treatEmoji: string | null;
   /** Selected hotbar slot ([X] drops it, mouse wheel changes it). */
   selectedSlot: number;
@@ -756,7 +759,7 @@ export class GameEngine {
     if (this.introPlayed) return;
     this.introPlayed = true;
     if (this.net && this.net.mode !== 'coop') return;
-    if (this.chapter === 1) this.startIntro();
+    if (this.chapter === 1 && !this.survival) this.startIntro();
     else if (CHAPTER_CARDS[this.chapter]) this.startCard(CHAPTER_CARDS[this.chapter]!);
   }
 
@@ -1420,6 +1423,14 @@ export class GameEngine {
     this.player.flashlight.color.setHex(0xfff1dc);
     this.player.noSprint = ch === 'nosprint';
     if (ch === 'pack3') this.state.maxInventorySlots = 3;
+    // Mutators
+    this.player.invertStrafe = ch === 'inverted';
+    if (ch === 'nolamp') this.player.flashlightBattery = 15;
+    (this.scene.fog as THREE.FogExp2).density = ch === 'fog' ? 0.22 : 0.07;
+    for (const m of this.monsters) {
+      m.speedMul = ch === 'fast' ? 1.4 : 1;
+      m.mesh.scale.setScalar(ch === 'giant' ? 1.35 : 1);
+    }
     this.precompile();
     this.stress = 0;
     this.micHeardTimer = 0;
@@ -2284,7 +2295,7 @@ export class GameEngine {
   private applyUsedItem(item: GameItem) {
     const p = this.player;
     if (item.type === 'battery') {
-      p.flashlightBattery = Math.min(100, p.flashlightBattery + 55);
+      p.flashlightBattery = Math.min(100, p.flashlightBattery + (this.challenge === 'nolamp' ? 25 : 55));
       sound.playFlashlightToggle(true);
       this.state.showToast('Pile insérée : +55 % de batterie.');
     } else if (item.type === 'medkit') {
@@ -2544,6 +2555,7 @@ export class GameEngine {
   // -----------------------------------------------------------------------
   // Main loop
   // -----------------------------------------------------------------------
+  private pad: GamepadInput | null = null;
   private tick = (now: number) => {
     this.rafId = requestAnimationFrame(this.tick);
     // rAF timestamps can lag behind performance.now() right after start(): never step backwards
@@ -2551,6 +2563,18 @@ export class GameEngine {
     const delta = Math.min(realDelta, 0.05);
     this.lastTime = now;
     if (this.running && !this.paused) this.adaptResolution(realDelta);
+    // 🎮 Gamepad
+    if (this.running) {
+      this.pad ??= new GamepadInput(this.player, {
+        useSelected: () => this.useSlot(this.selectedSlot),
+        cycleSlot: (dir) => {
+          if (this.vsRole === 'monster') return;
+          this.selectedSlot = (this.selectedSlot + (dir > 0 ? 1 : 4)) % 5;
+          this.pushHud();
+        },
+      });
+      this.pad.poll(realDelta);
+    }
 
     const simulate = this.running && !this.paused && !this.finished;
     if (simulate) {
@@ -2962,6 +2986,7 @@ export class GameEngine {
       runCoins: this.state.runCoins,
       runTreats: this.runTreats + this.runChests * TREATS_PER_CHEST,
       presents: this.xmasNight ? this.runPresents : null,
+      survival: this.survival && this.survivalWave ? { wave: this.survivalWave, time: this.runTime } : null,
       treatEmoji: this.treatSeason ? SEASON_INFO[this.treatSeason].treat.emoji : null,
       selectedSlot: this.selectedSlot,
       intro: !!this.intro,
@@ -3712,6 +3737,10 @@ export class GameEngine {
       case 'hide': {
         const spot = this.map.hidingSpots.find((s) => s.id === t.id);
         if (!spot) return;
+        if (this.challenge === 'nohide') {
+          this.state.showToast('🚫 Défi du jour : impossible de se cacher. Courez !');
+          return;
+        }
         p.enterHiding(spot.id, spot.position, spot.viewDirection);
         this.stat('hides');
         if (spot.kind === 'bed') {
@@ -3980,7 +4009,7 @@ export class GameEngine {
       const idx = gs.inventory.findIndex((i) => i.id === item.id);
       if (idx >= 0 && (item.type !== 'throwable' || this.canAct())) this.net.send({ k: 'slot', i: idx });
     } else if (item.type === 'battery') {
-      p.flashlightBattery = Math.min(100, p.flashlightBattery + 55);
+      p.flashlightBattery = Math.min(100, p.flashlightBattery + (this.challenge === 'nolamp' ? 25 : 55));
       gs.removeItem(item.id);
       sound.playFlashlightToggle(true);
       gs.showToast('Pile insérée : +55 % de batterie.');
@@ -4138,6 +4167,10 @@ export class GameEngine {
   public runChests = 0;
   /** 🎄 Christmas night (special chapter): evil Santa, snow, 12 presents to find */
   public xmasNight = false;
+  /** 🧟 Endless survival: a new creature every wave, last as long as you can */
+  public survival = false;
+  public survivalWave = 0;
+  private survivalNext = 0;
   public runPresents = 0;
   private snow: THREE.Points | null = null;
   private treatDisposables: { dispose: () => void }[] = [];
@@ -4156,6 +4189,12 @@ export class GameEngine {
     this.runChests = 0;
     this.runPresents = 0;
     if (this.xmasNight && !this.maze && !this.forest && !this.site) this.setupXmasNight();
+    this.survivalWave = 0;
+    if (this.survival && !this.maze && !this.forest && !this.site) {
+      this.survivalWave = 1;
+      this.survivalNext = 40;
+      this.queueChapterToast('🧟 SURVIE INFINIE. Pas de sortie qui compte : tenez le plus longtemps possible. Toutes les 40 secondes environ, une créature de plus arrive… et elles savent où vous êtes.');
+    }
     this.treatSeason = getActiveSeason();
     if (!this.treatSeason || this.vsRole === 'monster') return;
     const track = <T extends { dispose: () => void }>(o: T) => {
@@ -4177,7 +4216,32 @@ export class GameEngine {
       this.treats.push({ mesh, y: mesh.position.y, taken: false, chest });
     });
   }
+  /** 🧟 Survival: the waves */
+  private updateSurvival(delta: number) {
+    if (!this.survival || !this.survivalWave || this.dying || this.finished) return;
+    this.survivalNext -= delta;
+    if (this.survivalNext > 0) return;
+    this.survivalWave++;
+    this.survivalNext = Math.max(22, 42 - this.survivalWave * 2);
+    if (this.monsters.length < 12) {
+      const spawns = this.map.monsterSpawns;
+      // The spawn point furthest from the player, so nobody appears in your face
+      const s = [...spawns].sort((a, b) => b.pos.distanceToSquared(this.player.position) - a.pos.distanceToSquared(this.player.position))[0];
+      const m = new MonsterAI(s.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.5, 0, (Math.random() - 0.5) * 1.5)), this.map.navNodes, this.map.patrolRoute, this.map.doors, (door) => this.setDoorOpen(door, true, true), s.routeIdx);
+      m.applyLook(this.localLook.monster);
+      m.speedMul = 1 + Math.min(0.5, this.survivalWave * 0.03);
+      if (this.lowEndGpu) m.mesh.traverse((o) => (o.castShadow = false));
+      this.monsters.push(m);
+      this.scene.add(m.mesh);
+    }
+    // They all come to where you are now
+    this.alertAll(this.player.position.clone(), 30);
+    sound.playItemPickup();
+    this.state.showToast(`☠️ VAGUE ${this.survivalWave} — une créature de plus… elles savent où vous êtes.`);
+  }
+
   private updateTreats(delta: number) {
+    this.updateSurvival(delta);
     this.updateSnow(delta);
     if (!this.treats.length) return;
     const t = performance.now() / 1000;

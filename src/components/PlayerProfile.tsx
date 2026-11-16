@@ -125,6 +125,7 @@ export const PlayerProfile: React.FC<{ name: string; token: string; onAddFriend?
               </button>
             )}
             {p.friend && <p className="text-xs font-mono text-emerald-400 text-center">🤝 Vous êtes amis</p>}
+            {!p.me && <ReportBox name={p.username} token={token} />}
             {msg && <p className="text-xs font-mono text-zinc-300 text-center mt-2">{msg}</p>}
           </>
         )}
@@ -135,3 +136,62 @@ export const PlayerProfile: React.FC<{ name: string; token: string; onAddFriend?
 
 /** The look stores the outfit's value (e.g. "santa"): find its name in the catalog. */
 const cosmeticOutfitName = (value: string) => CATALOG.find((c) => c.slot === 'outfit' && c.target === 'human' && c.value === value)?.name ?? null;
+
+/** 🚩 Report a player to the admins. */
+const ReportBox: React.FC<{ name: string; token: string }> = ({ name, token }) => {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [note, setNote] = useState('');
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  if (msg?.ok) return <p className="text-[11px] font-mono text-zinc-400 text-center mt-3">{msg.text}</p>;
+  return (
+    <div className="mt-3 text-center">
+      {!open ? (
+        <button onClick={() => setOpen(true)} className="text-[11px] font-mono text-zinc-500 hover:text-red-300 underline">
+          🚩 Signaler ce joueur
+        </button>
+      ) : (
+        <div className="text-left p-2 border border-red-900/60 bg-red-950/20 space-y-2">
+          <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-red-300">🚩 Signaler {name}</div>
+          <div className="grid grid-cols-2 gap-1">
+            {['Pseudo insultant', 'Triche', 'Comportement toxique', 'Autre'].map((r) => (
+              <button
+                key={r}
+                onClick={() => setReason(r)}
+                className={`px-2 py-1 border text-[11px] font-mono ${reason === r ? 'border-red-400 text-red-200 bg-red-950/50' : 'border-zinc-700 text-zinc-400'}`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={200}
+            placeholder="Détails (facultatif)"
+            className="w-full bg-black border border-zinc-700 px-2 py-1 text-xs text-zinc-100 font-mono"
+          />
+          {msg && <p className="text-[11px] font-mono text-red-400">{msg.text}</p>}
+          <div className="flex gap-1">
+            <button onClick={() => setOpen(false)} className="px-2 py-1 text-[11px] font-mono text-zinc-500 uppercase">
+              Annuler
+            </button>
+            <button
+              disabled={!reason}
+              onClick={async () => {
+                try {
+                  setMsg({ ok: true, text: (await api.report(token, name, reason, note)).message });
+                } catch (e) {
+                  setMsg({ ok: false, text: (e as Error).message });
+                }
+              }}
+              className="flex-1 py-1 bg-red-700 hover:bg-red-600 text-white text-[11px] font-mono uppercase disabled:opacity-40"
+            >
+              Envoyer
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

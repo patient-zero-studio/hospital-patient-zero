@@ -97,6 +97,8 @@ export interface BoardEntry {
   time: number;
   date: string;
   level?: number;
+  /** survival: last wave reached */
+  wave?: number;
 }
 
 export interface AdminUser {
@@ -235,6 +237,8 @@ export const api = {
       return undefined;
     }
   },
+  submitSurvival: (token: string, time: number, wave: number): Promise<WalletView & { record: boolean; rank: number | null; coins: number; xp: number }> =>
+    post('/api/survival', { time, wave }, token),
   xpDeath: (token: string): Promise<WalletView & { xp: number }> => post('/api/xp/death', {}, token),
   adminBoost: (token: string, kind: BoostKind | null, hours: number): Promise<WalletView> => post('/api/admin/boost', { kind, hours }, token),
   /** Event on for everyone (null = none, undefined = server unreachable). */
@@ -293,6 +297,14 @@ export const api = {
     if (!res.ok) throw new Error(data.error || 'Serveur injoignable.');
     return data;
   },
+  report: (token: string, username: string, reason: string, note: string): Promise<{ message: string }> => post('/api/report', { username, reason, note }, token),
+  async adminReports(token: string): Promise<{ id: string; target: string; by: string; reason: string; note: string; at: number; banned: boolean }[]> {
+    const res = await fetch('/api/admin/reports', { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Serveur injoignable.');
+    return data;
+  },
+  adminReportDone: (token: string, id: string) => post('/api/admin/reports/done', { id }, token),
   adminRestore: (token: string, day: string): Promise<{ message: string }> => post('/api/admin/restore', { day }, token),
   // ---- Friends ----
   async friends(token: string): Promise<FriendsView> {
