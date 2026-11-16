@@ -4,7 +4,7 @@
  * once it has been opened online. Accounts, coins, leaderboard and multiplayer
  * (/api, /ws) always need the network and are never cached.
  */
-const CACHE = 'pz-v2';
+const CACHE = 'pz-v3';
 const CORE = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -63,5 +63,35 @@ self.addEventListener('fetch', (e) => {
           return res;
         })
     )
+  );
+});
+
+// 🔔 Push notifications: friend invites, gifts, events… (even with the game closed)
+self.addEventListener('push', (e) => {
+  let d = { title: 'Patient Zero', body: '', tag: 'pz' };
+  try {
+    d = { ...d, ...e.data.json() };
+  } catch {
+    /* plain text */
+  }
+  e.waitUntil(
+    self.registration.showNotification(d.title, {
+      body: d.body,
+      tag: d.tag,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      data: { url: '/' },
+    })
+  );
+});
+
+// Click: back to the game (an open window if there is one)
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      const win = list.find((c) => new URL(c.url).origin === self.location.origin);
+      return win ? win.focus() : self.clients.openWindow('/');
+    })
   );
 });

@@ -16,6 +16,8 @@ export interface AchDef {
   goal?: number;
   /** name / description hidden until unlocked */
   secret?: boolean;
+  /** only the server can grant it (the game can't report it) */
+  server?: boolean;
 }
 
 export type StatKey = 'escapes' | 'deaths' | 'hides' | 'coinsFound' | 'boxes' | 'flips';
@@ -79,6 +81,23 @@ export const ACHIEVEMENTS: AchDef[] = [
   { id: 'escapes50', name: 'Légende de Saint-Aurore', desc: 'Sortir de l\'hôpital 50 fois.', icon: '👑', tier: 'platine', reward: 500, stat: 'escapes', goal: 50 },
   { id: 'coins500', name: 'Pilleur', desc: 'Ramasser 500 pièces pendant vos parties.', icon: '🪙', tier: 'argent', reward: 100, stat: 'coinsFound', goal: 500 },
   { id: 'boxes10', name: 'Collectionneur', desc: 'Ouvrir 10 boîtes mystère ou cadeaux.', icon: '🎁', tier: 'or', reward: 100, stat: 'boxes', goal: 10 },
+  // --- Progression, events, friends ---
+  { id: 'tutorial', name: 'Bon élève', desc: 'Finir le tutoriel.', icon: '🎓', tier: 'bronze', reward: 30 },
+  { id: 'new_face', name: 'Nouveau visage', desc: 'Jouer un autre personnage qu\'Alex.', icon: '🧑', tier: 'bronze', reward: 30, server: true },
+  { id: 'lvl10', name: 'Habitué de Saint-Aurore', desc: 'Atteindre le niveau 10.', icon: '⭐', tier: 'argent', reward: 100, server: true },
+  { id: 'lvl25', name: 'Vétéran', desc: 'Atteindre le niveau 25.', icon: '🌟', tier: 'or', reward: 200, server: true },
+  { id: 'lvl50', name: 'Légende vivante', desc: 'Atteindre le niveau 50.', icon: '💫', tier: 'platine', reward: 500, server: true },
+  { id: 'friend', name: 'Pas tout seul', desc: 'Avoir un ami dans sa liste.', icon: '🤝', tier: 'bronze', reward: 30, server: true },
+  { id: 'matchmade', name: 'Inconnu sympathique', desc: 'Jouer avec un partenaire trouvé au hasard.', icon: '🔎', tier: 'bronze', reward: 50, server: true },
+  { id: 'gift', name: 'Généreux', desc: 'Offrir un cadeau à un ami.', icon: '💝', tier: 'bronze', reward: 50, server: true },
+  { id: 'chest', name: 'Chasseur de trésor', desc: 'Trouver un coffre rare pendant un événement.', icon: '💎', tier: 'argent', reward: 100, server: true },
+  { id: 'event_box', name: 'Gourmand', desc: 'Ouvrir une boîte d\'événement (500 friandises).', icon: '🍬', tier: 'argent', reward: 75, server: true },
+  { id: 'xmas_all', name: 'Joyeux Noël, Patient Zéro', desc: 'Retrouver les 12 cadeaux de la Nuit de Noël.', icon: '🎅', tier: 'or', reward: 200, server: true },
+  { id: 'advent25', name: 'Calendrier complet', desc: 'Ouvrir les 25 cases du calendrier de l\'Avent.', icon: '🗓️', tier: 'platine', reward: 300, server: true },
+  { id: 'pass10', name: 'Saisonnier', desc: 'Atteindre le palier 10 du pass de saison.', icon: '🏆', tier: 'argent', reward: 100, server: true },
+  { id: 'pass30', name: 'Pass terminé', desc: 'Atteindre le palier 30 du pass de saison.', icon: '👑', tier: 'platine', reward: 400, server: true },
+  { id: 'weekly3', name: 'Semaine parfaite', desc: 'Réussir les 3 défis d\'une même semaine.', icon: '🗓️', tier: 'or', reward: 150, server: true },
+  { id: 'podium', name: 'Sur le podium', desc: 'Finir dans le top 3 du classement de la semaine.', icon: '🥇', tier: 'platine', reward: 300, server: true },
 ];
 
 export const ACH_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));
@@ -132,7 +151,7 @@ export const applyAchReport = (
   if (Array.isArray(unlock))
     for (const id of unlock.slice(0, 40)) {
       const def = typeof id === 'string' ? ACH_BY_ID.get(id) : undefined;
-      if (def && !def.stat && id !== 'all_endings') grant(id);
+      if (def && !def.stat && !def.server && id !== 'all_endings') grant(id);
     }
   const inc = (stats ?? {}) as Record<string, unknown>;
   for (const k of STAT_KEYS) {
@@ -144,4 +163,16 @@ export const applyAchReport = (
   for (const def of ACHIEVEMENTS) if (def.stat && def.goal && st.stats[def.stat] >= def.goal) grant(def.id);
   if (ENDING_ACHS.every((id) => st.done[id])) grant('all_endings');
   return newly;
+};
+
+/** Server-side unlock (achievements the game can't report itself). Returns the newly unlocked ones. */
+export const grantServerAch = (st: AchState, ids: string[]): AchDef[] => {
+  const out: AchDef[] = [];
+  for (const id of ids) {
+    const def = ACH_BY_ID.get(id);
+    if (!def || st.done[id]) continue;
+    st.done[id] = Date.now();
+    out.push(def);
+  }
+  return out;
 };

@@ -8,6 +8,7 @@ import { DIFFICULTIES, Difficulty } from '../game/Difficulty';
 import { fmtCoins } from '../economy';
 import { InstallButton } from './InstallButton';
 import { SeasonalOverlay } from './SeasonalOverlay';
+import { getLang, setLang } from '../i18n';
 import { SEASON_INFO, Season } from '../seasons';
 import { LevelInfo, levelColor } from '../levels';
 import type { Boost } from '../net/api';
@@ -54,6 +55,9 @@ interface StartScreenProps {
   coins: number | null;
   /** the free daily gift is waiting in the shop */
   giftReady?: boolean;
+  /** 🔔 push notifications state (null = not logged in) */
+  notifications?: 'on' | 'off' | 'unsupported' | 'denied' | null;
+  onToggleNotifications?: () => void;
   /** 🏆 season pass & weekly challenges */
   onProgression?: () => void;
   progressionAlert?: number;
@@ -112,6 +116,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   shopLocked = false,
   level = null,
   onProgression,
+  notifications = null,
+  onToggleNotifications,
   progressionAlert = 0,
   boost = null,
   onFriends,
@@ -177,6 +183,32 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               </span>
             )}
           </div>
+        )}
+        <button
+          data-no-i18n
+          onClick={() => setLang(getLang() === 'fr' ? 'en' : 'fr')}
+          title={getLang() === 'fr' ? 'Play in English' : 'Jouer en français'}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-zinc-800 bg-zinc-950/80 text-zinc-300 hover:text-white text-xs font-mono uppercase"
+        >
+          🌐 <span className={getLang() === 'fr' ? 'text-white font-bold' : 'text-zinc-500'}>FR</span>/<span className={getLang() === 'en' ? 'text-white font-bold' : 'text-zinc-500'}>EN</span>
+        </button>
+        {notifications && notifications !== 'unsupported' && onToggleNotifications && (
+          <button
+            onClick={onToggleNotifications}
+            title={
+              notifications === 'on'
+                ? 'Notifications activées (invitations, cadeaux, événements). Cliquer pour couper.'
+                : notifications === 'denied'
+                  ? 'Notifications bloquées dans les réglages du navigateur.'
+                  : 'Être prévenu quand un ami t\'invite, d\'un cadeau ou d\'un événement, même jeu fermé.'
+            }
+            className={`flex items-center gap-2 px-3 py-1.5 border bg-zinc-950/80 text-xs font-mono uppercase transition-colors ${
+              notifications === 'on' ? 'border-emerald-700 text-emerald-300' : 'border-zinc-800 text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            {notifications === 'on' ? '🔔' : '🔕'}
+            <span className="hidden sm:inline">{notifications === 'on' ? 'Notifs' : 'Notifs off'}</span>
+          </button>
         )}
         {onToggleMusic && (
           <button

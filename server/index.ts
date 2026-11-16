@@ -35,12 +35,14 @@ import {
   XMAS_PRESENTS,
   openEventBox,
 } from '../src/economy.ts';
-import { SEASONS, SeasonSetting, adventDay, adventYear, isSeasonSetting, resolveSeason } from '../src/seasons.ts';
+import { SEASONS, SEASON_INFO, SeasonSetting, adventDay, adventYear, isSeasonSetting, resolveSeason } from '../src/seasons.ts';
 import { AchDef, AchState, StatKey, applyAchReport, sanitizeAch } from '../src/achievements.ts';
 import { challengeMet, dailyChallenge } from '../src/challenges.ts';
 import { debouncedSaver, makeStore } from './storage.ts';
 import { DAILY_XP, DEATH_XP, ESCAPE_XP, levelOf, levelReward } from '../src/levels.ts';
 import { isBadName } from '../src/moderation.ts';
+import { grantServerAch } from '../src/achievements.ts';
+import { PushSub, isPushSub, pushPublicKey, pushTo, setupPush } from './push.ts';
 import { LEVEL_SKINS, PASS_TIERS, PASS_XP_PER_TIER, nextWeek, passEnds, passKey, passName, passReward, weekKey, weeklyChallenges } from '../src/progression.ts';
 import { BOXES, SUPPLY_NAMES, TIER_LABEL, TIER_PRICE, cosmetic as cosmeticById } from '../src/economy.ts';
 import { CATALOG } from '../src/economy.ts';
@@ -91,6 +93,15 @@ interface User {
   lastXmas?: number;
   /** Banned by an admin: can't log in any more */
   banned?: boolean;
+  /** XP earned this week (weekly leaderboard) + podiums won */
+  weekXp?: { week: string; xp: number };
+  trophies?: { week: string; place: number }[];
+  /** Gifts received from friends, shown once */
+  inbox?: { from: string; text: string; at: number }[];
+  /** gifts sent today (limit) */
+  gifts?: { day: string; n: number };
+  /** devices that accept notifications */
+  push?: PushSub[];
   /** Weekly challenges: counters at the start of the week, escapes in Difficult+, rewards taken */
   weekly?: { week: string; base: Partial<Record<StatKey, number>>; hard: number; claimed: string[] };
   /** Season pass of the month: XP earned this month, tiers taken */
@@ -101,6 +112,7 @@ interface User {
 }
 
 const store = makeStore(DATA_DIR);
+await setupPush(store);
 const remote = store.kind === 'upstash';
 console.log(remote ? '[storage] comptes enregistrés dans Upstash (en ligne)' : `[storage] comptes enregistrés dans ${DATA_DIR}`);
 
@@ -233,6 +245,7 @@ app.put('/api/profile', (req, res) => {
   const user = username ? users.get(username.toLowerCase()) : undefined;
   if (!user) return res.status(401).json({ error: 'Session expirée.' });
   user.profile = enforceOwned(sanitizeAppearance(req.body), walletOf(user).owned);
+  if (user.profile.human.char && user.profile.human.char !== 'alex') serverAch(user, 'new_face');
   saveUsers();
   res.json(user.profile);
 });
@@ -308,17 +321,33 @@ const reportAch = (u: User, unlock: unknown, stats: unknown, trusted: Partial<Re
   }
   return newly.map((a: AchDef) => a.id);
 };
+/** Unlocks achievements only the server can check, and pays them. */
+const serverAch = (u: User, ...ids: string[]) => {
+  const newly = grantServerAch(achOf(u), ids);
+  const coins = newly.reduce((t, a) => t + a.reward, 0);
+  if (coins > 0) {
+    walletOf(u).coins += coins;
+    addXp(u, coins / 2);
+  }
+  return newly.map((a) => a.id);
+};
 // ---- Events (Christmas / Halloween): follows the calendar unless an admin forces one ----
 /** PZ_FAKE_DATE (tests only) pretends today is another day for the events. */
 const eventNow = () => (process.env.PZ_FAKE_DATE ? new Date(process.env.PZ_FAKE_DATE) : new Date());
 type BoostKind = 'coins2' | 'treats2' | 'xp2' | 'all2';
 const BOOST_KINDS: BoostKind[] = ['coins2', 'treats2', 'xp2', 'all2'];
-const settings: { season: SeasonSetting; boost?: { kind: BoostKind; until: number } } = await (async () => {
+const settings: {
+  season: SeasonSetting;
+  boost?: { kind: BoostKind; until: number };
+  notifiedSeason?: string | null;
+  weekPaid?: string;
+  lastPodium?: { username: string; xp: number; place: number }[];
+} = await (async () => {
   try {
     const raw = await store.load('settings');
     const s = raw ? JSON.parse(raw) : {};
     const boost = s.boost && BOOST_KINDS.includes(s.boost.kind) && Number(s.boost.until) > Date.now() ? { kind: s.boost.kind, until: Number(s.boost.until) } : undefined;
-    return { season: isSeasonSetting(s.season) ? s.season : 'auto', boost };
+    return { season: isSeasonSetting(s.season) ? s.season : 'auto', boost, notifiedSeason: s.notifiedSeason, weekPaid: s.weekPaid, lastPodium: Array.isArray(s.lastPodium) ? s.lastPodium : [] };
   } catch {
     return { season: 'auto' as SeasonSetting };
   }
@@ -350,9 +379,18 @@ const addXp = (u: User, amount: number) => {
   const gain = Math.max(0, Math.floor(amount * boostMul('xp')));
   u.xp = (u.xp ?? 0) + gain;
   passOf(u).xp += gain;
+  const wk = weekKey();
+  if (!u.weekXp || u.weekXp.week !== wk) u.weekXp = { week: wk, xp: 0 };
+  u.weekXp.xp += gain;
   const after = levelOf(u.xp).level;
   for (let l = before + 1; l <= after; l++) walletOf(u).coins += levelReward(l);
   grantLevelSkins(u);
+  if (after >= 10) serverAch(u, 'lvl10');
+  if (after >= 25) serverAch(u, 'lvl25');
+  if (after >= 50) serverAch(u, 'lvl50');
+  const tier = Math.floor(passOf(u).xp / PASS_XP_PER_TIER);
+  if (tier >= 10) serverAch(u, 'pass10');
+  if (tier >= PASS_TIERS) serverAch(u, 'pass30');
 };
 const grantLevelSkins = (u: User) => {
   const lv = levelOf(u.xp ?? 0).level;
@@ -392,6 +430,8 @@ const shopOpenFor = (u: User) => isAdmin(u) || !!u.shopUnlocked || walletOf(u).o
 const SHOP_LOCKED = 'Boutique verrouillée : échappe-toi de l\'hôpital une fois (le mode Exploration suffit) pour la débloquer.';
 
 const walletView = (u: User) => ({
+  inbox: u.inbox ?? [],
+  trophies: u.trophies ?? [],
   level: levelOf(u.xp ?? 0),
   weekly: weeklyView(u),
   pass: passView(u),
@@ -661,6 +701,7 @@ app.post('/api/event/xmas', (req, res) => {
   if (n >= XMAS_PRESENTS) {
     if (!w.owned.includes('m-noel-evilsanta')) {
       w.owned.push('m-noel-evilsanta');
+      serverAch(user, 'xmas_all');
       message += ' · 🎅 SKIN « Père Noël maléfique » débloqué !';
     } else {
       w.coins += 300;
@@ -684,6 +725,7 @@ app.post('/api/event/treats', (req, res) => {
   user.lastTreats = now;
   const w = walletOf(user);
   const added = n * boostMul('treats');
+  if (chests > 0) serverAch(user, 'chest');
   w.treats[season] = (w.treats[season] ?? 0) + added;
   saveUsers();
   res.json({ added, ...walletView(user) });
@@ -697,6 +739,7 @@ app.post('/api/event/box', (req, res) => {
   const season = currentSeason();
   if (!season) return res.status(400).json({ error: 'Aucun événement en cours.' });
   const result = openEventBox(walletOf(user), season);
+  if (result) serverAch(user, 'event_box');
   if (!result) return res.status(400).json({ error: `Il faut ${EVENT_BOX_PRICE} pour ouvrir la boîte.` });
   const newAch = reportAch(user, [], {}, { boxes: 1 });
   saveUsers();
@@ -712,6 +755,7 @@ app.post('/api/weekly/claim', (req, res) => {
   if (c.claimed) return res.status(400).json({ error: 'Récompense déjà prise.' });
   if (c.progress < c.goal) return res.status(400).json({ error: 'Défi pas encore réussi.' });
   weeklyOf(user).claimed.push(c.id);
+  if (weeklyOf(user).claimed.length >= 3) serverAch(user, 'weekly3');
   walletOf(user).coins += c.coins;
   addXp(user, c.xp);
   saveUsers();
@@ -788,9 +832,177 @@ app.get('/api/player/:name', (req, res) => {
     skins: walletOf(u).owned.length,
     records: records.sort((a, b) => a.rank - b.rank).slice(0, 8),
     look,
+    trophies: u.trophies ?? [],
     friend: friendsOf(me).includes(key),
     me: key === me.username.toLowerCase(),
   });
+});
+
+// ---------------------------------------------------------------------------
+// 🔔 Push notifications
+// ---------------------------------------------------------------------------
+const notify = (u: User | undefined, title: string, body: string, tag: string) => {
+  if (!u?.push?.length) return;
+  pushTo(u.push, title, body, tag).then((keep) => {
+    if (keep.length !== u.push?.length) {
+      u.push = keep;
+      saveUsers();
+    }
+  });
+};
+const notifyAll = (title: string, body: string, tag: string) => {
+  for (const u of users.values()) if (!u.banned) notify(u, title, body, tag);
+};
+app.get('/api/push/key', (_req, res) => res.json({ key: pushPublicKey() }));
+app.post('/api/push/subscribe', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const sub = req.body?.sub;
+  if (!isPushSub(sub)) return res.status(400).json({ error: 'Abonnement invalide.' });
+  user.push = [...(user.push ?? []).filter((x) => x.endpoint !== sub.endpoint), { endpoint: sub.endpoint, keys: sub.keys }].slice(-4);
+  saveUsers();
+  res.json({ ok: true });
+});
+app.post('/api/push/unsubscribe', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const ep = String(req.body?.endpoint ?? '');
+  user.push = (user.push ?? []).filter((x) => x.endpoint !== ep);
+  saveUsers();
+  res.json({ ok: true });
+});
+// A new event starting (Christmas, Halloween…): tell everyone, once
+const checkSeasonNotify = () => {
+  const cur = currentSeason();
+  if ((settings.notifiedSeason ?? null) === cur) return;
+  settings.notifiedSeason = cur;
+  settingsSaver.save();
+  if (cur) notifyAll(`${SEASON_INFO[cur].emoji} ${SEASON_INFO[cur].name} commence !`, 'Décorations, skins limités et friandises à ramasser. Viens jouer !', 'season');
+};
+
+// ---------------------------------------------------------------------------
+// 🏅 Weekly leaderboard: XP earned this week, top 3 paid every Monday
+// ---------------------------------------------------------------------------
+const WEEK_PRIZES = [1000, 600, 300];
+const payLastWeek = () => {
+  const cur = weekKey();
+  if (settings.weekPaid === cur) return;
+  const prev = weekKey(new Date(Date.now() - 7 * 86400000));
+  const ranking = [...users.values()]
+    .filter((u) => !u.banned && !isAdmin(u) && u.weekXp?.week === prev && u.weekXp.xp > 0)
+    .sort((a, b) => b.weekXp!.xp - a.weekXp!.xp)
+    .slice(0, 3);
+  settings.lastPodium = ranking.map((u, i) => ({ username: u.username, xp: u.weekXp!.xp, place: i + 1 }));
+  ranking.forEach((u, i) => {
+    walletOf(u).coins += WEEK_PRIZES[i];
+    u.trophies = [...(u.trophies ?? []), { week: prev, place: i + 1 }].slice(-20);
+    u.inbox = [...(u.inbox ?? []), { from: 'Patient Zero', text: `🏅 ${i + 1}${i ? 'e' : 'er'} du classement de la semaine : +${WEEK_PRIZES[i]} pièces !`, at: Date.now() }].slice(-20);
+    serverAch(u, 'podium');
+    notify(u, '🏅 Podium de la semaine !', `Tu finis ${i + 1}${i ? 'e' : 'er'} : +${WEEK_PRIZES[i]} pièces.`, 'podium');
+  });
+  settings.weekPaid = cur;
+  settingsSaver.save();
+  if (ranking.length) saveUsers();
+};
+setTimeout(() => {
+  payLastWeek();
+  checkSeasonNotify();
+}, 5000);
+setInterval(() => {
+  payLastWeek();
+  checkSeasonNotify();
+}, 30 * 60000);
+app.get('/api/weekly-board', (req, res) => {
+  const me = authUser(req);
+  const wk = weekKey();
+  const list = [...users.values()]
+    .filter((u) => !u.banned && !isAdmin(u) && u.weekXp?.week === wk && u.weekXp.xp > 0)
+    .sort((a, b) => b.weekXp!.xp - a.weekXp!.xp);
+  const rank = me ? list.findIndex((u) => u === me) : -1;
+  res.json({
+    resetAt: nextWeek(),
+    prizes: WEEK_PRIZES,
+    top: list.slice(0, 20).map((u) => ({ username: u.username, xp: u.weekXp!.xp, level: levelOf(u.xp ?? 0).level })),
+    me: me ? { rank: rank >= 0 ? rank + 1 : null, xp: me.weekXp?.week === wk ? me.weekXp.xp : 0 } : null,
+    lastPodium: settings.lastPodium ?? [],
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 💝 Gifts between friends (coins or a skin)
+// ---------------------------------------------------------------------------
+app.post('/api/friends/gift', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const key = String(req.body?.to ?? '').toLowerCase();
+  const target = users.get(key);
+  if (!target || !friendsOf(user).includes(key)) return res.status(400).json({ error: 'Tu ne peux offrir qu\'à un ami.' });
+  const day = todayKey();
+  if (!user.gifts || user.gifts.day !== day) user.gifts = { day, n: 0 };
+  if (user.gifts.n >= 5 && !isAdmin(user)) return res.status(429).json({ error: '5 cadeaux par jour maximum. Reviens demain !' });
+  const w = walletOf(user);
+  const tw = walletOf(target);
+  let text: string;
+  if (req.body?.skin) {
+    const item = cosmeticById(String(req.body.skin));
+    if (!item) return res.status(400).json({ error: 'Skin inconnu.' });
+    if (item.unlock) return res.status(400).json({ error: 'Ce skin se gagne, il ne s\'offre pas.' });
+    if (!w.owned.includes(item.id)) return res.status(400).json({ error: 'Tu n\'as pas ce skin.' });
+    if (tw.owned.includes(item.id)) return res.status(400).json({ error: `${target.username} l'a déjà.` });
+    if (!isAdmin(user)) w.owned = w.owned.filter((x) => x !== item.id);
+    tw.owned.push(item.id);
+    text = `💝 ${user.username} t'a offert le skin « ${item.name} » !`;
+  } else {
+    const n = Math.floor(Number(req.body?.coins));
+    if (!(n >= 10 && n <= 2000)) return res.status(400).json({ error: 'De 10 à 2000 pièces.' });
+    if (w.coins < n) return res.status(400).json({ error: 'Pas assez de pièces.' });
+    if (!isAdmin(user)) w.coins -= n;
+    tw.coins += n;
+    text = `💝 ${user.username} t'a offert ${n} pièces !`;
+  }
+  user.gifts.n++;
+  target.inbox = [...(target.inbox ?? []), { from: user.username, text, at: Date.now() }].slice(-20);
+  serverAch(user, 'gift');
+  notify(target, '💝 Tu as reçu un cadeau !', text.replace('💝 ', ''), 'gift');
+  saveUsers();
+  res.json({ message: `🎁 Cadeau envoyé à ${target.username} !`, ...walletView(user) });
+});
+app.post('/api/inbox/clear', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  user.inbox = [];
+  saveUsers();
+  res.json(walletView(user));
+});
+
+// ---------------------------------------------------------------------------
+// 💾 Admin: list and restore the daily backups
+// ---------------------------------------------------------------------------
+app.get('/api/admin/backups', async (req, res) => {
+  const user = authUser(req);
+  if (!user || !isAdmin(user)) return res.status(403).json({ error: 'Réservé aux admins.' });
+  const days: string[] = JSON.parse((await store.load('backups')) ?? '[]');
+  res.json({ days: [...days].reverse(), accounts: users.size });
+});
+app.post('/api/admin/restore', async (req, res) => {
+  const user = authUser(req);
+  if (!user || !isAdmin(user)) return res.status(403).json({ error: 'Réservé aux admins.' });
+  const day = String(req.body?.day ?? '');
+  const days: string[] = JSON.parse((await store.load('backups')) ?? '[]');
+  if (!days.includes(day)) return res.status(404).json({ error: 'Pas de sauvegarde ce jour-là.' });
+  const raw = await store.load(`backup-users-${day}`);
+  const list = raw ? (JSON.parse(raw) as User[]) : null;
+  if (!Array.isArray(list) || !list.length) return res.status(500).json({ error: 'Sauvegarde vide ou abîmée : rien n\'a été changé.' });
+  // Safety copy of the current accounts first (in case the restore was a mistake)
+  await store.save('backup-users-avant-restauration', JSON.stringify([...users.values()]));
+  users.clear();
+  for (const u of list) if (u?.username) users.set(u.username.toLowerCase(), u);
+  // Admins never lose their own access
+  if (!users.has(user.username.toLowerCase())) users.set(user.username.toLowerCase(), user);
+  saveUsers();
+  await usersSaver.flush();
+  console.log(`[admin] ${user.username} restaure la sauvegarde du ${day} (${users.size} comptes)`);
+  res.json({ message: `💾 Comptes remis comme le ${day} (${users.size} comptes). Une copie de l'état d'avant a été gardée.` });
 });
 
 // ⚡ Admin: surprise event for everyone (double coins / treats / XP) for a while
@@ -803,6 +1015,8 @@ app.post('/api/admin/boost', (req, res) => {
   else {
     if (!BOOST_KINDS.includes(kind) || !(hours > 0 && hours <= 168)) return res.status(400).json({ error: 'Événement surprise inconnu.' });
     settings.boost = { kind, until: Date.now() + hours * 3600000 };
+    const what = { coins2: 'PIÈCES DOUBLÉES', treats2: 'FRIANDISES DOUBLÉES', xp2: 'XP DOUBLÉE', all2: 'TOUT EST DOUBLÉ' }[kind];
+    notifyAll('⚡ Événement surprise !', `${what} pendant ${hours} h sur Patient Zero. Viens jouer !`, 'boost');
   }
   settingsSaver.save();
   console.log(`[admin] ${user.username} : événement surprise ${settings.boost ? `${kind} ${hours} h` : 'arrêté'}`);
@@ -823,6 +1037,7 @@ app.post('/api/shop/advent', (req, res) => {
   if (cal.days.includes(day)) return res.status(400).json({ error: 'Case déjà ouverte.' });
   const result = claimAdvent(walletOf(user), day);
   cal.days.push(day);
+  if (cal.days.length >= 25) serverAch(user, 'advent25');
   const newAch = reportAch(user, [], {}, { boxes: 1 });
   saveUsers();
   res.json({ result, newAch, ...walletView(user) });
@@ -921,6 +1136,7 @@ interface Client {
   username: string;
   room: Room | null;
   alive: boolean;
+  lastChat?: number;
 }
 type GameMode = 'coop' | 'versus' | 'race';
 interface Room {
@@ -1110,6 +1326,11 @@ server.on('upgrade', (req, socket, head) => {
           rooms.set(room.code, room);
           other.client.room = room;
           client.room = room;
+          for (const c of [other.client, client]) {
+            const u = users.get(c.username.toLowerCase());
+            if (u) serverAch(u, 'matchmade');
+          }
+          saveUsers();
           send(other.client, { t: 'created', code: room.code, ...roomSettings(room) });
           send(other.client, { t: 'peer-joined', username: client.username });
           send(client, { t: 'joined', code: room.code, host: other.client.username, ...roomSettings(room) });
@@ -1126,6 +1347,16 @@ server.on('upgrade', (req, socket, head) => {
         case 'leave':
           leaveRoom(client);
           break;
+        case 'chat': {
+          // 💬 Quick messages between the two players (presets only)
+          const now = Date.now();
+          const i = Math.floor(Number(msg.i));
+          if (!(i >= 0 && i < 8) || now - (client.lastChat ?? 0) < 700) break;
+          client.lastChat = now;
+          send(peerOf(client), { t: 'chat', from: client.username, i });
+          send(client, { t: 'chat', from: client.username, i });
+          break;
+        }
         case 'relay':
           // Game traffic: forwarded untouched to the other player
           send(peerOf(client), { t: 'relay', d: msg.d });
@@ -1217,6 +1448,8 @@ app.post('/api/friends/add', (req, res) => {
     user.friendReqs = requestsOf(user).filter((f) => f !== name);
     user.friends = [...friendsOf(user), name];
     other.friends = [...friendsOf(other).filter((f) => f !== me), me];
+    serverAch(user, 'friend');
+    serverAch(other, 'friend');
     saveUsers();
     return res.json({ message: `🤝 ${other.username} et toi êtes maintenant amis !`, ...friendsView(user) });
   }
@@ -1224,6 +1457,7 @@ app.post('/api/friends/add', (req, res) => {
   if (!theirs.includes(me)) {
     if (theirs.length >= 50) return res.status(400).json({ error: 'Ce joueur a trop de demandes en attente.' });
     other.friendReqs = [...theirs, me];
+    notify(other, '👥 Demande d\'ami', `${user.username} veut être ton ami dans Patient Zero.`, 'friend');
     saveUsers();
   }
   res.json({ message: `📨 Demande envoyée à ${other.username}.`, ...friendsView(user) });
@@ -1239,6 +1473,8 @@ app.post('/api/friends/accept', (req, res) => {
   user.friendReqs = requestsOf(user).filter((f) => f !== name);
   if (!friendsOf(user).includes(name)) user.friends = [...friendsOf(user), name];
   if (!friendsOf(other).includes(me)) other.friends = [...friendsOf(other), me];
+  serverAch(user, 'friend');
+  serverAch(other, 'friend');
   saveUsers();
   res.json({ message: `🤝 ${other.username} et toi êtes maintenant amis !`, ...friendsView(user) });
 });
@@ -1274,6 +1510,7 @@ app.post('/api/friends/invite', (req, res) => {
   invites.set(name, list.slice(-5));
   // Instant if they are connected to the game server
   for (const c of clientsOf(name)) send(c, { t: 'invite', from: user.username, code: room.code });
+  notify(users.get(name)!, '🎮 Invitation', `${user.username} t'invite à jouer ! Ouvre le jeu pour le rejoindre.`, 'invite');
   res.json({ message: `🎮 Invitation envoyée à ${users.get(name)!.username}.`, ...friendsView(user) });
 });
 

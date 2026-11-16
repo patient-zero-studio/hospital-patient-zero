@@ -1,3 +1,4 @@
+import { CHAT_PRESETS } from '../net/NetClient';
 import React, { useState } from 'react';
 import { Users, LogOut, Copy, Check, Loader2, X, Palette } from 'lucide-react';
 import { DIFFICULTIES, Difficulty } from '../game/Difficulty';
@@ -17,6 +18,8 @@ export interface LobbyState extends MatchSettings {
   status: 'idle' | 'connecting' | 'hosting' | 'joined' | 'searching';
   /** searching: players waiting in that mode */
   waiting?: number;
+  /** 💬 quick messages of the lobby */
+  chat?: { from: string; text: string }[];
   code?: string;
   partner?: string | null;
   error?: string | null;
@@ -36,6 +39,8 @@ interface Props {
   /** 🔎 random partner */
   onFindMatch?: (s: MatchSettings) => void;
   onCancelSearch?: () => void;
+  /** 💬 send a quick message */
+  onChat?: (i: number) => void;
   onUpdateSettings: (s: Partial<MatchSettings>) => void;
   /** chapter 2 unlocked for this account (got out of the hospital once) */
   ch2Unlocked?: boolean;
@@ -370,6 +375,24 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
                     </span>
                   )}
                 </div>
+                {p.lobby.partner && p.onChat && (
+                  <div className="space-y-1.5">
+                    <div className="max-h-24 overflow-y-auto space-y-0.5 text-xs font-mono">
+                      {(p.lobby.chat ?? []).slice(-6).map((m, i) => (
+                        <div key={i}>
+                          <span className={m.from === p.username ? 'text-emerald-400' : 'text-sky-300'}>{m.from}</span> <span className="text-zinc-200">{m.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {CHAT_PRESETS.map((t, i) => (
+                        <button key={i} onClick={() => p.onChat!(i)} className="px-2 py-1 border border-zinc-700 text-[11px] text-zinc-300 hover:border-sky-500">
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <button onClick={p.onLeave} className={`${btn} border border-zinc-700 text-zinc-400 hover:text-zinc-100`}>
                     Annuler
@@ -391,6 +414,24 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
                 <div className="text-xs font-mono text-zinc-500 inline-flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" /> En attente que l'hôte lance la partie…
                 </div>
+                {p.lobby.partner && p.onChat && (
+                  <div className="space-y-1.5">
+                    <div className="max-h-24 overflow-y-auto space-y-0.5 text-xs font-mono">
+                      {(p.lobby.chat ?? []).slice(-6).map((m, i) => (
+                        <div key={i}>
+                          <span className={m.from === p.username ? 'text-emerald-400' : 'text-sky-300'}>{m.from}</span> <span className="text-zinc-200">{m.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {CHAT_PRESETS.map((t, i) => (
+                        <button key={i} onClick={() => p.onChat!(i)} className="px-2 py-1 border border-zinc-700 text-[11px] text-zinc-300 hover:border-sky-500">
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <button onClick={p.onLeave} className={`${btn} w-full border border-zinc-700 text-zinc-400 hover:text-zinc-100`}>
                   Quitter
                 </button>

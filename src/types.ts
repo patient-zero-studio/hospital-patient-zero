@@ -65,7 +65,11 @@ export interface ControlSettings {
   micSensitivity: number;
   /** Online: proximity voice chat with the partner. */
   voiceChat: boolean;
+  /** Graphics quality: auto = adapts to the device */
+  quality?: GraphicsQuality;
 }
+
+export type GraphicsQuality = 'auto' | 'low' | 'medium' | 'high' | 'ultra';
 
 export type GameEnding = 'SURVIVAL' | 'PURGE' | 'TRUTH' | 'SEWER' | 'MAZE' | 'RESCUE' | 'DESTROY' | 'LUCAS';
 /** 1 = the hospital, 2 = the sewers */

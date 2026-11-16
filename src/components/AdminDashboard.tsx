@@ -133,6 +133,8 @@ export const AdminDashboard: React.FC<{ token: string }> = ({ token }) => {
         </>
       )}
 
+      <BackupsPanel token={token} />
+
       {/* Moderation */}
       <div className="p-2.5 border border-zinc-800 bg-black/40">
         <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-zinc-500 mb-1.5">🛡️ Modération</div>
@@ -210,6 +212,68 @@ export const AdminDashboard: React.FC<{ token: string }> = ({ token }) => {
           {list && shown.length === 0 && <div className="text-[11px] font-mono text-zinc-600">Personne.</div>}
         </div>
       </div>
+    </div>
+  );
+};
+
+/** 💾 Daily backups of the accounts: restore one if something went wrong. */
+const BackupsPanel: React.FC<{ token: string }> = ({ token }) => {
+  const [b, setB] = useState<{ days: string[]; accounts: number } | null>(null);
+  const [confirm, setConfirm] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => {
+    api.adminBackups(token).then(setB).catch((e) => setMsg({ ok: false, text: (e as Error).message }));
+  }, [token]);
+  return (
+    <div className="p-2.5 border border-zinc-800 bg-black/40">
+      <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-zinc-500 mb-1.5">💾 Sauvegardes des comptes (une par jour, 7 jours)</div>
+      {msg && <p className={`text-xs font-mono mb-2 ${msg.ok ? 'text-emerald-400' : 'text-red-400'}`}>{msg.text}</p>}
+      {!b ? (
+        <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />
+      ) : b.days.length === 0 ? (
+        <p className="text-[11px] font-mono text-zinc-600">Pas encore de sauvegarde (la première se fait une minute après le démarrage du serveur).</p>
+      ) : (
+        <div className="space-y-1">
+          {b.days.map((d) => (
+            <div key={d} className="flex items-center gap-2 text-xs font-mono">
+              <span className="flex-1 text-zinc-300">{new Date(d + 'T12:00:00Z').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+              {confirm === d ? (
+                <>
+                  <span className="text-[10px] text-red-300">Tout revenir à ce jour ?</span>
+                  <button
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      try {
+                        setMsg({ ok: true, text: (await api.adminRestore(token, d)).message });
+                      } catch (e) {
+                        setMsg({ ok: false, text: (e as Error).message });
+                      } finally {
+                        setBusy(false);
+                        setConfirm(null);
+                      }
+                    }}
+                    className="px-2 py-0.5 bg-red-700 text-white text-[10px] uppercase"
+                  >
+                    Oui, restaurer
+                  </button>
+                  <button onClick={() => setConfirm(null)} className="px-1 text-[10px] uppercase text-zinc-500">
+                    Non
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setConfirm(d)} className="px-2 py-0.5 border border-zinc-700 text-[10px] uppercase text-zinc-400 hover:border-amber-500 hover:text-amber-200">
+                  Restaurer
+                </button>
+              )}
+            </div>
+          ))}
+          <p className="text-[10px] font-mono text-zinc-600 mt-1">
+            Remet tous les comptes (pièces, skins, niveaux…) comme ce jour-là. Ce qui a été gagné depuis est perdu ; une copie de l'état actuel est gardée au cas où.
+          </p>
+        </div>
+      )}
     </div>
   );
 };

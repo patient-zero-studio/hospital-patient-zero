@@ -4,6 +4,7 @@ import { Loader2, Medal, X } from 'lucide-react';
 import { api, BoardEntry } from '../net/api';
 import { fmtTime } from '../challenges';
 import { DIFFICULTIES } from '../game/Difficulty';
+import { WeeklyBoard } from './WeeklyBoard';
 
 /** Fastest escapes, per chapter and difficulty (one line per player: their best). */
 export const LeaderboardMenu: React.FC<{ me: string | null; onProfile?: (name: string) => void; onClose: () => void }> = ({ me, onProfile, onClose }) => {
@@ -11,6 +12,7 @@ export const LeaderboardMenu: React.FC<{ me: string | null; onProfile?: (name: s
   const [error, setError] = useState<string | null>(null);
   const [chapter, setChapter] = useState<0 | 1 | 2 | 3 | 4 | 5>(1);
   const [diff, setDiff] = useState(2);
+  const [week, setWeek] = useState(false);
 
   useEffect(() => {
     api
@@ -45,25 +47,34 @@ export const LeaderboardMenu: React.FC<{ me: string | null; onProfile?: (name: s
 
         <div className="p-4 space-y-2">
           <div className="flex gap-2 flex-wrap">
-            <button className={tab(chapter === 1)} onClick={() => setChapter(1)}>
+            <button className={tab(week)} onClick={() => setWeek(true)}>
+              🏅 Semaine
+            </button>
+            <button className={tab(!week && chapter === 1)} onClick={() => (setWeek(false), setChapter(1))}>
               🏥 Chapitre 1
             </button>
-            <button className={tab(chapter === 2)} onClick={() => setChapter(2)}>
+            <button className={tab(!week && chapter === 2)} onClick={() => (setWeek(false), setChapter(2))}>
               🐀 Chapitre 2
             </button>
-            <button className={tab(chapter === 3)} onClick={() => setChapter(3)}>
+            <button className={tab(!week && chapter === 3)} onClick={() => (setWeek(false), setChapter(3))}>
               🌀 Chapitre 3
             </button>
-            <button className={tab(chapter === 4)} onClick={() => setChapter(4)}>
+            <button className={tab(!week && chapter === 4)} onClick={() => (setWeek(false), setChapter(4))}>
               🌲 Chapitre 4
             </button>
-            <button className={tab(chapter === 5)} onClick={() => setChapter(5)}>
+            <button className={tab(!week && chapter === 5)} onClick={() => (setWeek(false), setChapter(5))}>
               🟣 Chapitre 5
             </button>
-            <button className={tab(chapter === 0)} onClick={() => setChapter(0)}>
+            <button className={tab(!week && chapter === 0)} onClick={() => (setWeek(false), setChapter(0))}>
               🏆 Campagne
             </button>
           </div>
+          {week ? (
+            <div className="mt-3">
+              <WeeklyBoard me={me} onProfile={onProfile} />
+            </div>
+          ) : (
+          <>
           <div className="flex gap-1 flex-wrap">
             {DIFFICULTIES.filter((d) => d.level >= 2).map((d) => (
               <button key={d.level} className={tab(diff === d.level)} onClick={() => setDiff(d.level)}>
@@ -113,6 +124,8 @@ export const LeaderboardMenu: React.FC<{ me: string | null; onProfile?: (name: s
               );
             })}
           </div>
+          </>
+          )}
           <p className="text-[10px] font-mono text-zinc-600">Il faut être connecté et sortir de l'hôpital (difficulté 2 ou plus) pour apparaître ici.</p>
         </div>
       </div>

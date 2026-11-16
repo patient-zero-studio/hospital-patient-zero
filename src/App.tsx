@@ -25,6 +25,7 @@ import { ProgressionMenu, progressionAlerts } from './components/ProgressionMenu
 import { TUTO_STEPS, TutorialOverlay, markTutorialDone, tutorialDone } from './components/Tutorial';
 import { levelReward } from './levels';
 import { FriendsPanel, InviteToast } from './components/FriendsPanel';
+import { CHAT_PRESETS } from './net/NetClient';
 import { PlayerProfile } from './components/PlayerProfile';
 import { ShopMenu } from './components/ShopMenu';
 import { HoboShop } from './components/HoboShop';
@@ -558,6 +559,8 @@ export default function App() {
   const finishTutorial = () => {
     markTutorialDone();
     setTutoSeen(true);
+    const s = sessionRef.current;
+    if (s) api.reportAch(s.token, ['tutorial'], {}).then((r) => (setWallet(r), showNewAch(r.newAch))).catch(() => {});
   };
   useEffect(() => {
     if (!tutorial || tutorial.step >= TUTO_STEPS.length) return;
@@ -902,6 +905,40 @@ export default function App() {
   };
 
   const [progOpen, setProgOpen] = useState(false);
+  // 🔔 Push notifications (friend invites, gifts, events…), even with the game closed
+  const [pushState, setPushState] = useState<'on' | 'off' | 'unsupported' | 'denied'>('off');
+  useEffect(() => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return setPushState('unsupported');
+    if (Notification.permission === 'denied') return setPushState('denied');
+    navigator.serviceWorker.getRegistration().then((reg) => reg?.pushManager.getSubscription().then((sub) => setPushState(sub ? 'on' : 'off')));
+  }, [session]);
+  const togglePush = async () => {
+    const s = sessionRef.current;
+    if (!s || pushState === 'unsupported') return;
+    try {
+      const reg = (await navigator.serviceWorker.getRegistration()) ?? (await navigator.serviceWorker.register('/sw.js'));
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) {
+        await api.pushUnsubscribe(s.token, existing.endpoint).catch(() => {});
+        await existing.unsubscribe();
+        setPushState('off');
+        return;
+      }
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') return setPushState(perm === 'denied' ? 'denied' : 'off');
+      const key = await api.pushKey();
+      if (!key) throw new Error('Notifications indisponibles sur le serveur.');
+      const pad = '='.repeat((4 - (key.length % 4)) % 4);
+      const raw = atob((key + pad).replace(/-/g, '+').replace(/_/g, '/'));
+      const appKey = Uint8Array.from(raw, (c) => c.charCodeAt(0));
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey });
+      await api.pushSubscribe(s.token, sub.toJSON());
+      setPushState('on');
+    } catch (e) {
+      console.warn('[push]', e);
+      setPushState('off');
+    }
+  };
   const claimWeekly = async (id: string) => {
     const r = await api.claimWeekly(tokenOrThrow(), id);
     setWallet(r);
@@ -1013,6 +1050,9 @@ export default function App() {
           error: e.t === 'room-closed' ? 'L\'hôte a quitté la partie.' : 'Connexion au serveur perdue.',
         }));
         if (e.t === 'disconnected') netRef.current = null;
+        break;
+      case 'chat':
+        setLobby((l) => ({ ...l, chat: [...(l.chat ?? []), { from: e.from, text: CHAT_PRESETS[e.i] ?? '' }].slice(-20) }));
         break;
       case 'queued':
         setLobby((l) => ({ ...l, status: 'searching', waiting: e.waiting, error: null }));
@@ -1177,6 +1217,8 @@ export default function App() {
               : undefined
           }
           progressionAlert={progressionAlerts(wallet)}
+          notifications={session ? pushState : null}
+          onToggleNotifications={togglePush}
           boost={boost}
           onFriends={
             session
@@ -1237,6 +1279,7 @@ export default function App() {
           onJoin={joinRoom}
           onFindMatch={findMatch}
           onCancelSearch={cancelSearch}
+          onChat={(i) => netRef.current?.chat(i)}
           ch2Unlocked={ch2Unlocked}
           ch4Unlocked={ch4Unlocked}
           ch5Unlocked={ch5Unlocked}
@@ -1287,6 +1330,23 @@ export default function App() {
       {progOpen && session && !isPlaying && (
         <ProgressionMenu wallet={wallet} onClaimWeekly={claimWeekly} onClaimPass={claimPass} onClose={() => setProgOpen(false)} />
       )}
+      {!isPlaying && session && (wallet?.inbox?.length ?? 0) > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[91] w-[min(92vw,440px)] p-3 border border-pink-500 bg-zinc-950/95 shadow-[0_0_30px_rgba(236,72,153,0.35)]">
+          <div className="space-y-1 mb-2">
+            {wallet!.inbox!.slice(-4).map((m, i) => (
+              <div key={i} className="text-sm text-zinc-100">
+                {m.text}
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={() => api.inboxClear(tokenOrThrow()).then(setWallet).catch(() => {})}
+            className="w-full py-1.5 bg-pink-600 hover:bg-pink-500 text-black font-mono text-xs uppercase font-bold"
+          >
+            Super, merci !
+          </button>
+        </div>
+      )}
       {levelUp && <LevelUpToast level={levelUp.level} coins={levelUp.coins} onDone={() => setLevelUp(null)} />}
       {friendsOpen && session && !isPlaying && (
         <FriendsPanel
@@ -1298,6 +1358,13 @@ export default function App() {
           }}
           onInvite={(n) => friendAct((t) => api.friendInvite(t, n))}
           onProfile={setProfileOf}
+          owned={wallet?.wallet.owned ?? []}
+          coins={wallet?.wallet.coins ?? 0}
+          onGift={async (to, what) => {
+            const r = await api.gift(tokenOrThrow(), to, what);
+            setWallet(r);
+            return r.message;
+          }}
           onCreateRoom={
             lobby.status === 'idle'
               ? () => {

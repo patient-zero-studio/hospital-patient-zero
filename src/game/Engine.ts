@@ -2458,10 +2458,27 @@ export class GameEngine {
     if (!this.micNoise && !this.wantsVoice) this.mic.stop();
     else if (this.running) this.startMic();
 
-    // Bloom alone costs as much as the whole scene on integrated GPUs
-    this.bloom.enabled = !s.performanceMode && !this.lowEndGpu;
-    this.maxPixelRatio = s.performanceMode ? 0.7 : this.lowEndGpu ? 0.85 : Math.min(window.devicePixelRatio, 1.25);
-    this.setPixelRatio(Math.min(this.lowEndGpu ? 0.75 : this.pixelRatio, this.maxPixelRatio));
+    // Graphics quality: a fixed level, or "auto" (adapts to the device)
+    const q = s.quality ?? 'auto';
+    if (q === 'auto') {
+      // Bloom alone costs as much as the whole scene on integrated GPUs
+      this.bloom.enabled = !s.performanceMode && !this.lowEndGpu;
+      this.maxPixelRatio = s.performanceMode ? 0.7 : this.lowEndGpu ? 0.85 : Math.min(window.devicePixelRatio, 1.25);
+      this.setPixelRatio(Math.min(this.lowEndGpu ? 0.75 : this.pixelRatio, this.maxPixelRatio));
+    } else {
+      this.bloom.enabled = q !== 'low';
+      this.maxPixelRatio = q === 'low' ? 0.6 : q === 'medium' ? 0.9 : q === 'high' ? Math.min(window.devicePixelRatio, 1.25) : Math.min(window.devicePixelRatio, 2);
+      this.setPixelRatio(this.maxPixelRatio);
+      const shadows = q === 'high' || q === 'ultra';
+      if (this.renderer.shadowMap.enabled !== shadows) {
+        this.renderer.shadowMap.enabled = shadows;
+        if (this.player) this.player.flashlight.castShadow = shadows;
+        this.scene.traverse((o) => {
+          const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+          if (m) (Array.isArray(m) ? m : [m]).forEach((mm) => (mm.needsUpdate = true));
+        });
+      }
+    }
     this.perfCooldown = 2;
   }
 
@@ -2477,7 +2494,8 @@ export class GameEngine {
    * (integrated GPUs) and raises it back when there is headroom.
    */
   private adaptResolution(realDelta: number) {
-    if (document.hidden) return;
+    // A fixed quality chosen by the player is kept as is (only "auto" adapts)
+    if (document.hidden || (this.settings.quality && this.settings.quality !== 'auto')) return;
     this.perfFrames++;
     this.perfTime += realDelta;
     if (this.perfTime < 1) return;

@@ -23,6 +23,7 @@ export type LobbyEvent =
   | ({ t: 'start'; seed?: number } & RoomSettings)
   | { t: 'error'; error: string }
   | { t: 'queued'; waiting: number }
+  | { t: 'chat'; from: string; i: number }
   | { t: 'unqueued' }
   | { t: 'disconnected' };
 
@@ -99,6 +100,10 @@ export class NetClient {
   public leave() {
     this.raw({ t: 'leave' });
   }
+  /** 💬 Quick message (index in CHAT_PRESETS) */
+  public chat(i: number) {
+    this.raw({ t: 'chat', i });
+  }
   /** 🔎 Wait for a random partner with these settings */
   public queue(settings: RoomSettings) {
     this.raw({ t: 'queue', ...settings });
@@ -131,3 +136,6 @@ export class NetClient {
     this.ws = null;
   }
 }
+
+/** 💬 Quick messages in the multiplayer lobby */
+export const CHAT_PRESETS = ['👋 Salut !', '✅ Prêt !', '⏳ Attends-moi', '🚀 On y va !', '😂 GG', '🙏 Merci !', '😱 J\'ai peur…', '🔁 On en refait une ?'];

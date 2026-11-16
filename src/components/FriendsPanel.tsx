@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { Check, Loader2, UserMinus, UserPlus, Users, X } from 'lucide-react';
+import { Check, Gift, Loader2, UserMinus, UserPlus, Users, X } from 'lucide-react';
+import { CATALOG } from '../economy';
+import { CosmeticBadge } from './ShopMenu';
 import type { FriendsView } from '../net/api';
 import { levelColor } from '../levels';
 
@@ -17,13 +19,20 @@ interface Props {
   onInvite: (name: string) => Promise<string | undefined>;
   /** 👤 open a player's profile */
   onProfile?: (name: string) => void;
+  /** 💝 gifts: what you own, and how to send */
+  owned?: string[];
+  coins?: number;
+  onGift?: (to: string, what: { coins?: number; skin?: string }) => Promise<string | undefined>;
   /** no room yet: open the multiplayer panel to create one */
   onCreateRoom?: () => void;
   onClose: () => void;
 }
 
 /** Friends: add by pseudo, accept requests, see who is online, invite them to your game. */
-export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove, onInvite, onProfile, onCreateRoom, onClose }) => {
+export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove, onInvite, onProfile, owned = [], coins = 0, onGift, onCreateRoom, onClose }) => {
+  const [giftTo, setGiftTo] = useState<string | null>(null);
+  const [giftCoins, setGiftCoins] = useState(100);
+  const giftable = CATALOG.filter((c) => owned.includes(c.id) && !c.unlock);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -157,7 +166,8 @@ export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove,
             ) : (
               <div className="space-y-1">
                 {view.friends.map((f) => (
-                  <div key={f.username} className="flex items-center gap-2 px-3 py-2 border border-zinc-800 bg-black/40">
+                  <React.Fragment key={f.username}>
+                  <div className="flex items-center gap-2 px-3 py-2 border border-zinc-800 bg-black/40">
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: DOT[f.status].color, boxShadow: f.status !== 'offline' ? `0 0 8px ${DOT[f.status].color}` : undefined }} />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm text-zinc-100 truncate">
@@ -205,12 +215,59 @@ export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove,
                             {busy === 'inv-' + f.username ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Inviter'}
                           </button>
                         )}
+                        {onGift && (
+                          <button onClick={() => setGiftTo(giftTo === f.username ? null : f.username)} title="Offrir un cadeau" className="p-1 text-zinc-500 hover:text-pink-300">
+                            <Gift className="w-4 h-4" />
+                          </button>
+                        )}
                         <button onClick={() => setConfirmRemove(f.username)} title="Retirer cet ami" className="p-1 text-zinc-600 hover:text-red-400">
                           <UserMinus className="w-4 h-4" />
                         </button>
                       </>
                     )}
                   </div>
+                  {giftTo === f.username && onGift && (
+                    <div className="p-2 border border-pink-800/60 bg-pink-950/20 space-y-2">
+                      <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-pink-300">💝 Offrir à {f.username} (5 cadeaux par jour)</div>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={10}
+                          max={2000}
+                          value={giftCoins}
+                          onChange={(e) => setGiftCoins(Math.max(10, Math.min(2000, Math.floor(Number(e.target.value) || 10))))}
+                          className="w-24 bg-black border border-zinc-700 px-2 py-1 text-sm text-zinc-100 font-mono"
+                        />
+                        <span className="text-[11px] font-mono text-zinc-400">pièces (tu en as {coins >= 1e8 ? '∞' : coins})</span>
+                        <button
+                          disabled={!!busy || giftCoins > coins}
+                          onClick={() => run('gift-c', () => onGift(f.username, { coins: giftCoins }))}
+                          className="ml-auto px-2 py-1 bg-amber-600 hover:bg-amber-500 text-black text-[11px] font-mono uppercase font-bold disabled:opacity-40"
+                        >
+                          Offrir
+                        </button>
+                      </div>
+                      {giftable.length > 0 && (
+                        <div>
+                          <div className="text-[10px] font-mono text-zinc-500 mb-1">…ou un de tes skins (il le reçoit, tu le perds) :</div>
+                          <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto">
+                            {giftable.map((c) => (
+                              <button
+                                key={c.id}
+                                title={c.name}
+                                disabled={!!busy}
+                                onClick={() => run('gift-s', () => onGift(f.username, { skin: c.id }))}
+                                className="hover:ring-2 hover:ring-pink-400"
+                              >
+                                <CosmeticBadge c={c} size={30} />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  </React.Fragment>
                 ))}
               </div>
             )}

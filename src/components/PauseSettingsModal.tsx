@@ -221,6 +221,35 @@ export const PauseSettingsModal: React.FC<PauseSettingsModalProps> = ({
               />
             </div>
 
+            <div className="text-xs font-mono text-zinc-300">
+              <span className="block mb-1.5">Qualité graphique</span>
+              <div className="grid grid-cols-5 gap-1">
+                {(
+                  [
+                    ['auto', 'Auto'],
+                    ['low', 'Basse'],
+                    ['medium', 'Moyenne'],
+                    ['high', 'Haute'],
+                    ['ultra', 'Ultra'],
+                  ] as const
+                ).map(([v, label]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => onUpdateControls({ quality: v })}
+                    className={`py-1.5 border text-[11px] ${
+                      (controlSettings.quality ?? 'auto') === v ? 'border-red-500 bg-red-950/40 text-zinc-100' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <span className="block text-[10px] text-zinc-500 mt-1">
+                Auto s'adapte à ton appareil. Basse = vieux téléphones, Ultra = bon PC (plus net, ombres, lumière).
+              </span>
+            </div>
+
             <div className="flex items-center justify-between text-xs font-mono text-zinc-300">
               <span>Ombres Dynamiques (Lampe)</span>
               <input

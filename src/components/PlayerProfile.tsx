@@ -71,6 +71,15 @@ export const PlayerProfile: React.FC<{ name: string; token: string; onAddFriend?
                 </div>
               ))}
             </div>
+            {(p.trophies?.length ?? 0) > 0 && (
+              <div className="mb-3 flex flex-wrap gap-1">
+                {p.trophies!.slice(-8).map((t) => (
+                  <span key={t.week} title={`Semaine du ${t.week}`} className="px-1.5 py-0.5 border border-amber-700/60 text-[10px] font-mono text-amber-200">
+                    {['🥇', '🥈', '🥉'][t.place - 1]} {t.week.slice(5)}
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="text-[11px] font-mono text-zinc-400 mb-3">
               Joue <span className="text-zinc-100">{ch.name}</span>
               {outfit && (

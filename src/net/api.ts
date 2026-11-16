@@ -36,6 +36,9 @@ export interface WalletView {
   challenge?: { id: string; done: boolean };
   /** player level (XP) */
   level?: LevelInfo;
+  /** 💝 gifts / news received, shown once */
+  inbox?: { from: string; text: string; at: number }[];
+  trophies?: { week: string; place: number }[];
   /** 🗓️ weekly challenges */
   weekly?: { resetAt: number; list: (WeeklyDef & { progress: number; claimed: boolean })[] };
   /** 🏆 season pass of the month */
@@ -65,7 +68,16 @@ export interface FriendsView {
   message?: string;
 }
 
+export interface WeeklyBoardView {
+  resetAt: number;
+  prizes: number[];
+  top: { username: string; xp: number; level: number }[];
+  me: { rank: number | null; xp: number } | null;
+  lastPodium: { username: string; xp: number; place: number }[];
+}
+
 export interface PlayerProfileView {
+  trophies?: { week: string; place: number }[];
   username: string;
   level: LevelInfo;
   admin: boolean;
@@ -258,6 +270,30 @@ export const api = {
     if (!res.ok) throw new Error(data.error || 'Serveur injoignable.');
     return { ...data, look: sanitizeAppearance(data.look) };
   },
+  async weeklyBoard(): Promise<WeeklyBoardView> {
+    const t = readToken();
+    const res = await fetch('/api/weekly-board', { headers: t ? { Authorization: `Bearer ${t}` } : {} });
+    if (!res.ok) throw new Error('Serveur injoignable.');
+    return res.json();
+  },
+  gift: (token: string, to: string, what: { coins?: number; skin?: string }): Promise<WalletView & { message: string }> => post('/api/friends/gift', { to, ...what }, token),
+  inboxClear: (token: string): Promise<WalletView> => post('/api/inbox/clear', {}, token),
+  async pushKey(): Promise<string | null> {
+    try {
+      return (await (await fetch('/api/push/key')).json()).key ?? null;
+    } catch {
+      return null;
+    }
+  },
+  pushSubscribe: (token: string, sub: PushSubscriptionJSON) => post('/api/push/subscribe', { sub }, token),
+  pushUnsubscribe: (token: string, endpoint: string) => post('/api/push/unsubscribe', { endpoint }, token),
+  async adminBackups(token: string): Promise<{ days: string[]; accounts: number }> {
+    const res = await fetch('/api/admin/backups', { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Serveur injoignable.');
+    return data;
+  },
+  adminRestore: (token: string, day: string): Promise<{ message: string }> => post('/api/admin/restore', { day }, token),
   // ---- Friends ----
   async friends(token: string): Promise<FriendsView> {
     const res = await fetch('/api/friends', { headers: { Authorization: `Bearer ${token}` } });
