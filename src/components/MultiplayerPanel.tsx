@@ -11,7 +11,7 @@ export interface MatchSettings {
   /** versus: which side plays the creature */
   monster: 'host' | 'guest';
   /** 1 = the hospital, 2 = the sewers, 4 = the forest, 5 = Site B (co-op only) */
-  chapter: 1 | 2 | 4 | 5;
+  chapter: 1 | 2 | 4 | 5 | 6;
 }
 
 export interface LobbyState extends MatchSettings {
@@ -46,6 +46,7 @@ interface Props {
   ch2Unlocked?: boolean;
   ch4Unlocked?: boolean;
   ch5Unlocked?: boolean;
+  ch6Unlocked?: boolean;
   onStart: () => void;
   onLeave: () => void;
   onClose: () => void;
@@ -153,6 +154,15 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
           >
             {p.ch5Unlocked || value.chapter === 5 ? '🟣' : '🔒'} Chapitre 5
             <div className="text-[9px] normal-case tracking-normal text-zinc-500">le Site B (coop)</div>
+          </button>
+          <button
+            disabled={readOnly || (!p.ch6Unlocked && value.chapter !== 6)}
+            title={p.ch6Unlocked ? 'Coop uniquement' : 'Terminez une fois le Site B pour débloquer le chapitre 6'}
+            className={tab(value.chapter === 6)}
+            onClick={() => onChange({ chapter: 6, mode: 'coop' })}
+          >
+            {p.ch6Unlocked || value.chapter === 6 ? '⛈️' : '🔒'} Chapitre 6
+            <div className="text-[9px] normal-case tracking-normal text-zinc-500">le toit (coop)</div>
           </button>
         </div>
         <div className="grid grid-cols-3 gap-1">

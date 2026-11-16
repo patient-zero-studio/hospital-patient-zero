@@ -81,6 +81,9 @@ export const ACHIEVEMENTS: AchDef[] = [
   { id: 'escapes50', name: 'Légende de Saint-Aurore', desc: 'Sortir de l\'hôpital 50 fois.', icon: '👑', tier: 'platine', reward: 500, stat: 'escapes', goal: 50 },
   { id: 'coins500', name: 'Pilleur', desc: 'Ramasser 500 pièces pendant vos parties.', icon: '🪙', tier: 'argent', reward: 100, stat: 'coinsFound', goal: 500 },
   { id: 'boxes10', name: 'Collectionneur', desc: 'Ouvrir 10 boîtes mystère ou cadeaux.', icon: '🎁', tier: 'or', reward: 100, stat: 'boxes', goal: 10 },
+  // --- Chapter 6 ---
+  { id: 'ch6_escape', name: 'Au-dessus de la tempête', desc: 'S\'envoler du toit en hélicoptère (Chapitre 6).', icon: '🚁', tier: 'or', reward: 250 },
+  { id: 'ch6_notes', name: 'Hélios 2', desc: 'Trouver les 2 documents du toit avant de partir.', icon: '📓', tier: 'argent', reward: 100 },
   // --- Progression, events, friends ---
   { id: 'tutorial', name: 'Bon élève', desc: 'Finir le tutoriel.', icon: '🎓', tier: 'bronze', reward: 30 },
   { id: 'new_face', name: 'Nouveau visage', desc: 'Jouer un autre personnage qu\'Alex.', icon: '🧑', tier: 'bronze', reward: 30, server: true },

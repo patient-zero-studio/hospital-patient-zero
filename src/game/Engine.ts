@@ -14,6 +14,7 @@ import { MonsterAI } from './MonsterAI';
 import { Labyrinth } from './Labyrinth';
 import { Forest, ForestNet, ForestPlayer } from './Forest';
 import { SiteB, SiteNet, SitePlayer } from './SiteB';
+import { Rooftop } from './Rooftop';
 import { GameState } from './GameState';
 import { ProceduralTextures } from '../textures/ProceduralTextures';
 import { MicListener, MicStatus } from '../audio/MicListener';
@@ -374,7 +375,8 @@ export class GameEngine {
   /** Chapter 4: the forest, the radio tower and the Beast. */
   private forest: Forest | null = null;
   /** Chapter 5: Site B, the UV ramps and the final fight. */
-  private site: SiteB | null = null;
+  /** Chapter 5 (Site B) or chapter 6 (the roof): same kind of scripted level */
+  private site: SiteB | Rooftop | null = null;
   /** Battery drain before the UV lamp multiplies it. */
   private baseDrain = 1;
   /** Co-op: the forest / lab layout seed shared by both players (null = random, solo). */
@@ -726,7 +728,7 @@ export class GameEngine {
     this.builtChapter = this.chapter;
     this.monsters = [];
     this.crawler = null;
-    if (this.chapter === 5) this.spawnSite();
+    if (this.chapter === 5 || this.chapter === 6) this.spawnSite();
     else if (this.chapter === 4) this.spawnForest();
     else if (this.chapter === 3) this.spawnMaze();
     else if (this.chapter === 2) this.spawnSewerMonsters();
@@ -981,7 +983,7 @@ export class GameEngine {
   /** Chapter 3, [R]: a chalk arrow on the floor so you know where you've been. */
   public drawChalk() {
     const p = this.player;
-    if (this.site && this.running && !this.paused && !this.dying && !this.finished && !this.intro) {
+    if (this.site instanceof SiteB && this.running && !this.paused && !this.dying && !this.finished && !this.intro) {
       const on = this.site.toggleUV();
       if (on && !p.flashlightOn && p.flashlightBattery > 0) p.flashlightOn = true;
       sound.playFlashlightToggle(on);
@@ -1028,6 +1030,12 @@ export class GameEngine {
     this.stairsBuilt = true;
     this.ventOpen = false;
     this.ductWarned = true;
+    if (this.chapter === 6) {
+      this.site = new Rooftop(this.map, this.scene, this.difficulty, this.lowEndGpu, (msg) => this.shout(msg), this.levelSeed ?? Math.random());
+      this.site.guest = this.net?.role === 'guest';
+      if (this.site.stalker) this.monsters.push(this.site.stalker);
+      return;
+    }
     const ids = ['note-b-dossier', 'note-b-journal', 'note-b-dessin'];
     this.site = new SiteB(
       this.map,
@@ -1394,7 +1402,13 @@ export class GameEngine {
       this.player.reset(lv.start.clone().add(off), lv.startYaw);
     } else this.player.reset(start, sewers ? this.map.sewer.startYaw : this.map.playerStartYaw);
     this.chapterToast = null;
-    if (this.site)
+    if (this.site instanceof Rooftop)
+      this.queueChapterToast(
+        this.site.stalker
+          ? 'CHAPITRE 6 — LE TOIT. La tempête cache vos pas… mais chaque éclair vous montre à lui. Réparez les 3 relais radio, allumez la balise de l\'héliport, puis tenez jusqu\'à l\'hélicoptère.'
+          : 'CHAPITRE 6 — LE TOIT (Exploration). Réparez les 3 relais radio, allumez la balise de l\'héliport et attendez l\'hélicoptère. Rien ne rôde… cette fois.'
+      );
+    else if (this.site)
       this.queueChapterToast(
         this.site.stalker
           ? 'CHAPITRE 5 — LE SITE B. Chargez les 3 rampes UV (archives, réacteur, câblage), puis lancez la purge au centre. [R] passe votre lampe en UV : ça le brûle… et vide la batterie.'
@@ -1505,7 +1519,12 @@ export class GameEngine {
     this.hemi.groundColor.copy(this.baseHemi.ground);
     this.hemi.intensity = this.baseHemi.intensity;
     // Sewers: no windows, no white paint… a bit more fill light so the torch reveals the bricks
-    if (this.chapter === 5) {
+    if (this.chapter === 6) {
+      // Storm clouds over the city
+      this.hemi.intensity = this.baseHemi.intensity * 4.5;
+      this.hemi.color.set(0x5a6a8a);
+      this.hemi.groundColor.set(0x101418);
+    } else if (this.chapter === 5) {
       // Clinical concrete under red emergency lights
       this.hemi.intensity = this.baseHemi.intensity * 3.5;
       this.hemi.color.set(0x8a8494);
@@ -1874,7 +1893,7 @@ export class GameEngine {
     this.cans.netApply(w.cans);
     if (w.lv) {
       this.forest?.netApply(w.lv as ForestNet);
-      this.site?.netApply(w.lv as SiteNet);
+      this.site?.netApply(w.lv as never);
     }
   }
 
@@ -1927,7 +1946,10 @@ export class GameEngine {
     this.stat('escapes');
     this.stat('coinsFound', this.state.runCoins);
     this.ach('first_escape');
-    if (ending === 'DESTROY' || ending === 'LUCAS') {
+    if (ending === 'ROOFTOP') {
+      this.ach('ch6_escape');
+      if (this.state.notesCollected.length >= 2) this.ach('ch6_notes');
+    } else if (ending === 'DESTROY' || ending === 'LUCAS') {
       this.ach('ch5_end');
       if (ending === 'LUCAS') this.ach('ch5_lucas');
       if (this.state.notesCollected.length >= 3) this.ach('ch5_notes');

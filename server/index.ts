@@ -513,7 +513,7 @@ app.post('/api/run', (req, res) => {
   const now = Date.now();
   const chNum = Number(req.body?.chapter);
   // 0 = the campaign (chapters 1 → 5 in one go)
-  const chapter = chNum === 0 ? 0 : chNum === 5 ? 5 : chNum === 4 ? 4 : chNum === 3 ? 3 : chNum === 2 ? 2 : 1;
+  const chapter = chNum === 0 ? 0 : chNum === 6 ? 6 : chNum === 5 ? 5 : chNum === 4 ? 4 : chNum === 3 ? 3 : chNum === 2 ? 2 : 1;
   const difficulty = Math.floor(Number(req.body?.difficulty));
   const time = Math.round(Number(req.body?.time) * 10) / 10;
   // Exploration doesn't count; a real escape takes at least a minute (the campaign: 10 min, up to 6 h)
@@ -1239,7 +1239,7 @@ interface Room {
   /** versus: who plays the creature */
   monster: 'host' | 'guest';
   /** 1 = the hospital, 2 = the sewers, 4 = the forest, 5 = Site B (co-op only) */
-  chapter: 1 | 2 | 4 | 5;
+  chapter: 1 | 2 | 4 | 5 | 6;
   started: boolean;
 }
 
@@ -1248,16 +1248,16 @@ const roomSettings = (r: Room) => {
   if (r.chapter >= 4 && r.mode !== 'coop') r.chapter = 1;
   return { difficulty: r.difficulty, mode: r.mode, monster: r.monster, chapter: r.chapter };
 };
-const parseChapter = (v: unknown): 1 | 2 | 4 | 5 => {
+const parseChapter = (v: unknown): 1 | 2 | 4 | 5 | 6 => {
   const n = Number(v);
-  return n === 2 || n === 4 || n === 5 ? n : 1;
+  return n === 2 || n === 4 || n === 5 || n === 6 ? n : 1;
 };
 const parseMode = (v: unknown): GameMode => (v === 'versus' || v === 'race' ? v : 'coop');
 const parseSide = (v: unknown): 'host' | 'guest' => (v === 'guest' ? 'guest' : 'host');
 
 const rooms = new Map<string, Room>();
 /** 🔎 Players waiting for a random partner */
-const matchQueue: { client: Client; mode: GameMode; difficulty: number; chapter: 1 | 2 | 4 | 5 }[] = [];
+const matchQueue: { client: Client; mode: GameMode; difficulty: number; chapter: 1 | 2 | 4 | 5 | 6 }[] = [];
 const unqueue = (c: Client) => {
   for (let i = matchQueue.length - 1; i >= 0; i--) if (matchQueue[i].client === c) matchQueue.splice(i, 1);
 };

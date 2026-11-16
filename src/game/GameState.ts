@@ -171,6 +171,16 @@ export class GameState {
           '« Lucas. » Le mot tombe dans le silence de la salle. La créature tressaille. Sous la peau grise, quelque chose bouge : un regard d\'enfant, perdu depuis des années. Les rampes UV s\'éteignent une à une. Il se recroqueville contre le fauteuil de contention et murmure, d\'une voix qui n\'est plus la sienne depuis longtemps : « …je veux rentrer. » Vous lui tendez la main. Pour la première fois, le Patient Zéro a un nom.',
       };
     }
+    if (endingType === 'ROOFTOP') {
+      const all = this.notesCollected.length >= 2;
+      return {
+        ending: 'ROOFTOP',
+        title: all ? 'CHAPITRE 6 : L\'HÉLICOPTÈRE EST REVENU' : 'CHAPITRE 6 : AU-DESSUS DE LA TEMPÊTE',
+        narrative: all
+          ? 'L\'hélicoptère s\'arrache du toit dans un hurlement de rotors. En bas, une silhouette grise s\'est arrêtée au bord de l\'héliport. Elle ne vous poursuit plus. Elle regarde l\'appareil s\'éloigner, comme un enfant qui attend depuis trop longtemps qu\'on revienne le chercher. Vous pensez au message gravé dans la rambarde. Cette fois, quelqu\'un est venu. Cette fois, vous reviendrez.'
+          : 'Les patins quittent le béton trempé. Sous vous, Saint-Aurore rapetisse, ses fenêtres noires avalées par la pluie. Un éclair dessine une dernière fois la silhouette au bord du toit, immobile. Le pilote ne dit rien. Il a déjà vu ce toit, une autre nuit, il y a longtemps. Il n\'en reparlera jamais.',
+      };
+    }
     if (endingType === 'DESTROY') {
       return {
         ending: 'DESTROY',

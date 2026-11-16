@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioSettings, Chapter, ControlSettings, GameEnding, GameItem } from './types';
 
 /** Chapters playable online (3 stays solo: the endless maze). */
-const toMpChapter = (c: unknown): 1 | 2 | 4 | 5 => (c === 2 || c === 4 || c === 5 ? c : 1);
+const toMpChapter = (c: unknown): 1 | 2 | 4 | 5 | 6 => (c === 2 || c === 4 || c === 5 || c === 6 ? c : 1);
 import { sound } from './audio/SoundSystem';
 import { CampaignCarry, GameEngine, HudSnapshot } from './game/Engine';
 import { CampaignCard } from './components/CampaignCard';
@@ -152,7 +152,7 @@ export default function App() {
   const [chapter, setChapter] = useState<Chapter>(() => {
     try {
       const v = localStorage.getItem('pz-chapter');
-      return v === '5' ? 5 : v === '4' ? 4 : v === '3' ? 3 : v === '2' ? 2 : 1;
+      return v === '6' ? 6 : v === '5' ? 5 : v === '4' ? 4 : v === '3' ? 3 : v === '2' ? 2 : 1;
     } catch {
       return 1;
     }
@@ -556,7 +556,7 @@ export default function App() {
     engineRef.current?.setNet(null);
     if (engineRef.current) engineRef.current.levelSeed = null;
     // Locked chapter picked earlier: fall back to the last one that is open
-    const open = [true, ch2Unlocked, ch3Unlocked, ch4Unlocked, ch5Unlocked];
+    const open = [true, ch2Unlocked, ch3Unlocked, ch4Unlocked, ch5Unlocked, ch6Unlocked];
     let ch: Chapter = chapter;
     while (ch > 1 && !open[ch - 1]) ch = (ch - 1) as Chapter;
     beginRun(hasStartedOnce.current, difficulty, ch);
@@ -874,6 +874,7 @@ export default function App() {
   const ch4Unlocked = !!wallet?.ach?.done.ch3_escape || !!wallet?.admin;
   /** Chapter 5 (finale) opens once you were rescued from the forest. */
   const ch5Unlocked = !!wallet?.ach?.done.ch4_escape || !!wallet?.admin;
+  const ch6Unlocked = !!wallet?.ach?.done.ch5_end || !!wallet?.admin;
 
   const tokenOrThrow = () => {
     const s = sessionRef.current;
@@ -1283,6 +1284,7 @@ export default function App() {
           ch3Unlocked={ch3Unlocked}
           ch4Unlocked={ch4Unlocked}
           ch5Unlocked={ch5Unlocked}
+          ch6Unlocked={ch6Unlocked}
           onCampaign={startCampaign}
           onTutorial={startTutorial}
           onSurvival={startSurvival}
@@ -1329,6 +1331,7 @@ export default function App() {
           ch2Unlocked={ch2Unlocked}
           ch4Unlocked={ch4Unlocked}
           ch5Unlocked={ch5Unlocked}
+          ch6Unlocked={ch6Unlocked}
           onUpdateSettings={(s) => {
             setLobby((l) => ({ ...l, ...s }));
             netRef.current?.updateSettings(s);

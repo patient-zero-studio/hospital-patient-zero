@@ -78,7 +78,7 @@ export interface SiteNet {
 export interface SiteAction {
   msg?: string;
   shake?: number;
-  ending?: 'LUCAS';
+  ending?: 'LUCAS' | 'ROOFTOP';
 }
 
 type Phase = 'wings' | 'ready' | 'boss' | 'down' | 'over';

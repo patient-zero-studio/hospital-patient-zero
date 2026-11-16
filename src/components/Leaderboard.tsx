@@ -10,7 +10,7 @@ import { WeeklyBoard } from './WeeklyBoard';
 export const LeaderboardMenu: React.FC<{ me: string | null; onProfile?: (name: string) => void; onClose: () => void }> = ({ me, onProfile, onClose }) => {
   const [boards, setBoards] = useState<Record<string, BoardEntry[]> | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [chapter, setChapter] = useState<0 | 1 | 2 | 3 | 4 | 5>(1);
+  const [chapter, setChapter] = useState<0 | 1 | 2 | 3 | 4 | 5 | 6>(1);
   const [diff, setDiff] = useState(2);
   const [week, setWeek] = useState(false);
   const [surv, setSurv] = useState(false);
@@ -68,6 +68,9 @@ export const LeaderboardMenu: React.FC<{ me: string | null; onProfile?: (name: s
             </button>
             <button className={tab(!week && !surv && chapter === 5)} onClick={() => (setWeek(false), setSurv(false), setChapter(5))}>
               🟣 Chapitre 5
+            </button>
+            <button className={tab(!week && !surv && chapter === 6)} onClick={() => (setWeek(false), setSurv(false), setChapter(6))}>
+              ⛈️ Chapitre 6
             </button>
             <button className={tab(!week && !surv && chapter === 0)} onClick={() => (setWeek(false), setSurv(false), setChapter(0))}>
               🏆 Campagne

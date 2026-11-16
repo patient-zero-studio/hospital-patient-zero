@@ -6,7 +6,7 @@ import { characterOf } from '../characters';
 import { fmtTime } from '../challenges';
 import { CATALOG } from '../economy';
 
-const BOARD_NAMES: Record<string, string> = { '0': 'Campagne', '1': 'Ch.1 Hôpital', '2': 'Ch.2 Égouts', '3': 'Ch.3 Dédale', '4': 'Ch.4 Forêt', '5': 'Ch.5 Site B' };
+const BOARD_NAMES: Record<string, string> = { '0': 'Campagne', '1': 'Ch.1 Hôpital', '2': 'Ch.2 Égouts', '3': 'Ch.3 Dédale', '4': 'Ch.4 Forêt', '5': 'Ch.5 Site B', '6': 'Ch.6 Toit' };
 const DIFF = ['', 'Exploration', 'Normal', 'Difficile', 'Cauchemar', 'Enfer'];
 const STATUS: Record<string, [string, string]> = { playing: ['#f59e0b', 'En partie'], online: ['#22c55e', 'En ligne'], offline: ['#71717a', 'Hors ligne'] };
 
