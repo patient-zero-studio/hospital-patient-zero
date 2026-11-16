@@ -40,7 +40,7 @@ import { AchDef, AchState, StatKey, applyAchReport, sanitizeAch } from '../src/a
 import { challengeMet, dailyChallenge } from '../src/challenges.ts';
 import { debouncedSaver, makeStore } from './storage.ts';
 import { DAILY_XP, DEATH_XP, ESCAPE_XP, levelOf, levelReward } from '../src/levels.ts';
-import { isBadName } from '../src/moderation.ts';
+import { censorText, isBadName } from '../src/moderation.ts';
 import { grantServerAch } from '../src/achievements.ts';
 import { PushSub, isPushSub, pushPublicKey, pushTo, setupPush } from './push.ts';
 import { LEVEL_SKINS, PASS_TIERS, PASS_XP_PER_TIER, nextWeek, passEnds, passKey, passName, passReward, weekKey, weeklyChallenges } from '../src/progression.ts';
@@ -111,6 +111,17 @@ interface User {
   /** Friends (lower-case names) and friend requests received */
   friends?: string[];
   friendReqs?: string[];
+  /** 🎟️ gift codes already used */
+  redeemed?: string[];
+  codeTries?: { at: number; n: number };
+  /** 📣 who invited this player (lower case), and whether the referral was paid */
+  referredBy?: string;
+  refPaid?: boolean;
+  /** players this account brought in (paid) */
+  referrals?: number;
+  /** 💬 last message sent (anti-spam), last read per friend */
+  lastDm?: number;
+  dmRead?: Record<string, number>;
 }
 
 const store = makeStore(DATA_DIR);
@@ -210,7 +221,14 @@ app.post('/api/register', (req, res) => {
   const key = username.toLowerCase();
   if (users.has(key)) return res.status(409).json({ error: 'Ce pseudo est déjà pris.' });
   const salt = crypto.randomBytes(16).toString('hex');
-  users.set(key, { username, salt, hash: hashPassword(password, salt), createdAt: new Date().toISOString() });
+  const ref = typeof req.body?.ref === 'string' ? req.body.ref.toLowerCase() : '';
+  users.set(key, {
+    username,
+    salt,
+    hash: hashPassword(password, salt),
+    createdAt: new Date().toISOString(),
+    ...(ref && ref !== key && users.has(ref) ? { referredBy: ref } : {}),
+  });
   saveUsers();
   bumpStat('signups');
   res.json({ token: newSession(username), username });
@@ -432,6 +450,9 @@ const shopOpenFor = (u: User) => isAdmin(u) || !!u.shopUnlocked || walletOf(u).o
 const SHOP_LOCKED = 'Boutique verrouillée : échappe-toi de l\'hôpital une fois (le mode Exploration suffit) pour la débloquer.';
 
 const walletView = (u: User) => ({
+  bests: bestsOf(u),
+  referrals: u.referrals ?? 0,
+  referredBy: u.referredBy ? (users.get(u.referredBy)?.username ?? null) : null,
   inbox: u.inbox ?? [],
   trophies: u.trophies ?? [],
   level: levelOf(u.xp ?? 0),
@@ -497,6 +518,16 @@ const boards: Record<string, BoardEntry[]> = await (async () => {
   }
 })();
 const boardsSaver = debouncedSaver(store, 'leaderboard', () => JSON.stringify(boards), remote ? 1500 : 300);
+/** ⏱️ Personal bests of a player: "chapter-difficulty" → seconds */
+function bestsOf(u: User) {
+  const out: Record<string, number> = {};
+  for (const [k, list] of Object.entries(boards)) {
+    if (k.startsWith('survival')) continue;
+    const mine = list.find((e) => e.username === u.username);
+    if (mine) out[k] = mine.time;
+  }
+  return out;
+}
 const saveBoards = () => boardsSaver.save();
 
 app.get('/api/leaderboard', (_req, res) => {
@@ -537,6 +568,7 @@ app.post('/api/run', (req, res) => {
     saveBoards();
   }
   const rank = list.findIndex((e) => e.username === user.username);
+  if (chapter !== 0 && time < 300) serverAch(user, 'speedrun');
 
   let challengeWon = 0;
   const c = dailyChallenge();
@@ -1157,6 +1189,7 @@ app.post('/api/wallet/reward', (req, res) => {
   addXp(user, ESCAPE_XP[diff]);
   user.lastReward = now;
   bumpStat('escapes');
+  if (diff >= 2) payReferral(user);
   saveUsers();
   res.json({ gained, xp, ...walletView(user) });
 });
@@ -1227,6 +1260,9 @@ interface Client {
   room: Room | null;
   alive: boolean;
   lastChat?: number;
+  /** 👀 spectator of this room, following one of the players */
+  watching?: Room;
+  follow?: 'host' | 'guest';
 }
 type GameMode = 'coop' | 'versus' | 'race';
 interface Room {
@@ -1241,6 +1277,10 @@ interface Room {
   /** 1 = the hospital, 2 = the sewers, 4 = the forest, 5 = Site B (co-op only) */
   chapter: 1 | 2 | 4 | 5 | 6;
   started: boolean;
+  /** same level layout for everyone (spectators too) */
+  seed?: number;
+  /** 👀 friends watching */
+  spectators?: Client[];
 }
 
 /** Chapters 4 and 5 are co-op only: any other mode falls back to chapter 1. */
@@ -1261,10 +1301,26 @@ const matchQueue: { client: Client; mode: GameMode; difficulty: number; chapter:
 const unqueue = (c: Client) => {
   for (let i = matchQueue.length - 1; i >= 0; i--) if (matchQueue[i].client === c) matchQueue.splice(i, 1);
 };
+/** 👀 Spectators go back to the menu */
+const endWatchers = (room: Room, reason: string) => {
+  for (const s of room.spectators ?? []) {
+    s.watching = undefined;
+    send(s, { t: 'watch-end', reason });
+  }
+  room.spectators = [];
+};
+const unwatch = (c: Client) => {
+  const r = c.watching;
+  if (!r) return;
+  r.spectators = (r.spectators ?? []).filter((s) => s !== c);
+  c.watching = undefined;
+};
 const startRoom = (room: Room) => {
   room.started = true;
+  endWatchers(room, 'La partie a recommencé.');
   // One random seed for both players: same forest / lab layout
-  const start = { t: 'start', ...roomSettings(room), seed: crypto.randomInt(1, 2 ** 31) / 2 ** 31 };
+  room.seed = crypto.randomInt(1, 2 ** 31) / 2 ** 31;
+  const start = { t: 'start', ...roomSettings(room), seed: room.seed };
   send(room.host, start);
   send(room.guest, start);
 };
@@ -1286,6 +1342,7 @@ const leaveRoom = (c: Client) => {
   const room = c.room;
   if (!room) return;
   c.room = null;
+  endWatchers(room, 'La partie est terminée.');
   if (room.host === c) {
     // Host left: the room closes
     rooms.delete(room.code);
@@ -1318,6 +1375,7 @@ server.on('upgrade', (req, socket, head) => {
     ws.on('pong', () => (client.alive = true));
     ws.on('close', () => {
       clients.delete(client);
+      unwatch(client);
       unqueue(client);
       leaveRoom(client);
     });
@@ -1447,9 +1505,47 @@ server.on('upgrade', (req, socket, head) => {
           send(client, { t: 'chat', from: client.username, i });
           break;
         }
-        case 'relay':
+        case 'relay': {
           // Game traffic: forwarded untouched to the other player
           send(peerOf(client), { t: 'relay', d: msg.d });
+          // 👀 …and to the spectators: the world comes from the host, the view from the player they follow
+          const room = client.room;
+          if (room?.spectators?.length) {
+            const role = room.host === client ? 'host' : 'guest';
+            const k = (msg.d as { k?: string } | null)?.k;
+            const personal = k === 'p' || k === 'look' || k === 'emote';
+            for (const s of room.spectators) if (personal ? s.follow === role : role === 'host') send(s, { t: 'relay', d: msg.d });
+          }
+          break;
+        }
+        case 'watch': {
+          const me = users.get(client.username.toLowerCase());
+          const name = String(msg.name ?? '').toLowerCase();
+          if (!me || !friendsOf(me).includes(name)) return send(client, { t: 'error', error: 'Tu ne peux regarder que tes amis.' });
+          const target = clientsOf(name).find((c) => c.room?.started && c.room.guest);
+          const room = target?.room;
+          if (!target || !room) return send(client, { t: 'error', error: 'Ton ami n\'est pas en partie en ligne en ce moment.' });
+          if (room.mode !== 'coop') return send(client, { t: 'error', error: 'Seules les parties en coop peuvent être regardées.' });
+          if ((room.spectators ?? []).length >= 4) return send(client, { t: 'error', error: 'Il y a déjà 4 spectateurs dans cette partie.' });
+          unwatch(client);
+          unqueue(client);
+          leaveRoom(client);
+          room.spectators = [...(room.spectators ?? []), client];
+          client.watching = room;
+          client.follow = room.host === target ? 'host' : 'guest';
+          const other = client.follow === 'host' ? room.guest : room.host;
+          send(client, { t: 'watch-start', ...roomSettings(room), seed: room.seed, player: target.username, other: other?.username });
+          // The players send everything again for the newcomer (and are told someone watches)
+          for (const c of [room.host, room.guest]) {
+            send(c, { t: 'relay', d: { k: 'resync' } });
+            send(c, { t: 'relay', d: { k: 'toast', msg: `👀 ${client.username} regarde la partie.` } });
+          }
+          serverAch(me, 'spectate');
+          saveUsers();
+          break;
+        }
+        case 'unwatch':
+          unwatch(client);
           break;
       }
     });
@@ -1503,7 +1599,13 @@ const friendsView = (u: User) => {
   const order = { playing: 0, online: 1, offline: 2 };
   return {
     friends: friendsOf(u)
-      .map((f) => ({ username: users.get(f)!.username, status: statusOf(f), level: levelOf(users.get(f)!.xp ?? 0).level }))
+      .map((f) => ({
+        username: users.get(f)!.username,
+        status: statusOf(f),
+        level: levelOf(users.get(f)!.xp ?? 0).level,
+        unread: unreadFrom(u, f),
+        watchable: [...clientsOf(f)].some((c) => c.room?.started && c.room.mode === 'coop'),
+      }))
       .sort((a, b) => order[a.status] - order[b.status] || a.username.localeCompare(b.username)),
     requests: requestsOf(u).map((f) => users.get(f)!.username),
     /** requests you sent that are still waiting */
@@ -1614,6 +1716,210 @@ app.post('/api/friends/invite/dismiss', (req, res) => {
     (invites.get(me) ?? []).filter((i) => i.code !== code)
   );
   res.json(friendsView(user));
+});
+
+
+// ---------------------------------------------------------------------------
+// 🎟️ Gift codes (made by an admin, used once per player)
+// ---------------------------------------------------------------------------
+interface GiftCode {
+  code: string;
+  coins: number;
+  skin?: string;
+  treats?: number;
+  /** how many players can use it (0 = unlimited) */
+  max: number;
+  used: number;
+  /** expiry (ms), 0 = never */
+  until: number;
+  by: string;
+  at: number;
+}
+const giftCodes: GiftCode[] = await (async () => {
+  try {
+    const raw = await store.load('codes');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+})();
+const codesSaver = debouncedSaver(store, 'codes', () => JSON.stringify(giftCodes), 500);
+const CODE_RE = /^[A-Z0-9-]{4,20}$/;
+
+app.get('/api/admin/codes', (req, res) => {
+  const user = authUser(req);
+  if (!user || !isAdmin(user)) return res.status(403).json({ error: 'Réservé aux admins.' });
+  res.json([...giftCodes].reverse());
+});
+app.post('/api/admin/codes', (req, res) => {
+  const user = authUser(req);
+  if (!user || !isAdmin(user)) return res.status(403).json({ error: 'Réservé aux admins.' });
+  let code = String(req.body?.code ?? '').trim().toUpperCase();
+  if (!code) for (let i = 0; i < 8; i++) code += CODE_CHARS[crypto.randomInt(CODE_CHARS.length)];
+  if (!CODE_RE.test(code)) return res.status(400).json({ error: 'Code : 4 à 20 lettres, chiffres ou tirets.' });
+  if (giftCodes.some((c) => c.code === code)) return res.status(409).json({ error: 'Ce code existe déjà.' });
+  const coins = Math.max(0, Math.min(100000, Math.floor(Number(req.body?.coins) || 0)));
+  const treats = Math.max(0, Math.min(5000, Math.floor(Number(req.body?.treats) || 0)));
+  const skin = req.body?.skin ? String(req.body.skin) : '';
+  if (skin && !cosmeticById(skin)) return res.status(400).json({ error: 'Skin inconnu.' });
+  if (!coins && !treats && !skin) return res.status(400).json({ error: 'Mets au moins des pièces, des friandises ou un skin.' });
+  const max = Math.max(0, Math.min(100000, Math.floor(Number(req.body?.max) || 0)));
+  const days = Math.max(0, Math.min(365, Number(req.body?.days) || 0));
+  const gc: GiftCode = { code, coins, treats, ...(skin ? { skin } : {}), max, used: 0, until: days ? Date.now() + days * 86400000 : 0, by: user.username, at: Date.now() };
+  giftCodes.push(gc);
+  codesSaver.save();
+  console.log(`[admin] ${user.username} crée le code ${code}`);
+  res.json({ message: `🎟️ Code ${code} créé !`, codes: [...giftCodes].reverse() });
+});
+app.post('/api/admin/codes/delete', (req, res) => {
+  const user = authUser(req);
+  if (!user || !isAdmin(user)) return res.status(403).json({ error: 'Réservé aux admins.' });
+  const i = giftCodes.findIndex((c) => c.code === String(req.body?.code ?? ''));
+  if (i >= 0) giftCodes.splice(i, 1);
+  codesSaver.save();
+  res.json({ message: 'Code supprimé.', codes: [...giftCodes].reverse() });
+});
+
+app.post('/api/redeem', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const now = Date.now();
+  // No guessing: 8 wrong tries per 10 minutes
+  if (!user.codeTries || now - user.codeTries.at > 10 * 60000) user.codeTries = { at: now, n: 0 };
+  if (user.codeTries.n >= 8) return res.status(429).json({ error: 'Trop d\'essais. Réessaie dans 10 minutes.' });
+  const code = String(req.body?.code ?? '').trim().toUpperCase();
+  const gc = giftCodes.find((c) => c.code === code);
+  const fail = (msg: string) => {
+    user.codeTries!.n++;
+    return res.status(400).json({ error: msg });
+  };
+  if (!gc) return fail('Ce code n\'existe pas.');
+  if (gc.until && now > gc.until) return fail('Ce code a expiré.');
+  if (gc.max && gc.used >= gc.max) return fail('Ce code a déjà été utilisé par tout le monde.');
+  if ((user.redeemed ?? []).includes(code)) return res.status(400).json({ error: 'Tu as déjà utilisé ce code.' });
+  const w = walletOf(user);
+  const got: string[] = [];
+  if (gc.coins) {
+    w.coins += gc.coins;
+    got.push(`${gc.coins} pièces`);
+  }
+  if (gc.treats) {
+    const season = currentSeason() ?? 'noel';
+    w.treats[season] = (w.treats[season] ?? 0) + gc.treats;
+    got.push(`${gc.treats} ${SEASON_INFO[season].treat.many}`);
+  }
+  if (gc.skin) {
+    const item = cosmeticById(gc.skin)!;
+    if (w.owned.includes(item.id)) {
+      const refund = Math.round(TIER_PRICE[item.tier] * 0.6);
+      w.coins += refund;
+      got.push(`${item.name} (déjà possédé → +${refund} pièces)`);
+    } else {
+      w.owned.push(item.id);
+      got.push(`le skin « ${item.name} »`);
+    }
+  }
+  gc.used++;
+  user.redeemed = [...(user.redeemed ?? []), code].slice(-200);
+  serverAch(user, 'code');
+  codesSaver.save();
+  saveUsers();
+  res.json({ message: `🎟️ Code accepté ! Tu gagnes : ${got.join(', ')}.`, ...walletView(user) });
+});
+
+// ---------------------------------------------------------------------------
+// 📣 Referral: a friend signs up with your link and escapes once → you both win
+// ---------------------------------------------------------------------------
+const REFERRAL_COINS = 300;
+const MAX_REFERRALS = 25;
+function payReferral(u: User) {
+  if (!u.referredBy || u.refPaid) return;
+  u.refPaid = true;
+  const sponsor = users.get(u.referredBy);
+  walletOf(u).coins += REFERRAL_COINS;
+  u.inbox = [...(u.inbox ?? []), { from: 'Patient Zero', text: `📣 Bonus de parrainage : +${REFERRAL_COINS} pièces ! Merci d'avoir rejoint le jeu.`, at: Date.now() }].slice(-20);
+  if (!sponsor || (sponsor.referrals ?? 0) >= MAX_REFERRALS) return;
+  sponsor.referrals = (sponsor.referrals ?? 0) + 1;
+  walletOf(sponsor).coins += REFERRAL_COINS;
+  sponsor.inbox = [...(sponsor.inbox ?? []), { from: u.username, text: `📣 ${u.username}, que tu as parrainé, s'est échappé pour la première fois : +${REFERRAL_COINS} pièces !`, at: Date.now() }].slice(-20);
+  serverAch(sponsor, 'referral');
+  notify(sponsor, '📣 Parrainage réussi !', `${u.username} s'est échappé : +${REFERRAL_COINS} pièces pour toi.`, 'referral');
+}
+
+// ---------------------------------------------------------------------------
+// 💬 Private chat between friends (filtered)
+// ---------------------------------------------------------------------------
+type Dm = { f: string; t: string; at: number };
+const dms: Record<string, Dm[]> = await (async () => {
+  try {
+    const raw = await store.load('dms');
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+})();
+const dmsSaver = debouncedSaver(store, 'dms', () => JSON.stringify(dms), remote ? 3000 : 500);
+const pairKey = (a: string, b: string) => [a, b].sort().join('|');
+const unreadFrom = (u: User, friend: string) => {
+  const read = u.dmRead?.[friend] ?? 0;
+  return (dms[pairKey(u.username.toLowerCase(), friend)] ?? []).filter((m) => m.f === friend && m.at > read).length;
+};
+
+app.get('/api/dm/:name', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const me = user.username.toLowerCase();
+  const other = String(req.params.name ?? '').toLowerCase();
+  if (!friendsOf(user).includes(other)) return res.status(400).json({ error: 'Tu ne peux parler qu\'à tes amis.' });
+  const list = dms[pairKey(me, other)] ?? [];
+  user.dmRead = { ...(user.dmRead ?? {}), [other]: Date.now() };
+  res.json({
+    with: users.get(other)?.username ?? other,
+    status: statusOf(other),
+    messages: list.map((m) => ({ from: users.get(m.f)?.username ?? m.f, text: m.t, at: m.at, mine: m.f === me })),
+  });
+});
+
+app.post('/api/dm', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const me = user.username.toLowerCase();
+  const other = String(req.body?.to ?? '').toLowerCase();
+  const target = users.get(other);
+  if (!target || !friendsOf(user).includes(other)) return res.status(400).json({ error: 'Tu ne peux parler qu\'à tes amis.' });
+  const raw = String(req.body?.text ?? '').replace(/[\u0000-\u001f]/g, ' ').trim();
+  if (!raw) return res.status(400).json({ error: 'Message vide.' });
+  if (raw.length > 200) return res.status(400).json({ error: '200 caractères maximum.' });
+  const now = Date.now();
+  if (user.lastDm && now - user.lastDm < 1000) return res.status(429).json({ error: 'Doucement ! Un message par seconde.' });
+  user.lastDm = now;
+  const text = censorText(raw);
+  const key = pairKey(me, other);
+  const list = (dms[key] ??= []);
+  list.push({ f: me, t: text, at: now });
+  if (list.length > 60) list.splice(0, list.length - 60);
+  user.dmRead = { ...(user.dmRead ?? {}), [other]: now };
+  dmsSaver.save();
+  serverAch(user, 'chat');
+  // Instant if they have the game open, otherwise a notification
+  for (const c of clientsOf(other)) send(c, { t: 'dm', from: user.username });
+  if (statusOf(other) === 'offline') notify(target, `💬 ${user.username}`, text.slice(0, 80), `dm-${me}`);
+  saveUsers();
+  res.json({ ok: true, text });
+});
+
+// ---------------------------------------------------------------------------
+// 👀 Spectator: watch a friend's co-op game live
+// ---------------------------------------------------------------------------
+app.get('/api/spectate/:name', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const other = String(req.params.name ?? '').toLowerCase();
+  if (!friendsOf(user).includes(other)) return res.status(400).json({ error: 'Tu ne peux regarder que tes amis.' });
+  const room = clientsOf(other).find((c) => c.room?.started)?.room;
+  if (!room) return res.status(404).json({ error: 'Ton ami n\'est pas en partie en ligne en ce moment.' });
+  if (room.mode !== 'coop') return res.status(400).json({ error: 'Seules les parties en coop peuvent être regardées.' });
+  res.json({ code: room.code });
 });
 
 // ---------------------------------------------------------------------------

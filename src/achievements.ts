@@ -81,6 +81,14 @@ export const ACHIEVEMENTS: AchDef[] = [
   { id: 'escapes50', name: 'Légende de Saint-Aurore', desc: 'Sortir de l\'hôpital 50 fois.', icon: '👑', tier: 'platine', reward: 500, stat: 'escapes', goal: 50 },
   { id: 'coins500', name: 'Pilleur', desc: 'Ramasser 500 pièces pendant vos parties.', icon: '🪙', tier: 'argent', reward: 100, stat: 'coinsFound', goal: 500 },
   { id: 'boxes10', name: 'Collectionneur', desc: 'Ouvrir 10 boîtes mystère ou cadeaux.', icon: '🎁', tier: 'or', reward: 100, stat: 'boxes', goal: 10 },
+  // --- Gadgets, speedrun, social ---
+  { id: 'smoke', name: 'Écran de fumée', desc: 'Lancer un fumigène.', icon: '💨', tier: 'bronze', reward: 20 },
+  { id: 'trap', name: 'Pris au piège', desc: 'Bloquer un monstre avec un piège à mâchoires.', icon: '🪤', tier: 'argent', reward: 75 },
+  { id: 'speedrun', name: 'Speedrunner', desc: 'Sortir d\'un chapitre en moins de 5 minutes (Normal ou plus).', icon: '⏱️', tier: 'or', reward: 150, server: true },
+  { id: 'referral', name: 'Recruteur', desc: 'Parrainer un ami qui s\'échappe une fois.', icon: '📣', tier: 'argent', reward: 100, server: true },
+  { id: 'code', name: 'Code secret', desc: 'Utiliser un code cadeau.', icon: '🎟️', tier: 'bronze', reward: 20, server: true },
+  { id: 'spectate', name: 'Dans les tribunes', desc: 'Regarder un ami jouer en direct.', icon: '👀', tier: 'bronze', reward: 30, server: true },
+  { id: 'chat', name: 'Bavard', desc: 'Envoyer un message à un ami.', icon: '💬', tier: 'bronze', reward: 20, server: true },
   // --- Chapter 6 ---
   { id: 'ch6_escape', name: 'Au-dessus de la tempête', desc: 'S\'envoler du toit en hélicoptère (Chapitre 6).', icon: '🚁', tier: 'or', reward: 250 },
   { id: 'ch6_notes', name: 'Hélios 2', desc: 'Trouver les 2 documents du toit avant de partir.', icon: '📓', tier: 'argent', reward: 100 },

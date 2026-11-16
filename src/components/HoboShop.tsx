@@ -11,6 +11,8 @@ const ICON: Record<string, string> = {
   can: 'CupSoda',
   alarm: 'AlarmClock',
   sedative: 'Syringe',
+  smoke: 'CloudFog',
+  trap: 'Cog',
 };
 
 const LINES = [

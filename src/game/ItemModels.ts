@@ -85,6 +85,35 @@ export const buildItemModel = (item: GameItem, track: Track): THREE.Group => {
       for (const s of [-1, 1]) add(track, g, new THREE.BoxGeometry(0.012, 0.006, 0.033), mat(track, 0xb8b8b8, { metalness: 0.6, roughness: 0.3 }), s * 0.061, 0.009, 0);
       break;
     }
+    case 'smoke': {
+      // Smoke grenade: olive canister, grey cap, ring pull
+      const olive = mat(track, 0x4a5a32, { roughness: 0.6, metalness: 0.3 });
+      const steel = mat(track, 0x9aa0a6, { metalness: 0.9, roughness: 0.3 });
+      const can = add(track, g, new THREE.CylinderGeometry(0.03, 0.03, 0.13, 18), olive, 0, 0.03, 0);
+      can.rotation.z = Math.PI / 2;
+      const cap = add(track, g, new THREE.CylinderGeometry(0.022, 0.026, 0.025, 14), steel, 0.075, 0.03, 0);
+      cap.rotation.z = Math.PI / 2;
+      add(track, g, new THREE.TorusGeometry(0.014, 0.003, 6, 14), steel, 0.095, 0.05, 0);
+      add(track, g, new THREE.BoxGeometry(0.06, 0.006, 0.012), mat(track, 0xffffff, { roughness: 0.5 }), -0.01, 0.061, 0);
+      break;
+    }
+    case 'trap': {
+      // Jaw trap lying open: base plate, two toothed half-rings, spring
+      const iron = mat(track, 0x5a4a3a, { metalness: 0.7, roughness: 0.55 });
+      add(track, g, new THREE.CylinderGeometry(0.05, 0.05, 0.01, 16), iron, 0, 0.005, 0);
+      for (const s of [-1, 1]) {
+        const jaw = add(track, g, new THREE.TorusGeometry(0.13, 0.008, 6, 20, Math.PI), iron, 0, 0.01, 0);
+        jaw.rotation.x = -Math.PI / 2;
+        jaw.rotation.z = s > 0 ? 0 : Math.PI;
+        for (let i = 1; i < 7; i++) {
+          const a = (i / 7) * Math.PI;
+          const tooth = add(track, g, new THREE.ConeGeometry(0.008, 0.03, 4), iron, Math.cos(a) * 0.12, 0.02, s * Math.sin(a) * 0.12);
+          tooth.castShadow = false;
+        }
+      }
+      add(track, g, new THREE.BoxGeometry(0.32, 0.012, 0.02), iron, 0, 0.006, 0);
+      break;
+    }
     case 'alarm': {
       // Twin-bell alarm clock
       const red = mat(track, 0xb81818, { roughness: 0.35, metalness: 0.4 });

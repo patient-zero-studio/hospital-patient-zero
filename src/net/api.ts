@@ -55,10 +55,58 @@ export interface WalletView {
   seasonShop?: string[];
   /** advent calendar (Christmas only): last box that can be opened + boxes already opened */
   advent?: { open: number; claimed: number[] };
+  /** ⏱️ personal bests, "chapter-difficulty" → seconds */
+  bests?: Record<string, number>;
+  /** 📣 friends brought in with your link (paid), and who brought you */
+  referrals?: number;
+  referredBy?: string | null;
 }
 
+export interface DmView {
+  with: string;
+  status: 'playing' | 'online' | 'offline';
+  messages: { from: string; text: string; at: number; mine: boolean }[];
+}
+
+export interface GiftCodeView {
+  code: string;
+  coins: number;
+  skin?: string;
+  treats?: number;
+  max: number;
+  used: number;
+  until: number;
+  by: string;
+  at: number;
+}
+
+// 📣 Referral link: remember who invited us (until we sign up)
+try {
+  const ref = new URLSearchParams(location.search).get('ref');
+  if (ref && /^[A-Za-z0-9_-]{3,16}$/.test(ref)) {
+    localStorage.setItem('pz-ref', ref);
+    history.replaceState(null, '', location.pathname);
+  }
+} catch {
+  /* ignore */
+}
+const savedRef = () => {
+  try {
+    return localStorage.getItem('pz-ref') ?? undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const getJson = async (url: string, token: string) => {
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Serveur injoignable.');
+  return data;
+};
+
 export interface FriendsView {
-  friends: { username: string; status: 'playing' | 'online' | 'offline'; level?: number }[];
+  friends: { username: string; status: 'playing' | 'online' | 'offline'; level?: number; unread?: number; watchable?: boolean }[];
   requests: string[];
   /** requests you sent, still waiting */
   sent?: string[];
@@ -164,7 +212,7 @@ const post = async (url: string, body: unknown, token?: string) => {
 
 export const api = {
   async register(username: string, password: string): Promise<Session> {
-    const s = await post('/api/register', { username, password });
+    const s = await post('/api/register', { username, password, ref: savedRef() });
     writeToken(s.token);
     return s;
   },
@@ -318,6 +366,17 @@ export const api = {
   friendRemove: (token: string, username: string): Promise<FriendsView> => post('/api/friends/remove', { username }, token),
   friendInvite: (token: string, username: string): Promise<FriendsView> => post('/api/friends/invite', { username }, token),
   inviteDismiss: (token: string, code: string): Promise<FriendsView> => post('/api/friends/invite/dismiss', { code }, token),
+
+  // ---- 🎟️ Codes, 💬 chat, 👀 spectator ----
+  redeem: (token: string, code: string): Promise<WalletView & { message: string }> => post('/api/redeem', { code }, token),
+  dm: (token: string, name: string): Promise<DmView> => getJson(`/api/dm/${encodeURIComponent(name)}`, token),
+  dmSend: (token: string, to: string, text: string): Promise<{ ok: boolean; text: string }> => post('/api/dm', { to, text }, token),
+  adminCodes: (token: string): Promise<GiftCodeView[]> => getJson('/api/admin/codes', token),
+  adminCodeCreate: (
+    token: string,
+    c: { code?: string; coins?: number; treats?: number; skin?: string; max?: number; days?: number }
+  ): Promise<{ message: string; codes: GiftCodeView[] }> => post('/api/admin/codes', c, token),
+  adminCodeDelete: (token: string, code: string): Promise<{ message: string; codes: GiftCodeView[] }> => post('/api/admin/codes/delete', { code }, token),
 
   // ---- Admin ----
   async adminUsers(token: string): Promise<AdminUser[]> {

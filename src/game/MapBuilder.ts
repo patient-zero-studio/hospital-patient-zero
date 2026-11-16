@@ -1972,7 +1972,7 @@ export class MapBuilder {
         case 'sedative':
           return { id: `pick-sedative-${n}`, name: 'Seringue de Sédatif', type, description: 'Immobilise un monstre 5 secondes (à moins de 3 m, face à lui).', icon: 'Syringe' };
         default:
-          return { id: `pick-medkit-${n}`, name: 'Adrénaline', type, description: 'Auto-injecteur : endurance au maximum.', icon: 'HeartPulse' };
+          return { id: `pick-medkit-${n}`, name: 'Adrénaline', type, description: 'Auto-injecteur : endurance au maximum + 6 s de sprint illimité.', icon: 'HeartPulse' };
       }
     };
     const drop = (item: GameItem, x: number, z: number, y = 0) => pickups.push({ item, pos: new THREE.Vector3(x, y, z), rotY: Math.random() * Math.PI * 2 });

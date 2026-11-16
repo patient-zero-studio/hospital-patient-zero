@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Check, Gift, Loader2, UserMinus, UserPlus, Users, X } from 'lucide-react';
+import { Check, Eye, Gift, Loader2, MessageCircle, UserMinus, UserPlus, Users, X } from 'lucide-react';
+import { FriendChat } from './FriendChat';
 import { CATALOG } from '../economy';
 import { CosmeticBadge } from './ShopMenu';
 import type { FriendsView } from '../net/api';
@@ -25,11 +26,19 @@ interface Props {
   onGift?: (to: string, what: { coins?: number; skin?: string }) => Promise<string | undefined>;
   /** no room yet: open the multiplayer panel to create one */
   onCreateRoom?: () => void;
+  /** 💬 chat + 👀 spectator + 📣 referral */
+  token?: string;
+  me?: string;
+  referrals?: number;
+  onWatch?: (name: string) => void;
   onClose: () => void;
 }
 
 /** Friends: add by pseudo, accept requests, see who is online, invite them to your game. */
-export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove, onInvite, onProfile, owned = [], coins = 0, onGift, onCreateRoom, onClose }) => {
+export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove, onInvite, onProfile, owned = [], coins = 0, onGift, onCreateRoom, token, me, referrals = 0, onWatch, onClose }) => {
+  const [chatWith, setChatWith] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const refLink = me ? `${location.origin}/?ref=${encodeURIComponent(me)}` : '';
   const [giftTo, setGiftTo] = useState<string | null>(null);
   const [giftCoins, setGiftCoins] = useState(100);
   const giftable = CATALOG.filter((c) => owned.includes(c.id) && !c.unlock);
@@ -93,6 +102,32 @@ export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove,
           </button>
         </form>
         {msg && <p className={`text-xs font-mono mb-3 ${msg.ok ? 'text-emerald-400' : 'text-red-400'}`}>{msg.text}</p>}
+        {refLink && (
+          <div className="mb-4 p-2.5 border border-amber-800/60 bg-amber-950/15">
+            <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-amber-300 mb-1">📣 Parrainage</div>
+            <p className="text-[11px] text-zinc-400 mb-2">
+              Envoie ce lien à un ami. Quand il crée son compte avec et s'échappe une fois (Normal ou plus), vous gagnez <b className="text-amber-300">300 pièces chacun</b>.
+              {referrals > 0 && <span className="text-emerald-400"> Déjà {referrals} ami{referrals > 1 ? 's' : ''} parrainé{referrals > 1 ? 's' : ''} !</span>}
+            </p>
+            <div className="flex gap-1.5">
+              <input readOnly value={refLink} data-no-i18n onFocus={(e) => e.target.select()} className="flex-1 min-w-0 bg-black border border-zinc-700 px-2 py-1 text-[11px] text-zinc-300 font-mono" />
+              <button
+                onClick={() => {
+                  navigator.clipboard?.writeText(refLink).then(
+                    () => {
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    },
+                    () => {}
+                  );
+                }}
+                className="px-2.5 bg-amber-500 hover:bg-amber-400 text-black text-[11px] font-mono uppercase font-bold"
+              >
+                {copied ? '✓ Copié' : 'Copier'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {!view ? (
           <div className="flex justify-center py-8 text-zinc-500">
@@ -215,6 +250,19 @@ export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove,
                             {busy === 'inv-' + f.username ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Inviter'}
                           </button>
                         )}
+                        {onWatch && f.watchable && (
+                          <button onClick={() => onWatch(f.username)} title="Regarder sa partie en direct" className="px-2 py-1 border border-sky-700 text-sky-300 hover:bg-sky-950/40 text-[11px] font-mono uppercase flex items-center gap-1">
+                            <Eye className="w-3.5 h-3.5" /> Regarder
+                          </button>
+                        )}
+                        {token && (
+                          <button onClick={() => setChatWith(chatWith === f.username ? null : f.username)} title="Discuter" className="relative p-1 text-zinc-500 hover:text-sky-300">
+                            <MessageCircle className="w-4 h-4" />
+                            {!!f.unread && chatWith !== f.username && (
+                              <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-sky-500 text-black text-[9px] font-bold flex items-center justify-center">{f.unread}</span>
+                            )}
+                          </button>
+                        )}
                         {onGift && (
                           <button onClick={() => setGiftTo(giftTo === f.username ? null : f.username)} title="Offrir un cadeau" className="p-1 text-zinc-500 hover:text-pink-300">
                             <Gift className="w-4 h-4" />
@@ -226,6 +274,7 @@ export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove,
                       </>
                     )}
                   </div>
+                  {chatWith === f.username && token && <FriendChat token={token} friend={f.username} />}
                   {giftTo === f.username && onGift && (
                     <div className="p-2 border border-pink-800/60 bg-pink-950/20 space-y-2">
                       <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-pink-300">💝 Offrir à {f.username} (5 cadeaux par jour)</div>

@@ -8,6 +8,7 @@ import { FlashlightBeam, makeFlashlightCookie } from './FlashlightBeam';
 
 import { Chapter, ControlSettings, GameEnding, GameItem, MonsterState, Objective } from '../types';
 import { sound } from '../audio/SoundSystem';
+import { SMOKES } from './MonsterAI';
 import { DoorObject, MapBuilder, MapData } from './MapBuilder';
 import { PlayerController } from './PlayerController';
 import { MonsterAI } from './MonsterAI';
@@ -144,6 +145,10 @@ function segHitsRect(ax: number, az: number, bx: number, bz: number, x0: number,
 }
 
 export interface HudSnapshot {
+  /** 👀 watching a friend's game */
+  watching: boolean;
+  /** ⏱️ Speedrun chrono (setting on) */
+  speedrun: { time: number; best: number | null } | null;
   battery: number;
   flashlightOn: boolean;
   stamina: number;
@@ -347,6 +352,9 @@ type InteractTarget =
   | { kind: 'stairs'; dir: 'up' | 'down'; to: string };
 
 /** An item lying in the world (dropped, or left on a table). */
+const SMOKE_ITEM: Omit<GameItem, 'id'> = { name: 'Fumigène', type: 'smoke', description: 'Un épais nuage pendant 12 s : les monstres ne vous voient plus à travers.', icon: 'CloudFog' };
+const TRAP_ITEM: Omit<GameItem, 'id'> = { name: 'Piège à mâchoires', type: 'trap', description: 'Posez-le par terre : le premier monstre qui marche dessus reste bloqué 6 s.', icon: 'Cog' };
+
 interface WorldItem {
   uid: number;
   item: GameItem;
@@ -356,6 +364,8 @@ interface WorldItem {
   restY: number;
   /** alarm clock: seconds before it rings (-1 = idle) */
   alarm: number;
+  /** jaw trap put down: armed */
+  trap?: boolean;
   disposables: { dispose: () => void }[];
 }
 
@@ -760,6 +770,11 @@ export class GameEngine {
   public maybeIntro() {
     if (this.introPlayed) return;
     this.introPlayed = true;
+    // A spectator arrives in the middle of the game: no opening shot
+    if (this.watchOnly) {
+      this.blackout = 0;
+      return;
+    }
     if (this.net && this.net.mode !== 'coop') return;
     if (this.chapter === 1 && !this.survival) this.startIntro();
     else if (CHAPTER_CARDS[this.chapter]) this.startCard(CHAPTER_CARDS[this.chapter]!);
@@ -975,6 +990,10 @@ export class GameEngine {
 
   /** Daily challenge switched on for this run (solo only). */
   public challenge: ChallengeId | null = null;
+  /** 👀 Watching a friend's game: no body, no input, nothing sent */
+  public watchOnly = false;
+  /** ⏱️ Personal bests, "chapter-difficulty" → seconds (set by the app) */
+  public speedBests: Record<string, number> = {};
   /** Seconds played this run (escape time for the leaderboard). */
   public get runTime() {
     return this.run.time;
@@ -1134,6 +1153,8 @@ export class GameEngine {
     if (this.maze) for (const n of [...this.maze.noteDrops, ...this.maze.supplyDrops()]) this.spawnWorldItem(n.item, n.pos, Math.random() * Math.PI, false);
     if (this.forest) for (const n of [...this.forest.noteDrops, ...this.forest.supplyDrops()]) this.spawnWorldItem(n.item, n.pos, Math.random() * Math.PI, false);
     if (this.site) for (const n of [...this.site.noteDrops, ...this.site.supplyDrops()]) this.spawnWorldItem(n.item, n.pos, Math.random() * Math.PI, false);
+    this.clearSmokes();
+    this.spawnGadgets();
 
     // Cans live inside the level group so interactions can raycast them
     this.cans = new CanSystem(this.map.sceneGroup, {
@@ -1462,8 +1483,8 @@ export class GameEngine {
     this.fearFlashText = null;
     this.pendingEnding = null;
     this.hint = null;
-    // Multiplayer state
-    this.spectating = false;
+    // Multiplayer state (a spectator only ever watches)
+    this.spectating = this.watchOnly;
     this.remoteCaught = false;
     this.partnerGone = false;
     this.menuOpen = false;
@@ -2082,9 +2103,18 @@ export class GameEngine {
     this.state.showToast(`Vous : ${EMOTES[i]}`);
   }
 
+  /** 👀 Spectator: messages meant for the real guest are not for us */
+  private static WATCH_IGNORE = new Set(['caught', 'coins', 'ach', 'used', 'stun', 'blind', 'pounce', 'raceEnd', 'vsEnd', 'toast', 'resync']);
   private onNetMsg(msg: GameMsg) {
     const host = this.net?.role === 'host';
+    if (this.watchOnly && GameEngine.WATCH_IGNORE.has(msg.k)) return;
     switch (msg.k) {
+      case 'resync':
+        // A spectator arrived: full snapshot + our look again
+        this.lastWorldSent = -1;
+        this.lastNotesSent = -1;
+        this.net?.send({ k: 'look', a: this.localLook });
+        break;
       case 'p':
         this.remote?.apply(msg.s);
         break;
@@ -2135,6 +2165,18 @@ export class GameEngine {
         this.state.showToast(`🪙 +${msg.n} pièces (gardées si vous sortez de l'hôpital)`);
         sound.playItemPickup();
         break;
+      case 'smoke':
+        this.spawnSmokeFx(msg.x, msg.z);
+        break;
+      case 'trap': {
+        const d = Math.hypot(msg.x - this.player.position.x, msg.z - this.player.position.z);
+        sound.playTrapSnap(d);
+        if (d < 30) {
+          this.state.showToast('🪤 CLAC ! Un monstre est pris dans le piège : 6 secondes pour filer !');
+          this.ach('trap');
+        }
+        break;
+      }
       case 'alarm': {
         const d = Math.hypot(msg.x - this.player.position.x, msg.z - this.player.position.z);
         sound.playAlarmRing(d);
@@ -2290,9 +2332,14 @@ export class GameEngine {
     } else if (item.type === 'battery' || item.type === 'medkit' || item.type === 'food') {
       this.state.removeItem(item.id);
       this.net?.send({ k: 'used', item });
-    } else if (item.type === 'alarm') {
+    } else if (item.type === 'alarm' || item.type === 'trap') {
       const s = this.remote?.state;
       if (s) this.dropFrom(i, new THREE.Vector3(s.x, 0, s.z), s.yaw);
+    } else if (item.type === 'smoke') {
+      const s = this.remote?.state;
+      if (!s) return;
+      this.state.removeItem(item.id);
+      this.lightSmoke(s.x, s.z);
     } else {
       this.net?.send({ k: 'toast', msg: `${item.name} — s'utilise automatiquement avec [E] au bon endroit.` });
     }
@@ -2322,8 +2369,9 @@ export class GameEngine {
       this.state.showToast('Pile insérée : +55 % de batterie.');
     } else if (item.type === 'medkit') {
       p.stamina = p.maxStamina;
+      p.freeSprint = 6;
       sound.playItemPickup();
-      this.state.showToast('Adrénaline injectée : endurance au maximum.');
+      this.state.showToast('💉 Adrénaline ! Endurance au maximum + 6 s de sprint illimité.');
     } else if (item.type === 'food') {
       p.stamina = Math.min(p.maxStamina, p.stamina + 40);
       sound.playPaperRustle();
@@ -3000,6 +3048,7 @@ export class GameEngine {
       partnerName: this.net && !this.partnerGone && this.net.mode === 'coop' ? this.net.partnerName : null,
       partnerDead: !!this.remote?.state?.dead || this.remoteCaught,
       spectating: this.spectating,
+      watching: this.watchOnly,
       versusRole: this.vsRole,
       timeLeft: this.vsRole ? this.timeLeft : null,
       race: this.net?.mode === 'race',
@@ -3009,6 +3058,7 @@ export class GameEngine {
       runTreats: this.runTreats + this.runChests * TREATS_PER_CHEST,
       presents: this.xmasNight ? this.runPresents : null,
       survival: this.survival && this.survivalWave ? { wave: this.survivalWave, time: this.runTime } : null,
+      speedrun: this.settings.speedrun && !this.survival && !this.intro && this.vsRole === null ? { time: this.runTime, best: this.speedBests[`${this.chapter}-${this.difficulty}`] ?? null } : null,
       treatEmoji: this.treatSeason ? SEASON_INFO[this.treatSeason].treat.emoji : null,
       selectedSlot: this.selectedSlot,
       intro: !!this.intro,
@@ -4021,11 +4071,11 @@ export class GameEngine {
     const handsFull = gs.inventory.length >= gs.maxInventorySlots;
     if (item.type === 'battery' && p.flashlightBattery >= 95 && !handsFull) {
       gs.showToast('La lampe est déjà chargée. Gardez la pile pour plus tard.');
-    } else if (item.type === 'medkit' && p.stamina >= p.maxStamina - 1 && !handsFull) {
+    } else if (item.type === 'medkit' && p.stamina >= p.maxStamina - 1 && p.freeSprint > 0 && !handsFull) {
       gs.showToast('Votre souffle est intact. Gardez l\'adrénaline pour une poursuite.');
     } else if (
       this.net?.role === 'guest' &&
-      (item.type === 'battery' || item.type === 'medkit' || item.type === 'throwable' || item.type === 'sedative')
+      (item.type === 'battery' || item.type === 'medkit' || item.type === 'throwable' || item.type === 'sedative' || item.type === 'smoke')
     ) {
       // Team inventory lives on the host: ask it to use the item for us
       const idx = gs.inventory.findIndex((i) => i.id === item.id);
@@ -4037,9 +4087,10 @@ export class GameEngine {
       gs.showToast('Pile insérée : +55 % de batterie.');
     } else if (item.type === 'medkit') {
       p.stamina = p.maxStamina;
+      p.freeSprint = 6;
       gs.removeItem(item.id);
       sound.playItemPickup();
-      gs.showToast('Adrénaline injectée : endurance au maximum.');
+      gs.showToast('💉 Adrénaline ! Endurance au maximum + 6 s de sprint illimité.');
     } else if (item.type === 'sedative') {
       if (this.applySedative(this.camera.position, p.yaw)) {
         gs.removeItem(item.id);
@@ -4057,9 +4108,12 @@ export class GameEngine {
         gs.removeItem(item.id);
         this.applyUsedItem(item);
       }
-    } else if (item.type === 'alarm') {
-      // Put it down: it rings 3 s later
+    } else if (item.type === 'alarm' || item.type === 'trap') {
+      // Put it down: it rings 3 s later / it waits for a creature
       this.dropSlot(gs.inventory.findIndex((i) => i.id === item.id));
+    } else if (item.type === 'smoke') {
+      gs.removeItem(item.id);
+      this.lightSmoke(p.position.x, p.position.z);
     } else if (item.type === 'note' || item.type === 'cassette') {
       sound.playPaperRustle();
     } else {
@@ -4135,6 +4189,9 @@ export class GameEngine {
     if (item.type === 'alarm') {
       w.alarm = 3;
       gs.showToast('⏰ Réveil posé : il va sonner dans 3 secondes… éloignez-vous !');
+    } else if (item.type === 'trap') {
+      w.trap = true;
+      gs.showToast('🪤 Piège posé. Attirez un monstre dessus… sans marcher dedans !');
     } else gs.showToast(`Vous lâchez : ${item.name}`);
   }
 
@@ -4154,7 +4211,108 @@ export class GameEngine {
     this.pushHud();
   }
 
+  // 💨 Smoke grenades -----------------------------------------------------
+  private smokes: { x: number; z: number; t: number; group: THREE.Group; puffs: { m: THREE.Mesh; a: number; r: number; h: number }[]; mat: THREE.MeshStandardMaterial; geo: THREE.BufferGeometry }[] = [];
+  private static SMOKE_TIME = 12;
+
+  /** Host / solo: a smoke grenade goes off at (x, z). */
+  private lightSmoke(x: number, z: number) {
+    this.spawnSmokeFx(x, z);
+    this.net?.send({ k: 'smoke', x, z });
+    this.ach('smoke');
+  }
+
+  private spawnSmokeFx(x: number, z: number) {
+    const group = new THREE.Group();
+    group.position.set(x, 0, z);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xb8bcc0, roughness: 1, transparent: true, opacity: 0.85, depthWrite: false });
+    const geo = new THREE.IcosahedronGeometry(0.7, 1);
+    const puffs: { m: THREE.Mesh; a: number; r: number; h: number }[] = [];
+    const n = this.lowEndGpu ? 16 : 28;
+    for (let i = 0; i < n; i++) {
+      const m = new THREE.Mesh(geo, mat);
+      m.castShadow = false;
+      m.receiveShadow = false;
+      const p = { m, a: Math.random() * Math.PI * 2, r: Math.random(), h: Math.random() };
+      puffs.push(p);
+      group.add(m);
+    }
+    this.scene.add(group);
+    this.smokes.push({ x, z, t: GameEngine.SMOKE_TIME, group, puffs, mat, geo });
+    const d = Math.hypot(x - this.player.position.x, z - this.player.position.z);
+    if (d < 25) sound.playHiss(2.5);
+  }
+
+  private updateSmokes(delta: number) {
+    SMOKES.length = 0;
+    for (const s of this.smokes) {
+      s.t -= delta;
+      const age = GameEngine.SMOKE_TIME - s.t;
+      const grow = Math.min(1, age / 1.5);
+      const radius = 3.2 * grow;
+      s.mat.opacity = 0.85 * Math.min(1, s.t / 2.5);
+      for (const p of s.puffs) {
+        p.a += delta * 0.15;
+        const r = p.r * radius;
+        p.m.position.set(Math.cos(p.a) * r, 0.4 + p.h * 2.2 * grow, Math.sin(p.a) * r);
+        p.m.scale.setScalar(0.6 + grow * (1.2 + p.h));
+      }
+      if (s.t > 1) SMOKES.push({ x: s.x, z: s.z, r: radius * 0.9 });
+    }
+    for (const s of this.smokes.filter((x) => x.t <= 0)) {
+      s.group.parent?.remove(s.group);
+      s.mat.dispose();
+      s.geo.dispose();
+    }
+    this.smokes = this.smokes.filter((x) => x.t > 0);
+  }
+
+  private clearSmokes() {
+    for (const s of this.smokes) {
+      s.group.parent?.remove(s.group);
+      s.mat.dispose();
+      s.geo.dispose();
+    }
+    this.smokes = [];
+    SMOKES.length = 0;
+  }
+
+  /** Host / solo: extra gadgets hidden in the level (smoke grenade + jaw trap). */
+  private spawnGadgets() {
+    if (this.net?.role === 'guest' || this.vsRole === 'monster' || this.xmasNight) return;
+    const lv = this.maze ?? this.forest ?? this.site;
+    const spots = lv ? lv.freeSpots(3) : treatSpots(this.map, 3).map((p) => p.setY(p.y - 0.45));
+    const defs = [SMOKE_ITEM, TRAP_ITEM, Math.random() < 0.5 ? SMOKE_ITEM : TRAP_ITEM];
+    spots.forEach((pos, i) => {
+      const item: GameItem = { id: `gadget-${i}-${Math.floor(Math.random() * 1e6)}`, ...defs[i] };
+      this.spawnWorldItem(item, pos.setY(Math.max(0, pos.y)), Math.random() * Math.PI * 2, false);
+    });
+  }
+
   private updateWorldItems(delta: number) {
+    this.updateSmokes(delta);
+    // 🪤 Armed traps (the host / solo decides)
+    if (this.net?.role !== 'guest') {
+      const sprung: number[] = [];
+      for (const w of this.worldItems) {
+        if (!w.trap) continue;
+        const pos = w.mesh.position;
+        const victim = this.monsters.find((m) => m.state !== 'STUNNED' && Math.hypot(m.position.x - pos.x, m.position.z - pos.z) < 0.9);
+        if (!victim) continue;
+        victim.stun(6);
+        sprung.push(w.uid);
+        const d = Math.hypot(pos.x - this.player.position.x, pos.z - this.player.position.z);
+        sound.playTrapSnap(d);
+        this.net?.send({ k: 'trap', x: pos.x, z: pos.z });
+        if (d < 30) {
+          this.state.showToast('🪤 CLAC ! Un monstre est pris dans le piège : 6 secondes pour filer !');
+          this.ach('trap');
+        }
+        // The other creatures heard it
+        this.alertAll(pos.clone().setY(1.2), 14);
+      }
+      sprung.forEach((uid) => this.removeWorldItem(uid));
+    }
     for (const w of this.worldItems) {
       if (w.mesh.position.y > w.restY) {
         w.vy -= 9.8 * delta;
@@ -4379,10 +4537,12 @@ export class GameEngine {
     this.supplyCounter++;
     const defs: Record<string, Omit<GameItem, 'id'>> = {
       battery: { name: 'Pile', type: 'battery', description: 'Recharge 55 % de la batterie de la lampe torche.', icon: 'BatteryCharging' },
-      medkit: { name: 'Adrénaline', type: 'medkit', description: 'Auto-injecteur : endurance au maximum.', icon: 'HeartPulse' },
+      medkit: { name: 'Adrénaline', type: 'medkit', description: 'Auto-injecteur : endurance au maximum + 6 s de sprint illimité.', icon: 'HeartPulse' },
       sedative: { name: 'Seringue de Sédatif', type: 'sedative', description: 'Immobilise un monstre 5 secondes (à moins de 3 m, face à lui).', icon: 'Syringe' },
       food: { name: 'Barre de céréales', type: 'food', description: 'Redonne 40 points d\'endurance.', icon: 'Cookie' },
       alarm: { name: 'Réveil', type: 'alarm', description: 'Posez-le : il sonne au bout de 3 s et attire les monstres.', icon: 'AlarmClock' },
+      smoke: SMOKE_ITEM,
+      trap: TRAP_ITEM,
     };
     const item: GameItem = kind === 'can' ? this.makeCan() : { id: `shop-${kind}-${this.supplyCounter}-${Date.now() % 100000}`, ...defs[kind] };
     if (this.net?.role === 'guest') this.net.send({ k: 'act', req: { kind: 'give', item } });

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FxHandle, buildFx } from './AnimatedFx';
 import { ProceduralTextures } from '../textures/ProceduralTextures';
 import { MONSTER_OUTFITS, buildMonsterAccessory } from './Cosmetics';
 import { MonsterState } from '../types';
@@ -48,6 +49,16 @@ export interface Listener {
   pos: THREE.Vector3;
   right: THREE.Vector3;
 }
+
+/** 💨 Smoke clouds in the level (set by the engine) */
+export const SMOKES: { x: number; z: number; r: number }[] = [];
+const segPointDist = (ax: number, az: number, bx: number, bz: number, px: number, pz: number) => {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const l2 = dx * dx + dz * dz || 1e-6;
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / l2));
+  return Math.hypot(ax + dx * t - px, az + dz * t - pz);
+};
 
 export class MonsterAI {
   public mesh: THREE.Group;
@@ -462,7 +473,14 @@ export class MonsterAI {
   private cosmeticDisposables: { dispose: () => void }[] = [];
 
   /** Player customisation: skin tint, glowing eyes, gown scraps, accessory, outfit. */
-  public applyLook(look: { skin: string; eyes: string; gown: string; acc?: string; outfit?: string }) {
+  /** ✨ Animated skin worn by the creature */
+  private fx: FxHandle | null = null;
+  public tickFx(delta: number) {
+    if (!this.fx) return;
+    this.fx.tick(delta);
+    if (this.fx.eyes && !this.blind) this.eyeMat.emissive.copy(this.fx.eyes());
+  }
+  public applyLook(look: { skin: string; eyes: string; gown: string; acc?: string; outfit?: string; fx?: string }) {
     const o = look.outfit ? MONSTER_OUTFITS[look.outfit] : undefined;
     const skin = this.skinMat;
     skin.color.set(o?.skin ?? look.skin);
@@ -489,6 +507,9 @@ export class MonsterAI {
     };
     for (const id of new Set([...(o?.accs ?? []), ...(look.acc ? [look.acc] : [])])) this.cosmetic.add(buildMonsterAccessory(id, track));
     if (!this.cosmetic.parent) this.head.add(this.cosmetic);
+    if (this.fx) this.mesh.remove(this.fx.group);
+    this.fx = look.fx ? buildFx(look.fx, track, 2.3, true) : null;
+    if (this.fx) this.mesh.add(this.fx.group);
   }
 
   /** Chapter 2 — "the Blind One": no eyes, bandaged head, terrifying hearing. */
@@ -606,6 +627,8 @@ export class MonsterAI {
   private canSee(s: MonsterSenses, boxes: CollisionBox[]) {
     if (s.playerHidden) return false;
     const dist = this.position.distanceTo(s.playerPos);
+    // 💨 Smoke grenade: no sight through the cloud (unless right next to you)
+    if (dist > 1.5 && SMOKES.some((c) => segPointDist(this.position.x, this.position.z, s.playerPos.x, s.playerPos.z, c.x, c.z) < c.r)) return false;
     // Blind: it only "sees" what it brushes against
     if (this.blind) return dist < 1.6;
     // Mostly blind: it sees light and close movement
@@ -959,6 +982,7 @@ export class MonsterAI {
   // ANIMATION
   // ---------------------------------------------------------------------
   private animate(delta: number) {
+    this.tickFx(delta);
     if (this.state === 'STUNNED') {
       // Slumped on its knees, twitching
       const k = 1 - Math.exp(-6 * delta);

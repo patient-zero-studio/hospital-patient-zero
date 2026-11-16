@@ -3,18 +3,18 @@ import { CHARACTERS, isCharacter } from './characters';
 
 /** Player customisation: colours, accessory and outfit of your human and your creature. */
 export interface Appearance {
-  human: { skin: string; gown: string; hair: string; acc: string; outfit: string; char: string };
-  monster: { skin: string; eyes: string; gown: string; acc: string; outfit: string };
+  human: { skin: string; gown: string; hair: string; acc: string; outfit: string; char: string; fx: string };
+  monster: { skin: string; eyes: string; gown: string; acc: string; outfit: string; fx: string };
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
-  human: { skin: '#d9b59a', gown: '#7f9aa8', hair: '#1d1d22', acc: '', outfit: '', char: 'alex' },
-  monster: { skin: '#8f968d', eyes: '#ff2a10', gown: '#6a6a60', acc: '', outfit: '' },
+  human: { skin: '#d9b59a', gown: '#7f9aa8', hair: '#1d1d22', acc: '', outfit: '', char: 'alex', fx: '' },
+  monster: { skin: '#8f968d', eyes: '#ff2a10', gown: '#6a6a60', acc: '', outfit: '', fx: '' },
 };
 
 const HEX = /^#[0-9a-f]{6}$/i;
 const ID = /^[a-z0-9]{0,16}$/;
-const COSMETIC_KEYS = ['acc', 'outfit', 'char'];
+const COSMETIC_KEYS = ['acc', 'outfit', 'char', 'fx'];
 
 /** Keeps only valid colours / ids, falling back to the defaults. */
 export const sanitizeAppearance = (a: unknown): Appearance => {

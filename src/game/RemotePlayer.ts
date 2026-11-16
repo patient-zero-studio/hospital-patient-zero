@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FxHandle, buildFx } from './AnimatedFx';
 import type { PlayerNetState } from '../net/protocol';
 import { ProceduralTextures } from '../textures/ProceduralTextures';
 import { HUMAN_OUTFITS, buildHumanAccessory, buildHumanBodyExtra } from './Cosmetics';
@@ -579,7 +580,9 @@ export class RemotePlayer {
     return g;
   }
 
-  public applyLook(look: { skin: string; gown: string; hair: string; acc?: string; outfit?: string; char?: string }) {
+  /** ✨ Animated skin */
+  private fx: FxHandle | null = null;
+  public applyLook(look: { skin: string; gown: string; hair: string; acc?: string; outfit?: string; char?: string; fx?: string }) {
     const outfit = look.outfit ? HUMAN_OUTFITS[look.outfit] : undefined;
     const gown = this.mats.gown;
     const hair = this.mats.hair;
@@ -618,6 +621,9 @@ export class RemotePlayer {
     }
     if (!this.cosmetic.parent) this.head.add(this.cosmetic);
     if (!this.cosmeticBody.parent) this.spine.add(this.cosmeticBody);
+    if (this.fx) this.group.remove(this.fx.group);
+    this.fx = look.fx ? buildFx(look.fx, track, 1.75 * ch.height, false) : null;
+    if (this.fx) this.group.add(this.fx.group);
   }
 
   private static skinTex: THREE.CanvasTexture | null = null;
@@ -739,12 +745,14 @@ export class RemotePlayer {
 
   /** Customisation preview: idle breathing, flashlight in hand. */
   public idle(delta: number) {
+    this.fx?.tick(delta);
     this.pose(delta, 0, false, false, false);
   }
 
   public update(delta: number) {
     const s = this.state;
     if (!s) return;
+    this.fx?.tick(delta);
     this.group.visible = !s.dead && !s.hid && !this.forceHidden;
 
     const prev = this.position.clone();

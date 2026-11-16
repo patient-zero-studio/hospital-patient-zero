@@ -13,6 +13,10 @@ export type ItemType =
   | 'food'
   /** alarm clock: put down, it rings and lures the creatures */
   | 'alarm'
+  /** smoke grenade: a cloud the creatures can't see through */
+  | 'smoke'
+  /** jaw trap: put down, it holds the first creature that steps on it */
+  | 'trap'
   /** coins found during a run (banked when you get out) */
   | 'coins'
   | 'special';
@@ -67,6 +71,8 @@ export interface ControlSettings {
   voiceChat: boolean;
   /** Graphics quality: auto = adapts to the device */
   quality?: GraphicsQuality;
+  /** ⏱️ Speedrun: chrono + personal best on screen */
+  speedrun?: boolean;
 }
 
 export type GraphicsQuality = 'auto' | 'low' | 'medium' | 'high' | 'ultra';

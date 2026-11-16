@@ -96,6 +96,10 @@ export type GameMsg =
   | { k: 'ach'; id: string }
   /** an alarm clock rings at (x, z) */
   | { k: 'alarm'; x: number; z: number }
+  /** a smoke grenade goes off at (x, z) */
+  | { k: 'smoke'; x: number; z: number }
+  /** a jaw trap snaps shut at (x, z) */
+  | { k: 'trap'; x: number; z: number }
   // versus (both ways)
   | { k: 'pounce' }
   /** Each player's customised colours (sent at the start of a game) */
@@ -108,7 +112,9 @@ export type GameMsg =
   /** Race: host → guest, someone reached the exit first */
   | { k: 'raceEnd'; winner: 'host' | 'guest'; ending: GameEnding }
   /** 👋 emote (keys 6-9), shown above the player's head */
-  | { k: 'emote'; e: number };
+  | { k: 'emote'; e: number }
+  /** 👀 a spectator arrived: send everything again (full snapshot, looks) */
+  | { k: 'resync' };
 
 /** Emotes, keys 6 → 9 */
 export const EMOTES = ['👋 Salut !', '👉 Par ici !', '😱 Au secours !', '🤫 Chut !'];

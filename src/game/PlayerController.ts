@@ -34,6 +34,8 @@ export class PlayerController {
   public isCrouching = false;
   public isSprinting = false;
   public stamina = 100;
+  /** Adrenaline: seconds of sprint that cost no stamina */
+  public freeSprint = 0;
   public maxStamina = 100;
   private exhausted = false;
   public flashlightOn = true;
@@ -273,16 +275,20 @@ export class PlayerController {
     const wantsSprint = active && !low && !this.noSprint && (k['ShiftLeft'] || k['ShiftRight'] || this.touchSprint) && fwd > 0.3;
     if (this.stamina < 1) this.exhausted = true;
     if (this.exhausted && this.stamina > 30) this.exhausted = false;
+    if (this.freeSprint > 0) {
+      this.freeSprint = Math.max(0, this.freeSprint - delta);
+      this.exhausted = false;
+    }
     if (wantsSprint && moving && !this.exhausted) {
       if (this.isCrouching) this.isCrouching = false;
       this.isSprinting = true;
-      this.stamina = Math.max(0, this.stamina - delta * this.sprintDrain);
+      if (this.freeSprint <= 0) this.stamina = Math.max(0, this.stamina - delta * this.sprintDrain);
     } else {
       this.isSprinting = false;
       this.stamina = Math.min(this.maxStamina, this.stamina + delta * (moving ? 10 : 18));
     }
 
-    const speed = this.isCrouching ? this.crouchSpeed : this.isSprinting ? this.sprintSpeed : this.walkSpeed;
+    const speed = this.isCrouching ? this.crouchSpeed : this.isSprinting ? this.sprintSpeed * (this.freeSprint > 0 ? 1.12 : 1) : this.walkSpeed;
     const wish = new THREE.Vector3();
     if (moving) {
       const sin = Math.sin(this.yaw);

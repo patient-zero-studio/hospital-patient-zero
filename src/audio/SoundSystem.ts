@@ -1730,6 +1730,52 @@ class SoundSystem {
     osc.stop(t + 0.13);
   }
 
+  /** Smoke grenade: a long hiss. */
+  public playHiss(seconds = 2.5) {
+    if (!this.ctx || !this.sfxGain) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const len = Math.floor(ctx.sampleRate * seconds);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 2500;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.25, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+    src.connect(hp);
+    hp.connect(g);
+    g.connect(this.sfxGain);
+    src.start(t);
+    src.stop(t + seconds + 0.05);
+  }
+
+  /** Jaw trap snapping shut (quieter far away). */
+  public playTrapSnap(dist = 0) {
+    if (!this.ctx || !this.sfxGain) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const v = Math.max(0.05, 1 - dist / 30);
+    for (const [f, d] of [[1800, 0.05], [420, 0.18], [2600, 0.04]] as const) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'square';
+      o.frequency.setValueAtTime(f, t);
+      o.frequency.exponentialRampToValueAtTime(f * 0.4, t + d);
+      g.gain.setValueAtTime(0.35 * v, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.05);
+      o.connect(g);
+      g.connect(this.sfxGain);
+      o.start(t);
+      o.stop(t + d + 0.08);
+    }
+  }
+
   public playBreakerClunk() {
     if (!this.ctx || !this.sfxGain) return;
     const t = this.ctx.currentTime;

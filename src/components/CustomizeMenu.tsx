@@ -79,6 +79,7 @@ const Preview: React.FC<{ look: Appearance; tab: Tab }> = ({ look, tab }) => {
       human.group.rotation.y = angle;
       monster.mesh.rotation.y = angle;
       if (isHuman) human.idle(dt);
+      else monster.tickFx(dt);
       const h = isHuman ? 1.0 : 1.25;
       camera.position.set(0, h + 0.2, isHuman ? 3.7 : 5.2);
       camera.lookAt(0, h, 0);
@@ -234,6 +235,7 @@ export const CustomizeMenu: React.FC<Props> = ({ username, initial, welcome, own
                 <Swatches label="Cheveux" colors={colors(PALETTES.humanHair, 'human', 'hair')} value={look.human.hair} onPick={(c) => set('human', 'hair', c)} />
                 <ItemPicker label="Accessoire" items={mine('human', 'acc')} value={look.human.acc} onPick={(v) => set('human', 'acc', v)} />
                 <ItemPicker label="Tenue" items={mine('human', 'outfit')} value={look.human.outfit} onPick={(v) => set('human', 'outfit', v)} />
+                <ItemPicker label="✨ Effet animé" items={mine('human', 'fx')} value={look.human.fx} onPick={(v) => set('human', 'fx', v)} />
                 <p className="text-[10px] font-mono text-zinc-600">Vu par votre partenaire en coop, et par le monstre en mode Chasse.</p>
               </>
             ) : (
@@ -243,6 +245,7 @@ export const CustomizeMenu: React.FC<Props> = ({ username, initial, welcome, own
                 <Swatches label="Lambeaux de blouse" colors={colors(PALETTES.monsterGown, 'monster', 'gown')} value={look.monster.gown} onPick={(c) => set('monster', 'gown', c)} />
                 <ItemPicker label="Accessoire" items={mine('monster', 'acc')} value={look.monster.acc} onPick={(v) => set('monster', 'acc', v)} />
                 <ItemPicker label="Tenue" items={mine('monster', 'outfit')} value={look.monster.outfit} onPick={(v) => set('monster', 'outfit', v)} />
+                <ItemPicker label="✨ Effet animé" items={mine('monster', 'fx')} value={look.monster.fx} onPick={(v) => set('monster', 'fx', v)} />
                 <p className="text-[10px] font-mono text-zinc-600">
                   Les créatures que vous affrontez prennent ces couleurs. En mode Chasse, c'est votre monstre quand vous le jouez.
                 </p>

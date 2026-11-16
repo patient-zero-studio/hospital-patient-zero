@@ -7,7 +7,7 @@ import { SEASONS, type Season } from './seasons';
 export type Tier = 'petit' | 'moyen' | 'style' | 'exclusif';
 export type Target = 'human' | 'monster';
 /** What a cosmetic changes: a colour slot, an accessory or a whole outfit. */
-export type Slot = 'gown' | 'hair' | 'skin' | 'eyes' | 'acc' | 'outfit';
+export type Slot = 'gown' | 'hair' | 'skin' | 'eyes' | 'acc' | 'outfit' | 'fx';
 
 export interface Cosmetic {
   id: string;
@@ -143,6 +143,15 @@ export const CATALOG: Cosmetic[] = [
   ev('poisson', 'm-pa-clown', 'Clown maléfique', 'monster', 'outfit', 'clownm', 'exclusif'),
 
   // ---- 🏆 Pass de saison (paliers 10, 20, 30) ----
+  // ✨ Animated skins
+  c('hfx-aura', 'Aura spectrale', 'human', 'fx', 'aura', 'exclusif'),
+  c('hfx-smoke', 'Traînée de fumée', 'human', 'fx', 'smoke', 'style'),
+  c('hfx-halo', 'Auréole dorée', 'human', 'fx', 'halo', 'style'),
+  c('hfx-sparks', 'Survolté', 'human', 'fx', 'sparks', 'exclusif'),
+  c('mfx-aura', 'Aura maudite', 'monster', 'fx', 'aura', 'exclusif'),
+  c('mfx-smoke', 'Brume noire', 'monster', 'fx', 'smoke', 'style'),
+  c('mfx-flames', 'Flammes infernales', 'monster', 'fx', 'flames', 'exclusif'),
+  c('mfx-rainbow', 'Yeux arc-en-ciel', 'monster', 'fx', 'rainbow', 'style'),
   { ...c('h-pass-crown', 'Couronne du survivant', 'human', 'acc', 'crown', 'style'), unlock: 'pass' },
   { ...c('m-pass-toxic', 'Patient Toxique', 'monster', 'outfit', 'toxic', 'style'), unlock: 'pass' },
   { ...c('h-pass-hazmat', 'Combinaison NRBC', 'human', 'outfit', 'hazmat', 'exclusif'), unlock: 'pass' },
@@ -163,7 +172,7 @@ export const seasonShop = (season: Season | null): Cosmetic[] => (season ? CATAL
 // ---------------------------------------------------------------------------
 // Wallet
 // ---------------------------------------------------------------------------
-export type SupplyKind = 'battery' | 'medkit' | 'sedative' | 'food' | 'alarm';
+export type SupplyKind = 'battery' | 'medkit' | 'sedative' | 'food' | 'alarm' | 'smoke' | 'trap';
 export interface Wallet {
   coins: number;
   owned: string[];
@@ -178,7 +187,7 @@ export const INFINITE_COINS = 1_000_000_000;
 /** Shows ∞ for an admin's bottomless purse. */
 export const fmtCoins = (n: number) => (n >= INFINITE_COINS / 10 ? '∞' : String(n));
 
-export const NEW_WALLET = (): Wallet => ({ coins: 100, owned: [], stash: { battery: 0, medkit: 0, sedative: 0, food: 0, alarm: 0 }, treats: {} });
+export const NEW_WALLET = (): Wallet => ({ coins: 100, owned: [], stash: { battery: 0, medkit: 0, sedative: 0, food: 0, alarm: 0, smoke: 0, trap: 0 }, treats: {} });
 
 export const sanitizeWallet = (w: unknown): Wallet => {
   const src = (w ?? {}) as Partial<Wallet>;
@@ -323,6 +332,8 @@ export const SUPPLY_NAMES: Record<SupplyKind, string> = {
   sedative: 'Sédatif',
   food: 'Barre de céréales',
   alarm: 'Réveil',
+  smoke: 'Fumigène',
+  trap: 'Piège à mâchoires',
 };
 
 /** Opens a box (mutates the wallet). Returns null if not enough coins. */
@@ -345,7 +356,7 @@ export const openBox = (w: Wallet, id: BoxId, rnd: () => number = Math.random): 
     return { kind: 'coins', coins: n, text: `${n} pièces` };
   }
   if (roll.kind === 'supplies') {
-    const kinds: SupplyKind[] = ['battery', 'medkit', 'sedative', 'food', 'alarm'];
+    const kinds: SupplyKind[] = ['battery', 'medkit', 'sedative', 'food', 'alarm', 'smoke', 'trap'];
     const got: Partial<Record<SupplyKind, number>> = {};
     for (let i = 0; i < roll.count; i++) {
       const k = kinds[Math.floor(rnd() * kinds.length)];
@@ -387,7 +398,7 @@ export const rollDailyGift = (w: Wallet, streak: number, rnd: () => number = Mat
     }
   }
   if (r < 0.22) {
-    const kinds: SupplyKind[] = ['battery', 'medkit', 'sedative', 'food', 'alarm'];
+    const kinds: SupplyKind[] = ['battery', 'medkit', 'sedative', 'food', 'alarm', 'smoke', 'trap'];
     const k = kinds[Math.floor(rnd() * kinds.length)];
     w.stash[k] += 1;
     const n = 15 + bonus;
@@ -474,7 +485,7 @@ export const claimAdvent = (w: Wallet, day: number, rnd: () => number = Math.ran
     }
   }
   if (r.supplies) {
-    const kinds: SupplyKind[] = ['battery', 'medkit', 'sedative', 'food', 'alarm'];
+    const kinds: SupplyKind[] = ['battery', 'medkit', 'sedative', 'food', 'alarm', 'smoke', 'trap'];
     const got: Partial<Record<SupplyKind, number>> = {};
     for (let i = 0; i < r.supplies; i++) {
       const k = kinds[Math.floor(rnd() * kinds.length)];
@@ -555,10 +566,12 @@ export interface Goods {
 export const HOBO_GOODS: Goods[] = [
   { kind: 'battery', name: 'Pile', price: 30, desc: '+55 % de batterie pour la lampe.' },
   { kind: 'food', name: 'Barre de céréales', price: 20, desc: 'Redonne du souffle.' },
-  { kind: 'medkit', name: 'Adrénaline', price: 60, desc: 'Endurance au maximum.' },
+  { kind: 'medkit', name: 'Adrénaline', price: 60, desc: 'Endurance au maximum + 6 s de sprint illimité.' },
   { kind: 'can', name: 'Canette', price: 10, desc: 'À lancer pour faire diversion.' },
   { kind: 'alarm', name: 'Réveil', price: 45, desc: 'Posez-le : il sonne et attire les monstres.' },
   { kind: 'sedative', name: 'Sédatif', price: 150, desc: 'Immobilise un monstre 5 secondes.' },
+  { kind: 'smoke', name: 'Fumigène', price: 80, desc: 'Un nuage épais : les monstres ne vous voient plus.' },
+  { kind: 'trap', name: 'Piège à mâchoires', price: 110, desc: 'Bloque 6 s le premier monstre qui marche dessus.' },
 ];
 
 /** Pays for hobo goods (mutates). Returns an error message or null. */

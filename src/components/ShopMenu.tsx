@@ -189,6 +189,7 @@ export const CosmeticBadge: React.FC<{ c: Cosmetic; size?: number }> = ({ c, siz
     fishhat: '🐟', clownnose: '🔴', clown: '🤡', clownm: '🤡',
     evilsanta: '🎅',
     crown: '👑', toxic: '☣️', hazmat: '☢️', nightvision: '🥽', abyss: '🌊', veteran: '🎖️', legend: '🩸',
+    aura: '🔮', smoke: '💨', halo: '😇', sparks: '⚡', flames: '🔥', rainbow: '🌈',
     witchhat: '🧙', pumpkinhead: '🎃', witch: '🧙', vampire: '🧛', reaper: '💀', mummy: '🧻', pumpking: '🎃',
   };
   return (
@@ -202,7 +203,11 @@ export const CosmeticBadge: React.FC<{ c: Cosmetic; size?: number }> = ({ c, siz
         boxShadow: c.tier === 'exclusif' ? `0 0 16px ${TIER_COLOR[c.tier]}88` : undefined,
       }}
     >
-      {!isColor && <span style={{ fontSize: size * 0.5 }}>{emoji[c.value] ?? '✨'}</span>}
+      {!isColor && (
+        <span className={c.slot === 'fx' ? 'animate-pulse' : undefined} style={{ fontSize: size * 0.5 }}>
+          {emoji[c.value] ?? '✨'}
+        </span>
+      )}
     </div>
   );
 };
@@ -673,7 +678,7 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
                   const total = Object.values(st).reduce((a, b) => a + b, 0);
                   return total > 0 ? (
                     <p className="text-[11px] font-mono text-zinc-400 mt-3">
-                      Réserve : {st.battery} pile(s), {st.medkit} adrénaline(s), {st.sedative} sédatif(s), {st.food} barre(s), {st.alarm} réveil(s) — à récupérer
+                      Réserve : {st.battery} pile(s), {st.medkit} adrénaline(s), {st.sedative} sédatif(s), {st.food} barre(s), {st.alarm} réveil(s), {st.smoke} fumigène(s), {st.trap} piège(s) — à récupérer
                       auprès du SDF dans l'entrepôt.
                     </p>
                   ) : null;

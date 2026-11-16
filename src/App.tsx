@@ -25,6 +25,7 @@ import { ProgressionMenu, progressionAlerts } from './components/ProgressionMenu
 import { TUTO_STEPS, TutorialOverlay, markTutorialDone, tutorialDone } from './components/Tutorial';
 import { levelReward } from './levels';
 import { FriendsPanel, InviteToast } from './components/FriendsPanel';
+import { RedeemCode } from './components/RedeemCode';
 import { CHAT_PRESETS } from './net/NetClient';
 import { PlayerProfile } from './components/PlayerProfile';
 import { ShopMenu } from './components/ShopMenu';
@@ -113,6 +114,7 @@ const EMPTY_HUD: HudSnapshot = {
   partnerName: null,
   partnerDead: false,
   spectating: false,
+  watching: false,
   versusRole: null,
   race: false,
   canBlind: false,
@@ -121,6 +123,7 @@ const EMPTY_HUD: HudSnapshot = {
   runTreats: 0,
   presents: null,
   survival: null,
+  speedrun: null,
   treatEmoji: null,
   selectedSlot: 0,
   voice: null,
@@ -177,6 +180,8 @@ export default function App() {
     partner: string;
     mode: 'coop' | 'versus' | 'race';
     versusRole: 'monster' | 'survivor' | null;
+    /** 👀 only watching a friend's game */
+    watching?: boolean;
   } | null>(null);
   /** Versus result screen. */
   const [versusResult, setVersusResult] = useState<{ won: boolean; reason: string } | null>(null);
@@ -282,6 +287,7 @@ export default function App() {
         onHud: setHud,
         onGameOver: () => {
           document.exitPointerLock?.();
+          if (onlineRef.current?.watching) return stopWatchingRef.current('👀 La partie que tu regardais est terminée.');
           // Campaign: a failed attempt still counts in the total time
           const cp = campaignRef.current;
           if (cp && !onlineRef.current) cp.time += engineRef.current?.runTime ?? 0;
@@ -422,6 +428,7 @@ export default function App() {
 
   const onVictory = (ending: GameEnding) => {
     document.exitPointerLock?.();
+    if (onlineRef.current?.watching) return stopWatchingRef.current('👀 Ils s\'en sont sortis ! La partie est terminée.');
     const e = engineRef.current!;
     grantRewardRef.current(e.builtDifficulty ?? 2);
     bankTreatsRef.current();
@@ -920,6 +927,13 @@ export default function App() {
       /* offline */
     }
   }, []);
+  const refreshFriendsRef = useRef(refreshFriends);
+  refreshFriendsRef.current = refreshFriends;
+  const [redeemOpen, setRedeemOpen] = useState(false);
+  // ⏱️ Personal bests for the speedrun chrono
+  useEffect(() => {
+    if (engineRef.current && wallet?.bests) engineRef.current.speedBests = wallet.bests;
+  }, [wallet]);
   // Polled while in the menus: who is online, requests, invitations
   useEffect(() => {
     if (!session || isPlaying) return;
@@ -1105,6 +1119,34 @@ export default function App() {
       case 'error':
         setLobby((l) => ({ ...l, status: l.status === 'connecting' ? 'idle' : l.status, error: e.error }));
         break;
+      case 'watch-start': {
+        const net = netRef.current;
+        if (!net || !engine) return;
+        const link: GameLink = {
+          role: 'guest',
+          partnerName: e.player,
+          mode: 'coop',
+          versusRole: null,
+          send: () => {},
+          setHandler: (fn) => net.onRelay(fn ? (d) => fn(d as GameMsg) : null),
+        };
+        engine.setNet(link);
+        engine.watchOnly = true;
+        engine.levelSeed = typeof e.seed === 'number' ? e.seed : null;
+        onlineRef.current = { role: 'guest', partner: e.player, mode: 'coop', versusRole: null, watching: true };
+        setOnline(onlineRef.current);
+        setVersusResult(null);
+        setMpOpen(false);
+        setFriendsOpen(false);
+        beginRun(true, e.difficulty as Difficulty, toMpChapter(e.chapter));
+        break;
+      }
+      case 'watch-end':
+        if (onlineRef.current?.watching) stopWatchingRef.current('👀 ' + e.reason);
+        break;
+      case 'dm':
+        refreshFriendsRef.current();
+        break;
       case 'start': {
         const l = lobbyRef.current;
         const role = l.status === 'hosting' ? 'host' : 'guest';
@@ -1175,9 +1217,30 @@ export default function App() {
     setLobby((l) => ({ ...l, status: 'idle', partner: null, code: undefined, error: null }));
   };
 
+  /** 👀 Watch a friend's co-op game live */
+  const watchFriend = async (name: string) => {
+    sound.init();
+    const net = await ensureNet().catch(() => null);
+    net?.watch(name);
+  };
+  const stopWatching = (reason: string | null) => {
+    netRef.current?.unwatch();
+    leaveOnlineGame();
+    if (reason) setNotice(reason);
+  };
+  const stopWatchingRef = useRef(stopWatching);
+  stopWatchingRef.current = stopWatching;
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
   /** Back to solo (keeps the account session). */
   const leaveOnlineGame = () => {
     engineRef.current?.stop();
+    if (engineRef.current) engineRef.current.watchOnly = false;
     engineRef.current?.setNet(null);
     setOnline(null);
     setVersusResult(null);
@@ -1190,6 +1253,7 @@ export default function App() {
   };
 
   const handleMainMenu = () => {
+    if (onlineRef.current?.watching) return stopWatching(null);
     if (onlineRef.current) {
       leaveRoom();
       leaveOnlineGame();
@@ -1262,6 +1326,7 @@ export default function App() {
           notifications={session ? pushState : null}
           onToggleNotifications={togglePush}
           boost={boost}
+          onRedeem={session ? () => setRedeemOpen(true) : undefined}
           onFriends={
             session
               ? () => {
@@ -1271,7 +1336,7 @@ export default function App() {
               : () => setMpOpen(true)
           }
           friendsOnline={friends ? friends.friends.filter((f) => f.status !== 'offline').length : null}
-          friendsAlert={friends ? friends.requests.length + friends.invites.length : 0}
+          friendsAlert={friends ? friends.requests.length + friends.invites.length + friends.friends.reduce((n, f) => n + (f.unread ?? 0), 0) : 0}
           giftReady={!!wallet?.dailyAvailable && !!wallet.shopUnlocked}
           season={season}
           adventReady={!!wallet?.shopUnlocked && !!wallet.advent && wallet.advent.claimed.length < wallet.advent.open}
@@ -1397,6 +1462,10 @@ export default function App() {
         </div>
       )}
       {levelUp && <LevelUpToast level={levelUp.level} coins={levelUp.coins} onDone={() => setLevelUp(null)} />}
+      {redeemOpen && session && !isPlaying && <RedeemCode token={session.token} onWallet={setWallet} onClose={() => setRedeemOpen(false)} />}
+      {notice && !isPlaying && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[95] px-4 py-2 bg-zinc-950 border border-sky-700 text-sky-100 font-mono text-xs shadow-lg">{notice}</div>
+      )}
       {friendsOpen && session && !isPlaying && (
         <FriendsPanel
           view={friends}
@@ -1413,6 +1482,13 @@ export default function App() {
             const r = await api.gift(tokenOrThrow(), to, what);
             setWallet(r);
             return r.message;
+          }}
+          token={session.token}
+          me={session.username}
+          referrals={wallet?.referrals ?? 0}
+          onWatch={(n) => {
+            setFriendsOpen(false);
+            watchFriend(n);
           }}
           onCreateRoom={
             lobby.status === 'idle'
@@ -1518,6 +1594,7 @@ export default function App() {
           blindLeft={hud.blindLeft}
           partnerDead={hud.partnerDead}
           spectating={hud.spectating}
+          watching={hud.watching}
           flashlightBattery={hud.battery}
           flashlightOn={hud.flashlightOn}
           stamina={hud.stamina}
@@ -1547,6 +1624,7 @@ export default function App() {
           runTreats={hud.runTreats}
           presents={hud.presents}
           survival={hud.survival}
+          speedrun={hud.speedrun}
           treatEmoji={hud.treatEmoji}
           selectedSlot={hud.selectedSlot}
           voice={hud.voice}

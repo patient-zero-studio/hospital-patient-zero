@@ -25,6 +25,11 @@ export type LobbyEvent =
   | { t: 'queued'; waiting: number }
   | { t: 'chat'; from: string; i: number }
   | { t: 'unqueued' }
+  /** 👀 spectator: the game you watch */
+  | ({ t: 'watch-start'; seed?: number; player: string; other?: string } & RoomSettings)
+  | { t: 'watch-end'; reason: string }
+  /** 💬 a friend sent you a message */
+  | { t: 'dm'; from: string }
   | { t: 'disconnected' };
 
 export class NetClient {
@@ -110,6 +115,13 @@ export class NetClient {
   }
   public unqueue() {
     this.raw({ t: 'unqueue' });
+  }
+  /** 👀 Watch a friend's co-op game */
+  public watch(name: string) {
+    this.raw({ t: 'watch', name });
+  }
+  public unwatch() {
+    this.raw({ t: 'unwatch' });
   }
 
   /** In-game messages to the partner. */

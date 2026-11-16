@@ -34,6 +34,8 @@ interface HUDProps {
   runTreats?: number;
   presents?: number | null;
   survival?: { wave: number; time: number } | null;
+  /** ⏱️ Speedrun chrono */
+  speedrun?: { time: number; best: number | null } | null;
   treatEmoji?: string | null;
   /** Hotbar slot [X] drops */
   selectedSlot?: number;
@@ -46,6 +48,8 @@ interface HUDProps {
   partnerName?: string | null;
   partnerDead?: boolean;
   spectating?: boolean;
+  /** 👀 watching a friend's game (not dead) */
+  watching?: boolean;
   versusRole?: 'monster' | 'survivor' | null;
   timeLeft?: number | null;
   /** Race mode: first one out wins */
@@ -61,6 +65,9 @@ interface HUDProps {
 const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 /** Versus clock, shown to both players. */
+/** 1:23.4 */
+const fmtRun = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
+
 const VersusTimer: React.FC<{ timeLeft: number; role: 'monster' | 'survivor' }> = ({ timeLeft, role }) => (
   <div className="absolute top-5 left-1/2 -translate-x-1/2 z-30 text-center">
     <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">
@@ -97,6 +104,7 @@ export const HUD: React.FC<HUDProps> = ({
   runTreats = 0,
   presents = null,
   survival = null,
+  speedrun = null,
   treatEmoji = null,
   selectedSlot = 0,
   touch = false,
@@ -107,6 +115,7 @@ export const HUD: React.FC<HUDProps> = ({
   partnerName,
   partnerDead,
   spectating,
+  watching = false,
   voice,
   versusRole,
   timeLeft,
@@ -280,6 +289,19 @@ export const HUD: React.FC<HUDProps> = ({
       {runCoins > 0 && (
         <div className="absolute bottom-[100px] left-1/2 -translate-x-1/2 px-2 py-0.5 bg-black/60 border border-amber-700/60 text-amber-300 font-mono text-[11px]">
           🪙 {runCoins} pièce{runCoins > 1 ? 's' : ''} trouvée{runCoins > 1 ? 's' : ''}
+        </div>
+      )}
+
+      {/* ⏱️ Speedrun */}
+      {speedrun && (
+        <div className="absolute top-14 right-3 px-3 py-1 bg-black/70 border border-sky-700 font-mono text-right pointer-events-none">
+          <div className="text-lg font-bold text-sky-200 tabular-nums">⏱️ {fmtRun(speedrun.time)}</div>
+          {speedrun.best != null && (
+            <div className={`text-[10px] tabular-nums ${speedrun.time <= speedrun.best ? 'text-emerald-400' : 'text-red-400'}`}>
+              Record {fmtRun(speedrun.best)} ({speedrun.time <= speedrun.best ? '-' : '+'}
+              {fmtRun(Math.abs(speedrun.best - speedrun.time))})
+            </div>
+          )}
         </div>
       )}
 
@@ -523,7 +545,13 @@ export const HUD: React.FC<HUDProps> = ({
       )}
 
       {/* Spectator banner */}
-      {spectating && (
+      {watching && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 text-center px-4 py-1.5 bg-black/60 border border-sky-700">
+          <div className="text-sky-300 font-mono tracking-[0.3em] text-xs">👀 EN DIRECT</div>
+          <div className="text-zinc-200 font-serif italic text-sm">Tu regardes {partnerName} · [Échap] pour quitter</div>
+        </div>
+      )}
+      {spectating && !watching && (
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 z-30 text-center">
           <div className="text-red-500 font-mono tracking-[0.4em] text-sm">FIN DE PARTIE POUR VOUS</div>
           <div className="text-zinc-300 font-serif italic text-base mt-1">Vous suivez {partnerName ?? (race ? 'votre rival' : 'votre partenaire')}…</div>

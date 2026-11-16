@@ -43,3 +43,7 @@ export const isBadName = (name: string): boolean => {
   }
   return false;
 };
+
+/** Chat text: every rude word becomes *** (punctuation around it is kept). */
+export const censorText = (text: string): string =>
+  text.replace(/[^\s.,;:!?'"()]+/g, (w) => (isBadName(w) ? '*'.repeat(Math.min(6, w.length)) : w));

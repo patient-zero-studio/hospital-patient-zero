@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Ban, Loader2, Pencil, RefreshCw, ShieldCheck } from 'lucide-react';
 import { api, AdminStats, AdminUser } from '../net/api';
+import type { GiftCodeView } from '../net/api';
+import { CATALOG } from '../economy';
 import { levelColor } from '../levels';
 
 const Tile: React.FC<{ label: string; value: React.ReactNode; color?: string }> = ({ label, value, color = '#e4e4e7' }) => (
@@ -133,6 +135,7 @@ export const AdminDashboard: React.FC<{ token: string }> = ({ token }) => {
         </>
       )}
 
+      <CodesPanel token={token} />
       <ReportsPanel token={token} />
       <BackupsPanel token={token} />
 
@@ -218,6 +221,110 @@ export const AdminDashboard: React.FC<{ token: string }> = ({ token }) => {
 };
 
 /** 💾 Daily backups of the accounts: restore one if something went wrong. */
+/** 🎟️ Gift codes for YouTube / TikTok / events */
+const CodesPanel: React.FC<{ token: string }> = ({ token }) => {
+  const [codes, setCodes] = useState<GiftCodeView[] | null>(null);
+  const [form, setForm] = useState({ code: '', coins: 500, treats: 0, skin: '', max: 100, days: 30 });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => {
+    api.adminCodes(token).then(setCodes).catch((e) => setMsg({ ok: false, text: (e as Error).message }));
+  }, [token]);
+  const skins = CATALOG.filter((c) => !c.value.startsWith('#'));
+  const num = (k: 'coins' | 'treats' | 'max' | 'days') => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: Math.max(0, Number(e.target.value) || 0) }));
+  const field = 'bg-black border border-zinc-700 px-2 py-1 text-xs text-zinc-100 font-mono w-full';
+  return (
+    <div className="p-2.5 border border-zinc-800 bg-black/40">
+      <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-zinc-500 mb-1.5">🎟️ Codes cadeaux</div>
+      {msg && <p className={`text-xs font-mono mb-2 ${msg.ok ? 'text-emerald-400' : 'text-red-400'}`}>{msg.text}</p>}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[10px] font-mono text-zinc-500">
+        <label>
+          Code (vide = au hasard)
+          <input className={field} value={form.code} maxLength={20} placeholder="NOEL2026" onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))} />
+        </label>
+        <label>
+          Pièces
+          <input className={field} type="number" value={form.coins} onChange={num('coins')} />
+        </label>
+        <label>
+          Friandises (événement en cours)
+          <input className={field} type="number" value={form.treats} onChange={num('treats')} />
+        </label>
+        <label className="col-span-2 sm:col-span-1">
+          Skin offert
+          <select className={field} value={form.skin} onChange={(e) => setForm((f) => ({ ...f, skin: e.target.value }))}>
+            <option value="">— aucun —</option>
+            {skins.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.target === 'human' ? 'humain' : 'monstre'})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Joueurs max (0 = illimité)
+          <input className={field} type="number" value={form.max} onChange={num('max')} />
+        </label>
+        <label>
+          Valable (jours, 0 = toujours)
+          <input className={field} type="number" value={form.days} onChange={num('days')} />
+        </label>
+      </div>
+      <button
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setMsg(null);
+          try {
+            const r = await api.adminCodeCreate(token, { ...form, skin: form.skin || undefined, code: form.code || undefined });
+            setCodes(r.codes);
+            setMsg({ ok: true, text: r.message });
+            setForm((f) => ({ ...f, code: '' }));
+          } catch (e) {
+            setMsg({ ok: false, text: (e as Error).message });
+          } finally {
+            setBusy(false);
+          }
+        }}
+        className="mt-2 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-mono text-[11px] uppercase font-bold disabled:opacity-40"
+      >
+        Créer le code
+      </button>
+      <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+        {!codes ? (
+          <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />
+        ) : codes.length === 0 ? (
+          <p className="text-[11px] font-mono text-zinc-600">Aucun code pour l'instant.</p>
+        ) : (
+          codes.map((c) => {
+            const expired = (c.until && Date.now() > c.until) || (c.max && c.used >= c.max);
+            return (
+              <div key={c.code} className={`flex items-center gap-2 text-[11px] font-mono ${expired ? 'opacity-50' : ''}`}>
+                <span data-no-i18n className="text-amber-200 tracking-widest">{c.code}</span>
+                <span className="flex-1 text-zinc-400 truncate">
+                  {[c.coins ? `${c.coins} 🪙` : '', c.treats ? `${c.treats} 🍬` : '', c.skin ? `skin ${CATALOG.find((x) => x.id === c.skin)?.name ?? c.skin}` : ''].filter(Boolean).join(' + ')} · {c.used}
+                  {c.max ? `/${c.max}` : ''} utilisé{c.used > 1 ? 's' : ''}
+                  {c.until ? ` · jusqu'au ${new Date(c.until).toLocaleDateString('fr-FR')}` : ''}
+                </span>
+                <button
+                  onClick={async () => {
+                    const r = await api.adminCodeDelete(token, c.code).catch(() => null);
+                    if (r) setCodes(r.codes);
+                  }}
+                  className="text-zinc-600 hover:text-red-400"
+                  title="Supprimer"
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+};
+
 const BackupsPanel: React.FC<{ token: string }> = ({ token }) => {
   const [b, setB] = useState<{ days: string[]; accounts: number } | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);

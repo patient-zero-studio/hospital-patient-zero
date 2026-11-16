@@ -71,6 +71,8 @@ interface StartScreenProps {
   boost?: Boost | null;
   /** friends list (null online count = not logged in) */
   onFriends?: () => void;
+  /** 🎟️ enter a gift code */
+  onRedeem?: () => void;
   friendsOnline?: number | null;
   /** friend requests + invitations waiting */
   friendsAlert?: number;
@@ -128,6 +130,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   progressionAlert = 0,
   boost = null,
   onFriends,
+  onRedeem,
   friendsOnline = null,
   friendsAlert = 0,
   season = null,
@@ -498,6 +501,15 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                 {friendsAlert > 0 && (
                   <span className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1 rounded-full bg-red-600 text-white text-[11px] flex items-center justify-center animate-pulse">{friendsAlert}</span>
                 )}
+              </button>
+            )}
+            {onRedeem && (
+              <button
+                onClick={onRedeem}
+                className="px-6 py-2.5 bg-black/60 hover:bg-zinc-900 text-zinc-200 font-mono text-xs uppercase tracking-widest flex items-center gap-3 transition-all cursor-pointer border border-zinc-700 hover:border-amber-400"
+              >
+                <span>🎟️</span>
+                <span>Code cadeau</span>
               </button>
             )}
             {onLeaderboard && (

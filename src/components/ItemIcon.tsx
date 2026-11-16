@@ -1,5 +1,5 @@
 import React from 'react';
-import { Key, KeyRound, CreditCard, Zap, BatteryCharging, HeartPulse, FileText, Disc, FileCheck, Flashlight, Package, CupSoda, Syringe, Hammer, Cookie, AlarmClock, Wrench } from 'lucide-react';
+import { Key, KeyRound, CreditCard, Zap, BatteryCharging, HeartPulse, FileText, Disc, FileCheck, Flashlight, Package, CupSoda, Syringe, Hammer, Cookie, AlarmClock, Wrench, CloudFog, Cog } from 'lucide-react';
 
 /** Icon for an inventory item, shared by the hotbar and the inventory screen. */
 export const ItemIcon: React.FC<{ icon: string; className?: string }> = ({ icon, className = 'w-6 h-6' }) => {
@@ -30,6 +30,10 @@ export const ItemIcon: React.FC<{ icon: string; className?: string }> = ({ icon,
       return <Hammer className={`${className} text-amber-600`} />;
     case 'Cookie':
       return <Cookie className={`${className} text-amber-300`} />;
+    case 'CloudFog':
+      return <CloudFog className={`${className} text-slate-300`} />;
+    case 'Cog':
+      return <Cog className={`${className} text-orange-400`} />;
     case 'AlarmClock':
       return <AlarmClock className={`${className} text-red-400`} />;
     case 'Wrench':

@@ -212,6 +212,16 @@ export const PauseSettingsModal: React.FC<PauseSettingsModalProps> = ({
             </div>
 
             <div className="flex items-center justify-between text-xs font-mono text-zinc-300">
+              <span>⏱️ Chrono speedrun (avec ton record)</span>
+              <input
+                type="checkbox"
+                checked={!!controlSettings.speedrun}
+                onChange={(e) => onUpdateControls({ speedrun: e.target.checked })}
+                className="accent-red-600 cursor-pointer w-4 h-4"
+              />
+            </div>
+
+            <div className="flex items-center justify-between text-xs font-mono text-zinc-300">
               <span>Oscillation de Marche (Head Bob)</span>
               <input
                 type="checkbox"
