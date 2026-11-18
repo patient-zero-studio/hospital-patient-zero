@@ -66,6 +66,25 @@ export interface WalletView {
   gallery?: { endings: string[]; docs: string[] };
   /** 🛡️ your clan's tag */
   clanTag?: string | null;
+  /** 🏅 ranked season */
+  ranked?: RankedSelf;
+}
+
+export interface RankedSelf {
+  season: string;
+  name: string;
+  ends: number;
+  points: number;
+  tier: string;
+  next: { id: string; min: number } | null;
+  wins: number;
+  losses: number;
+  history: { season: string; tier: string; points: number }[];
+}
+export interface RankedView extends RankedSelf {
+  rank: number | null;
+  counts: Record<string, number>;
+  top: { username: string; points: number; tier: string; level: number; clan: string | null }[];
 }
 
 export interface ClanSummary {
@@ -171,6 +190,7 @@ export interface PlayerProfileView {
   friend: boolean;
   me: boolean;
   clan?: { name: string; tag: string; emblem: string; color: string } | null;
+  ranked?: { tier: string; points: number; history: { season: string; tier: string; points: number }[] };
 }
 
 export interface BoardEntry {
@@ -297,8 +317,9 @@ export const api = {
     if (!res.ok) throw new Error(data.error || 'Serveur injoignable.');
     return data;
   },
-  reward: (token: string, difficulty: number, found: number): Promise<WalletView & { gained: number; xp?: number }> =>
-    post('/api/wallet/reward', { difficulty, found }, token),
+  ranked: (token: string): Promise<RankedView> => getJson('/api/ranked', token),
+  reward: (token: string, difficulty: number, found: number, chapter = 1): Promise<WalletView & { gained: number; xp?: number; rankGain?: { gain: number; points: number; tier: string; promoted: boolean } | null }> =>
+    post('/api/wallet/reward', { difficulty, found, chapter }, token),
   claimWeekly: (token: string, id: string): Promise<WalletView & { result: BoxResult }> => post('/api/weekly/claim', { id }, token),
   claimPass: (token: string, tier: number): Promise<WalletView & { result: BoxResult }> => post('/api/pass/claim', { tier }, token),
   xmasReward: (token: string, presents: number): Promise<WalletView & { message: string }> => post('/api/event/xmas', { presents }, token),
@@ -320,7 +341,7 @@ export const api = {
   },
   submitSurvival: (token: string, time: number, wave: number): Promise<WalletView & { record: boolean; rank: number | null; coins: number; xp: number }> =>
     post('/api/survival', { time, wave }, token),
-  xpDeath: (token: string): Promise<WalletView & { xp: number }> => post('/api/xp/death', {}, token),
+  xpDeath: (token: string, difficulty = 1): Promise<WalletView & { xp: number; rankLost?: number }> => post('/api/xp/death', { difficulty }, token),
   adminBoost: (token: string, kind: BoostKind | null, hours: number): Promise<WalletView> => post('/api/admin/boost', { kind, hours }, token),
   /** Event on for everyone (null = none, undefined = server unreachable). */
   async season(): Promise<Season | null | undefined> {

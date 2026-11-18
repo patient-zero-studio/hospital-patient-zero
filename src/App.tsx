@@ -30,6 +30,8 @@ import { ClansPanel } from './components/ClansPanel';
 import { MusicMenu } from './components/MusicMenu';
 import { GalleryMenu } from './components/GalleryMenu';
 import { endingKey } from './gallery';
+import { tierOf } from './ranked';
+import { RankedMenu } from './components/RankedMenu';
 import { CHAT_PRESETS } from './net/NetClient';
 import { PlayerProfile } from './components/PlayerProfile';
 import { ShopMenu } from './components/ShopMenu';
@@ -718,11 +720,14 @@ export default function App() {
     try {
       // Exploration gives no coins, but getting out unlocks the shop
       const wasLocked = wallet ? !wallet.shopUnlocked : false;
-      const r = await api.reward(s.token, diff, diff <= 1 ? 0 : (engineRef.current?.state.runCoins ?? 0));
+      const r = await api.reward(s.token, diff, diff <= 1 ? 0 : (engineRef.current?.state.runCoins ?? 0), engineRef.current?.builtChapter ?? 1);
+      const rg = r.rankGain;
+      const rt = rg ? tierOf(rg.points) : null;
+      const rank = rg && rt ? `  ·  ${rt.emoji} +${rg.gain} pts${rg.promoted ? ` — PROMU ${rt.name.toUpperCase()} !` : ` (${rt.name} ${rg.points})`}` : '';
       setWallet(r);
       if (wasLocked && r.shopUnlocked) setRewardMsg('🛒 BOUTIQUE DÉBLOQUÉE ! Skins, boîtes mystère et cadeau du jour t\'attendent au menu.');
       else {
-        const xp = r.xp ? `  ·  ⭐ +${r.xp} XP` : '';
+        const xp = (r.xp ? `  ·  ⭐ +${r.xp} XP` : '') + rank;
         if (diff <= 1) setRewardMsg(`Mode Exploration : pas de pièces.${xp}`);
         else if (r.admin) setRewardMsg(`🪙 Admin : pièces infinies${xp}`);
         else if (r.gained > 0) setRewardMsg(`🪙 +${r.gained} pièces — total ${r.wallet.coins}${xp}`);
@@ -753,7 +758,7 @@ export default function App() {
     if (!s || onlineRef.current?.mode === 'versus') return;
     try {
       await new Promise((r) => setTimeout(r, 1500));
-      setWallet(await api.xpDeath(s.token));
+      setWallet(await api.xpDeath(s.token, engineRef.current?.builtDifficulty ?? 1));
     } catch {
       /* offline */
     }
@@ -939,6 +944,7 @@ export default function App() {
   const [clansOpen, setClansOpen] = useState(false);
   const [musicOpen, setMusicOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  const [rankedOpen, setRankedOpen] = useState(false);
   /** 🖼️ Documents picked up (and the ending reached) go to the gallery */
   const reportGallery = (ending?: GameEnding) => {
     const s = sessionRef.current;
@@ -1356,6 +1362,8 @@ export default function App() {
           clanTag={wallet?.clanTag ?? null}
           onMusic={() => setMusicOpen(true)}
           onGallery={session ? () => setGalleryOpen(true) : undefined}
+          onRanked={session ? () => setRankedOpen(true) : undefined}
+          rankTier={wallet?.ranked?.tier ?? null}
           onFriends={
             session
               ? () => {
@@ -1504,6 +1512,7 @@ export default function App() {
           }}
         />
       )}
+      {rankedOpen && session && !isPlaying && <RankedMenu token={session.token} me={session.username} onProfile={setProfileOf} onClose={() => setRankedOpen(false)} />}
       {musicOpen && !isPlaying && <MusicMenu token={session?.token ?? null} wallet={wallet} onWallet={setWallet} onClose={() => setMusicOpen(false)} />}
       {galleryOpen && session && !isPlaying && (
         <GalleryMenu endings={wallet?.gallery?.endings ?? []} docs={wallet?.gallery?.docs ?? []} achDone={wallet?.ach?.done ?? {}} onClose={() => setGalleryOpen(false)} />

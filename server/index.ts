@@ -41,6 +41,7 @@ import { challengeMet, dailyChallenge } from '../src/challenges.ts';
 import { debouncedSaver, makeStore } from './storage.ts';
 import { DAILY_XP, DEATH_XP, ESCAPE_XP, levelOf, levelReward } from '../src/levels.ts';
 import { censorText, isBadName } from '../src/moderation.ts';
+import { RANK_TIERS, nextTier, rankLoss, rankWin, tierOf } from '../src/ranked.ts';
 import { CLAN_COLORS, CLAN_EMBLEMS, CLAN_MAX, CLAN_NAME_RE, CLAN_PRICE, CLAN_PRIZES, CLAN_TAG_RE } from '../src/clans.ts';
 import { MENU_TRACKS } from '../src/music.ts';
 import { isEndingKey } from '../src/gallery.ts';
@@ -134,6 +135,9 @@ interface User {
   /** 🖼️ gallery: endings seen, documents found */
   endings?: string[];
   docs?: string[];
+  /** 🏅 ranked season (month): points, best tier; past seasons */
+  rank?: { season: string; points: number; best: number; wins: number; losses: number };
+  rankHistory?: { season: string; tier: string; points: number }[];
 }
 
 const store = makeStore(DATA_DIR);
@@ -374,12 +378,14 @@ const settings: {
   notifiedSeason?: string | null;
   weekPaid?: string;
   lastPodium?: { username: string; xp: number; place: number }[];
+  /** 🏅 last ranked season paid */
+  rankPaid?: string;
 } = await (async () => {
   try {
     const raw = await store.load('settings');
     const s = raw ? JSON.parse(raw) : {};
     const boost = s.boost && BOOST_KINDS.includes(s.boost.kind) && Number(s.boost.until) > Date.now() ? { kind: s.boost.kind, until: Number(s.boost.until) } : undefined;
-    return { season: isSeasonSetting(s.season) ? s.season : 'auto', boost, notifiedSeason: s.notifiedSeason, weekPaid: s.weekPaid, lastPodium: Array.isArray(s.lastPodium) ? s.lastPodium : [] };
+    return { season: isSeasonSetting(s.season) ? s.season : 'auto', boost, notifiedSeason: s.notifiedSeason, weekPaid: s.weekPaid, lastPodium: Array.isArray(s.lastPodium) ? s.lastPodium : [], rankPaid: s.rankPaid };
   } catch {
     return { season: 'auto' as SeasonSetting };
   }
@@ -462,6 +468,7 @@ const shopOpenFor = (u: User) => isAdmin(u) || !!u.shopUnlocked || walletOf(u).o
 const SHOP_LOCKED = 'Boutique verrouillée : échappe-toi de l\'hôpital une fois (le mode Exploration suffit) pour la débloquer.';
 
 const walletView = (u: User) => ({
+  ranked: rankView(u),
   tracks: u.tracks ?? [],
   gallery: { endings: u.endings ?? [], docs: u.docs ?? [] },
   clanTag: u.clan ? (clans.get(u.clan)?.tag ?? null) : null,
@@ -920,6 +927,7 @@ app.get('/api/player/:name', (req, res) => {
     trophies: u.trophies ?? [],
     friend: friendsOf(me).includes(key),
     me: key === me.username.toLowerCase(),
+    ranked: { tier: tierOf(rankOf(u).points).id, points: rankOf(u).points, history: (u.rankHistory ?? []).slice(-6) },
     clan: u.clan && clans.get(u.clan) ? { name: clans.get(u.clan)!.name, tag: clans.get(u.clan)!.tag, emblem: clans.get(u.clan)!.emblem, color: clans.get(u.clan)!.color } : null,
   });
 });
@@ -971,6 +979,7 @@ const checkSeasonNotify = () => {
 // ---------------------------------------------------------------------------
 const WEEK_PRIZES = [1000, 600, 300];
 const payLastWeek = () => {
+  payRankedSeason();
   const cur = weekKey();
   if (settings.weekPaid === cur) return;
   const prev = weekKey(new Date(Date.now() - 7 * 86400000));
@@ -1210,6 +1219,7 @@ app.post('/api/wallet/reward', (req, res) => {
   const now = Date.now();
   if (user.lastReward && now - user.lastReward < 20000) return res.json({ gained: 0, xp: 0, ...walletView(user) });
   const diff = Math.min(5, Math.max(1, Math.floor(Number(req.body?.difficulty)) || 1));
+  const rankGain = rankEscape(user, diff, Math.floor(Number(req.body?.chapter)) || 1);
   const base = rewardFor(diff);
   const found = base > 0 ? Math.min(MAX_FOUND_COINS, Math.max(0, Math.floor(Number(req.body?.found) || 0))) : 0;
   const gained = (base + found) * boostMul('coins');
@@ -1221,7 +1231,7 @@ app.post('/api/wallet/reward', (req, res) => {
   bumpStat('escapes');
   if (diff >= 2) payReferral(user);
   saveUsers();
-  res.json({ gained, xp, ...walletView(user) });
+  res.json({ gained, xp, rankGain, ...walletView(user) });
 });
 
 // A lost run still gives a little XP
@@ -1233,8 +1243,10 @@ app.post('/api/xp/death', (req, res) => {
   user.lastDeathXp = now;
   addXp(user, DEATH_XP);
   bumpStat('deaths');
+  const diff = Math.floor(Number(req.body?.difficulty)) || 1;
+  const rankLost = diff >= 2 ? rankDeath(user) : 0;
   saveUsers();
-  res.json({ xp: DEATH_XP * boostMul('xp'), ...walletView(user) });
+  res.json({ xp: DEATH_XP * boostMul('xp'), rankLost, ...walletView(user) });
 });
 
 app.post('/api/shop/buy', (req, res) => {
@@ -1749,6 +1761,88 @@ app.post('/api/friends/invite/dismiss', (req, res) => {
 });
 
 
+
+
+// ---------------------------------------------------------------------------
+// 🏅 Ranked seasons (Bois → Pro), one per month
+// ---------------------------------------------------------------------------
+const rankSeason = () => passKey(eventNow());
+function rankOf(u: User) {
+  const season = rankSeason();
+  if (!u.rank || u.rank.season !== season) u.rank = { season, points: 0, best: 0, wins: 0, losses: 0 };
+  return u.rank;
+}
+function rankView(u: User) {
+  const r = rankOf(u);
+  const t = tierOf(r.points);
+  const n = nextTier(r.points);
+  return { season: r.season, name: passName(r.season), ends: passEnds(eventNow()), points: r.points, tier: t.id, next: n ? { id: n.id, min: n.min } : null, wins: r.wins, losses: r.losses, history: (u.rankHistory ?? []).slice(-12) };
+}
+/** Escape in Normal or harder: points (and maybe a promotion) */
+function rankEscape(u: User, difficulty: number, chapter: number) {
+  if (difficulty < 2) return null;
+  const r = rankOf(u);
+  const before = tierOf(r.points);
+  const gain = rankWin(difficulty, chapter);
+  r.points += gain;
+  r.wins++;
+  r.best = Math.max(r.best, r.points);
+  const after = tierOf(r.points);
+  if (after.min >= 600) serverAch(u, 'rank_gold');
+  if (after.id === 'pro') serverAch(u, 'rank_pro');
+  return { gain, points: r.points, tier: after.id, promoted: after.id !== before.id };
+}
+/** Caught: points lost (never below the tier you reached) */
+function rankDeath(u: User) {
+  const r = rankOf(u);
+  const loss = rankLoss(r.points);
+  r.points -= loss;
+  r.losses++;
+  return loss;
+}
+/** 1st of the month: reward for the tier reached, then everybody starts again at Bois */
+function payRankedSeason() {
+  const cur = rankSeason();
+  if (!settings.rankPaid) {
+    settings.rankPaid = cur;
+    settingsSaver.save();
+    return;
+  }
+  if (settings.rankPaid === cur) return;
+  const prev = settings.rankPaid;
+  let n = 0;
+  for (const u of users.values()) {
+    if (!u.rank || u.rank.season !== prev || (u.rank.wins === 0 && u.rank.points === 0)) continue;
+    const t = tierOf(u.rank.points);
+    u.rankHistory = [...(u.rankHistory ?? []), { season: prev, tier: t.id, points: u.rank.points }].slice(-24);
+    if (t.reward) {
+      walletOf(u).coins += t.reward;
+      u.inbox = [...(u.inbox ?? []), { from: 'Patient Zero', text: `🏅 Fin de la ${passName(prev).toLowerCase()} classée : rang ${t.emoji} ${t.name}, +${t.reward} pièces ! Nouvelle saison : tout le monde repart du Bois.`, at: Date.now() }].slice(-20);
+    }
+    n++;
+  }
+  settings.rankPaid = cur;
+  settingsSaver.save();
+  if (n) saveUsers();
+  console.log(`[ranked] saison ${prev} terminée : ${n} joueurs récompensés`);
+}
+
+app.get('/api/ranked', (req, res) => {
+  const u = authUser(req);
+  if (!u) return res.status(401).json({ error: 'Session expirée.' });
+  const season = rankSeason();
+  const all = [...users.values()]
+    .filter((x) => !x.banned && x.rank?.season === season && x.rank.points > 0)
+    .sort((a, b) => b.rank!.points - a.rank!.points);
+  const me = all.findIndex((x) => x === u);
+  res.json({
+    ...rankView(u),
+    rank: me >= 0 ? me + 1 : null,
+    tiers: RANK_TIERS,
+    counts: Object.fromEntries(RANK_TIERS.map((t) => [t.id, all.filter((x) => tierOf(x.rank!.points).id === t.id).length])),
+    top: all.slice(0, 50).map((x) => ({ username: x.username, points: x.rank!.points, tier: tierOf(x.rank!.points).id, level: levelOf(x.xp ?? 0).level, clan: x.clan ? (clans.get(x.clan)?.tag ?? null) : null })),
+  });
+});
 
 // ---------------------------------------------------------------------------
 // 🛡️ Clans

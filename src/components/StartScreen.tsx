@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { RANK_TIERS } from '../ranked';
 import { Coins, Medal, Music, Play, ShoppingBag, Sliders, Trophy, Users, VolumeX } from 'lucide-react';
 import type { ChallengeDef } from '../challenges';
 import { ACHIEVEMENTS } from '../achievements';
@@ -73,6 +74,9 @@ interface StartScreenProps {
   onFriends?: () => void;
   /** 🎟️ enter a gift code */
   onRedeem?: () => void;
+  /** 🏅 ranked season */
+  onRanked?: () => void;
+  rankTier?: string | null;
   /** 🛡️ clans, 🎵 menu music, 🖼️ gallery */
   onClans?: () => void;
   clanTag?: string | null;
@@ -138,6 +142,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onRedeem,
   onClans,
   clanTag,
+  onRanked,
+  rankTier,
   onMusic,
   onGallery,
   friendsOnline = null,
@@ -510,6 +516,19 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                 {friendsAlert > 0 && (
                   <span className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1 rounded-full bg-red-600 text-white text-[11px] flex items-center justify-center animate-pulse">{friendsAlert}</span>
                 )}
+              </button>
+            )}
+            {onRanked && (
+              <button
+                onClick={onRanked}
+                className="px-6 py-2.5 bg-black/60 hover:bg-zinc-900 text-zinc-200 font-mono text-xs uppercase tracking-widest flex items-center gap-3 transition-all cursor-pointer border hover:brightness-125"
+                style={{ borderColor: (RANK_TIERS.find((t) => t.id === rankTier) ?? RANK_TIERS[0]).color + 'aa' }}
+              >
+                <span>{(RANK_TIERS.find((t) => t.id === rankTier) ?? RANK_TIERS[0]).emoji}</span>
+                <span>Classé</span>
+                <span className="normal-case tracking-normal" style={{ color: (RANK_TIERS.find((t) => t.id === rankTier) ?? RANK_TIERS[0]).color }}>
+                  {(RANK_TIERS.find((t) => t.id === rankTier) ?? RANK_TIERS[0]).name}
+                </span>
               </button>
             )}
             {onClans && (
