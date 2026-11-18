@@ -480,7 +480,30 @@ export class MonsterAI {
     this.fx.tick(delta);
     if (this.fx.eyes && !this.blind) this.eyeMat.emissive.copy(this.fx.eyes());
   }
+  // ---------------------------------------------------------------------
+  // 👩‍⚕️ L'Infirmière: only moves when nobody is looking at her
+  // ---------------------------------------------------------------------
+  public nurse = false;
+  /** Set by the engine every frame: a player has her in view */
+  public observed = false;
+  private lookLocked = false;
+  public makeNurse() {
+    this.lookLocked = false;
+    this.applyLook({ skin: '#ece6dc', eyes: '#1a0000', gown: '#f6f6f2', acc: 'bandages' });
+    this.lookLocked = true;
+    this.nurse = true;
+    this.speedMul = 1.35;
+    this.eyeMat.emissiveIntensity = 0.4;
+    // Tall and thin
+    this.mesh.scale.set(0.92, 1.12, 0.9);
+  }
+  /** Can someone at `eye` see her head (walls in between)? */
+  public visibleFrom(eye: THREE.Vector3, boxes: CollisionBox[]) {
+    return this.lineOfSight(eye, this.eye(), boxes);
+  }
+
   public applyLook(look: { skin: string; eyes: string; gown: string; acc?: string; outfit?: string; fx?: string }) {
+    if (this.lookLocked) return;
     const o = look.outfit ? MONSTER_OUTFITS[look.outfit] : undefined;
     const skin = this.skinMat;
     skin.color.set(o?.skin ?? look.skin);
@@ -699,7 +722,7 @@ export class MonsterAI {
     const earDist = toEar.length();
     const pan = earDist > 0.01 ? THREE.MathUtils.clamp(toEar.normalize().dot(listener?.right ?? s.listenerRight) * -1, -1, 1) : 0;
 
-    if (this.growlTimer <= 0) {
+    if (this.growlTimer <= 0 && !this.nurse) {
       sound.playMonsterGrowl(earDist, pan);
       this.growlTimer = 5 + Math.random() * 7;
     }
@@ -718,6 +741,19 @@ export class MonsterAI {
       return;
     }
 
+    // 👩‍⚕️ The nurse: frozen while watched, otherwise she comes straight at you
+    if (this.nurse) {
+      if (this.observed) {
+        this.speedNow = 0;
+        this.head.getWorldPosition(this.headWorld);
+        return;
+      }
+      if (!s.playerHidden && !s.dead && dist < 30) {
+        this.state = 'CHASE';
+        this.lastKnown.copy(s.playerPos);
+        this.lostSightTimer = 0;
+      }
+    }
     const sees = this.canSee(s, boxes);
     let speed = 0;
 

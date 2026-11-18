@@ -7,7 +7,7 @@ import { SEASONS, type Season } from './seasons';
 export type Tier = 'petit' | 'moyen' | 'style' | 'exclusif';
 export type Target = 'human' | 'monster';
 /** What a cosmetic changes: a colour slot, an accessory or a whole outfit. */
-export type Slot = 'gown' | 'hair' | 'skin' | 'eyes' | 'acc' | 'outfit' | 'fx';
+export type Slot = 'gown' | 'hair' | 'skin' | 'eyes' | 'acc' | 'outfit' | 'fx' | 'dance';
 
 export interface Cosmetic {
   id: string;
@@ -22,7 +22,7 @@ export interface Cosmetic {
   /** Only in the advent calendar (never sold) */
   calendarOnly?: boolean;
   /** Earned, never sold: season pass tier or player level */
-  unlock?: 'pass' | 'level' | 'xmas' | 'ranked';
+  unlock?: 'pass' | 'level' | 'xmas' | 'ranked' | 'clan';
 }
 
 export const TIER_PRICE: Record<Tier, number> = { petit: 100, moyen: 500, style: 1000, exclusif: 2000 };
@@ -147,6 +147,17 @@ export const CATALOG: Cosmetic[] = [
   { ...c('m-rank-gladiator', 'Gladiateur de l\'arène', 'monster', 'outfit', 'gladiator', 'exclusif'), unlock: 'ranked' },
   { ...c('hfx-rank-stars', 'Étoiles du classement', 'human', 'fx', 'stars', 'exclusif'), unlock: 'ranked' },
   { ...c('h-rank-champion', 'Champion classé', 'human', 'outfit', 'champion', 'exclusif'), unlock: 'ranked' },
+  // 🛡️ Clan chest (earned together, never sold)
+  { ...c('h-clan-knight', 'Chevalier du clan', 'human', 'outfit', 'clanknight', 'style'), unlock: 'clan' },
+  { ...c('m-clan-beast', 'Bête du clan', 'monster', 'outfit', 'clanbeast', 'exclusif'), unlock: 'clan' },
+  { ...c('hfx-clan-embers', 'Braises du clan', 'human', 'fx', 'embers', 'exclusif'), unlock: 'clan' },
+  // 💃 Victory dances
+  c('d-jump', 'Saut de joie', 'human', 'dance', 'jump', 'petit'),
+  c('d-salute', 'Salut militaire', 'human', 'dance', 'salute', 'petit'),
+  c('d-guitar', 'Air guitar', 'human', 'dance', 'guitar', 'moyen'),
+  c('d-flex', 'Muscles !', 'human', 'dance', 'flex', 'moyen'),
+  c('d-robot', 'Danse du robot', 'human', 'dance', 'robot', 'style'),
+  c('d-moon', 'Moonwalk', 'human', 'dance', 'moon', 'exclusif'),
   // ✨ Animated skins
   c('hfx-aura', 'Aura spectrale', 'human', 'fx', 'aura', 'exclusif'),
   c('hfx-smoke', 'Traînée de fumée', 'human', 'fx', 'smoke', 'style'),

@@ -924,6 +924,17 @@ export const EN: Record<string, string> = {
   'Champion classé': 'Ranked champion',
   'Pass classé terminé': 'Ranked pass complete',
   'Prendre le palier 20 du pass classé.': 'Claim tier 20 of the ranked pass.',
+  'Saut de joie': 'Jump for joy',
+  'Salut militaire': 'Salute',
+  'Muscles !': 'Flex!',
+  'Danse du robot': 'Robot dance',
+  '💃 Danse de victoire (Aucun = coucou)': '💃 Victory dance (None = wave)',
+  'Une infirmière… immobile. Elle ne bouge que quand personne ne la regarde. Ne la quittez pas des yeux.':
+    "A nurse… perfectly still. She only moves when nobody is looking. Don't take your eyes off her.",
+  'Chevalier du clan': 'Clan knight',
+  'Bête du clan': 'Clan beast',
+  'Braises du clan': 'Clan embers',
+  contre: 'vs',
   // ---- Ranked seasons ----
   '🏅 Saison classée': '🏅 Ranked season',
   Classé: 'Ranked',

@@ -111,6 +111,19 @@ export interface ClansView {
         members: { username: string; level: number; weekXp: number; status: 'playing' | 'online' | 'offline'; leader: boolean }[];
         requests: string[];
         chat: { from: string; text: string; at: number; mine: boolean }[];
+        chest: { coins: number; top: { username: string; coins: number }[] };
+        war: {
+          active: boolean;
+          inWar: boolean;
+          ends: number;
+          next: number;
+          us?: number;
+          them?: number;
+          enemy?: { name: string; tag: string; emblem: string; color: string } | null;
+        };
+        warsWon: number;
+        warsPlayed: number;
+        lastWar: { enemy: string; tag: string; us: number; them: number; result: 'win' | 'tie' | 'loss' } | null;
       })
     | null;
 }
@@ -437,6 +450,7 @@ export const api = {
     settings?: { open?: boolean; emblem?: string; color?: string }
   ): Promise<ClansView> => post('/api/clans/manage', { action, username, ...settings }, token),
   clanChat: (token: string, text: string): Promise<ClansView> => post('/api/clans/chat', { text }, token),
+  clanDeposit: (token: string, coins: number): Promise<ClansView & { message: string; wallet: WalletView }> => post('/api/clans/deposit', { coins }, token),
   adminClanDelete: (token: string, id: string): Promise<{ message: string }> => post('/api/admin/clans/delete', { id }, token),
   buyTrack: (token: string, id: string): Promise<WalletView & { message: string }> => post('/api/music/buy', { id }, token),
   gallery: (token: string, docs: string[], ending?: string): Promise<{ gallery: { endings: string[]; docs: string[] } }> => post('/api/gallery', { docs, ending }, token),

@@ -53,6 +53,7 @@ export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
   clown: { gown: '#facc15', hair: '#f97316', accs: ['clownnose', 'fishhat'], extras: ['xmasbands'] },
   // 🏆 Pass de saison / ⭐ niveaux
   hazmat: { gown: '#f5c400', hair: '#1d1d22', accs: ['gasmask'], extras: ['belt'] },
+  clanknight: { gown: '#2a2f45', hair: '#1d1d22', accs: ['beret'], extras: ['cape', 'belt'] },
   champion: { gown: '#7a0a14', hair: '#f5d36a', accs: ['crown'], gownFx: 'gold', extras: ['cape', 'medal', 'belt'] },
   veteran: { gown: '#4b5320', hair: '#2a2a20', accs: ['beret', 'shades'], extras: ['medal', 'belt'] },
 };
@@ -518,6 +519,8 @@ export const MONSTER_OUTFITS: Record<string, MonsterOutfit> = {
   toxic: { skin: '#5adf3a', eyes: '#e8ff3a', gown: '#2a3a10', accs: ['gasmask'], skinFx: 'toxic' },
   abyss: { skin: '#0a1428', eyes: '#38bdf8', gown: '#050a14', accs: [], skinFx: 'abyss' },
   legend: { skin: '#4a0808', eyes: '#ffffff', gown: '#140000', accs: ['crown', 'chains'], skinFx: 'inferno' },
+  // 🛡️ Coffre de clan
+  clanbeast: { skin: '#3a3f5a', eyes: '#7dd3fc', gown: '#14182a', accs: ['horns', 'chains'], skinFx: 'abyss' },
   // 🏅 Pass classé
   gladiator: { skin: '#6a4a32', eyes: '#ff3a10', gown: '#3a1a0a', accs: ['hockey', 'chains'], skinFx: 'gold' },
   // 🎄 Nuit de Noël

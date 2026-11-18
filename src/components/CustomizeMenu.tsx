@@ -28,6 +28,9 @@ const Preview: React.FC<{ look: Appearance; tab: Tab }> = ({ look, tab }) => {
   const models = useRef<{ human: RemotePlayer; monster: MonsterAI } | null>(null);
   const tabRef = useRef(tab);
   tabRef.current = tab;
+  /** the chosen dance plays in the preview */
+  const danceRef = useRef(look.human.dance);
+  danceRef.current = look.human.dance;
 
   useEffect(() => {
     const el = mount.current;
@@ -78,7 +81,10 @@ const Preview: React.FC<{ look: Appearance; tab: Tab }> = ({ look, tab }) => {
       monster.mesh.visible = !isHuman;
       human.group.rotation.y = angle;
       monster.mesh.rotation.y = angle;
-      if (isHuman) human.idle(dt);
+      if (isHuman) {
+        if (danceRef.current) human.dance(dt, danceRef.current);
+        else human.idle(dt);
+      }
       else monster.tickFx(dt);
       const h = isHuman ? 1.0 : 1.25;
       camera.position.set(0, h + 0.2, isHuman ? 3.7 : 5.2);
@@ -236,6 +242,7 @@ export const CustomizeMenu: React.FC<Props> = ({ username, initial, welcome, own
                 <ItemPicker label="Accessoire" items={mine('human', 'acc')} value={look.human.acc} onPick={(v) => set('human', 'acc', v)} />
                 <ItemPicker label="Tenue" items={mine('human', 'outfit')} value={look.human.outfit} onPick={(v) => set('human', 'outfit', v)} />
                 <ItemPicker label="✨ Effet animé" items={mine('human', 'fx')} value={look.human.fx} onPick={(v) => set('human', 'fx', v)} />
+                <ItemPicker label="💃 Danse de victoire (Aucun = coucou)" items={mine('human', 'dance')} value={look.human.dance} onPick={(v) => set('human', 'dance', v)} />
                 <p className="text-[10px] font-mono text-zinc-600">Vu par votre partenaire en coop, et par le monstre en mode Chasse.</p>
               </>
             ) : (

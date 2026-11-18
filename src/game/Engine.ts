@@ -145,6 +145,8 @@ function segHitsRect(ax: number, az: number, bx: number, bz: number, x0: number,
 }
 
 export interface HudSnapshot {
+  /** 💃 victory dance on screen: no HUD */
+  dancing: boolean;
   /** 👀 watching a friend's game */
   watching: boolean;
   /** ⏱️ Speedrun chrono (setting on) */
@@ -482,6 +484,105 @@ export class GameEngine {
   }
 
   /** Apply everyone's colours to the current bodies. */
+  // -----------------------------------------------------------------------
+  // 💃 Victory dance: a few seconds seen from the outside
+  // -----------------------------------------------------------------------
+  private static DANCE_TIME = 4.2;
+  private danceT = -1;
+  private danceModel: RemotePlayer | null = null;
+  private danceLight: THREE.PointLight | null = null;
+  private danceYaw = 0;
+  private canDance() {
+    return !this.watchOnly && !this.survival && !this.vsRole && this.net?.mode !== 'race' && !this.player.isHidden;
+  }
+  private startDance() {
+    const p = this.player;
+    this.danceT = 0;
+    p.flashlightOn = false;
+    const m = new RemotePlayer('', new THREE.SpotLight(0xffffff, 0), new THREE.Object3D());
+    m.showName = false;
+    m.applyLook(this.localLook.human);
+    m.group.visible = true;
+    m.group.position.set(p.position.x, 0, p.position.z);
+    // Turned towards the camera (which stands in front of the player)
+    m.group.rotation.y = p.yaw + Math.PI;
+    this.scene.add(m.group);
+    this.danceModel = m;
+    const l = new THREE.PointLight(0xffe2b0, 14, 9, 1.6);
+    // Light on the camera side, so the face is lit
+    l.position.set(p.position.x - Math.sin(p.yaw) * 1.4, 2.3, p.position.z - Math.cos(p.yaw) * 1.4);
+    this.scene.add(l);
+    this.danceLight = l;
+    this.danceYaw = p.yaw;
+    if (this.remote) this.remote.forceHidden = false;
+    this.pushHud();
+  }
+  private updateDance(delta: number) {
+    this.danceT += delta;
+    const m = this.danceModel;
+    if (!m) return;
+    m.dance(delta);
+    // The partner dances too (if they made it out next to you)
+    const r = this.remote;
+    if (r?.state && !r.state.dead && r.position.distanceTo(m.group.position) < 10) r.dance(delta);
+    // Camera slowly turning in front of you
+    const a = this.danceYaw + Math.sin(this.danceT * 0.6) * 0.5;
+    const c = m.group.position;
+    this.camera.position.set(c.x - Math.sin(a) * 2.7, 1.45, c.z - Math.cos(a) * 2.7);
+    this.camera.lookAt(c.x, 1.05, c.z);
+    // Fade in, then fade out at the end
+    const t = this.danceT;
+    this.blackout = t < 0.5 ? 1 - t / 0.5 : t > GameEngine.DANCE_TIME - 0.6 ? Math.min(1, (t - (GameEngine.DANCE_TIME - 0.6)) / 0.6) : 0;
+  }
+  private endDance() {
+    if (this.danceModel) {
+      this.scene.remove(this.danceModel.group);
+      this.danceModel.dispose();
+    }
+    if (this.danceLight) {
+      this.scene.remove(this.danceLight);
+      this.danceLight.dispose();
+    }
+    this.danceModel = null;
+    this.danceLight = null;
+    this.blackout = 1;
+    this.danceT = -1;
+    this.pushHud();
+  }
+
+  private nurseWarned = false;
+  private spawnNurse(pos: THREE.Vector3, route: string[], routeIdx = 0) {
+    const m = new MonsterAI(pos, this.map.navNodes, route, this.map.doors, (door) => this.setDoorOpen(door, true, true), routeIdx);
+    m.makeNurse();
+    if (this.lowEndGpu) m.mesh.traverse((o) => (o.castShadow = false));
+    this.monsters.push(m);
+    this.scene.add(m.mesh);
+    return m;
+  }
+
+  /** 👩‍⚕️ Does a living player have the nurse in view right now? */
+  private nurseObserved(m: MonsterAI) {
+    const head = m.position.clone().setY(1.7);
+    const views: { eye: THREE.Vector3; dir: THREE.Vector3 }[] = [];
+    if (!this.dying && !this.spectating && !this.player.isHidden && !this.finished) {
+      const dir = new THREE.Vector3();
+      this.camera.getWorldDirection(dir);
+      views.push({ eye: this.camera.position.clone(), dir });
+    }
+    const rs = this.remote?.state;
+    if (rs && !rs.dead && !rs.hid && !this.remoteCaught) {
+      const cp = Math.cos(rs.pitch);
+      views.push({ eye: new THREE.Vector3(rs.x, 1.6, rs.z), dir: new THREE.Vector3(-Math.sin(rs.yaw) * cp, Math.sin(rs.pitch), -Math.cos(rs.yaw) * cp) });
+    }
+    return views.some((v) => {
+      const to = head.clone().sub(v.eye);
+      const d = to.length();
+      if (d > 35) return false;
+      if (to.normalize().dot(v.dir) < 0.7) return false;
+      return m.visibleFrom(v.eye, this.map.collisionBoxes);
+    });
+  }
+
   private applyLooks() {
     const vs = this.vsRole;
     // AI creatures wear the local player's monster colours
@@ -1116,6 +1217,11 @@ export class GameEngine {
       this.monsters.push(up);
       this.scene.add(up.mesh);
     }
+    // 👩‍⚕️ Difficulty 3+: the Nurse walks the ground floor
+    if (this.net?.mode !== 'versus' && this.difficulty >= 3 && this.map.monsterSpawns.length) {
+      const s = this.map.monsterSpawns[this.map.monsterSpawns.length - 1];
+      this.spawnNurse(s.pos.clone().add(new THREE.Vector3(-1.2, 0, 1.2)), this.map.patrolRoute, s.routeIdx);
+    }
     // The Crawler lives in the air duct (never in Exploration nor versus)
     this.crawler = null;
     if (this.net?.mode !== 'versus' && this.difficulty >= 2) {
@@ -1485,6 +1591,9 @@ export class GameEngine {
     this.hint = null;
     // Multiplayer state (a spectator only ever watches)
     this.spectating = this.watchOnly;
+    this.nurseWarned = false;
+    if (this.danceT >= 0) this.endDance();
+    this.danceT = -1;
     this.remoteCaught = false;
     this.partnerGone = false;
     this.menuOpen = false;
@@ -2687,6 +2796,13 @@ export class GameEngine {
       this.blackout = Math.min(1, this.blackout + delta * 1.2);
       this.fear = THREE.MathUtils.damp(this.fear, 0, 3, delta);
       this.netTick(delta);
+      // 💃 The victory dance, then the ending screen
+      if (this.victoryTimer <= 0 && this.danceT < 0 && this.canDance()) this.startDance();
+      if (this.danceT >= 0) {
+        this.updateDance(delta);
+        if (this.danceT < GameEngine.DANCE_TIME) return;
+        this.endDance();
+      }
       if (this.victoryTimer <= 0) {
         this.finished = true;
         this.running = false;
@@ -2930,6 +3046,13 @@ export class GameEngine {
     for (const m of this.monsters) {
       if (this.dying && m === this.killer) continue;
       if (m === this.maze?.stalker || m === this.forest?.stalker || m === this.site?.stalker) continue;
+      if (m.nurse) {
+        m.observed = this.nurseObserved(m);
+        if (m.observed && !this.nurseWarned && m.position.distanceTo(this.player.position) < 14) {
+          this.nurseWarned = true;
+          this.shout('Une infirmière… immobile. Elle ne bouge que quand personne ne la regarde. Ne la quittez pas des yeux.', 0.3);
+        }
+      }
       m.updateMulti(delta, players, listener, this.map.collisionBoxes, (idx) => {
         if (idx === 0) this.startDeath(m);
         else this.catchRemote(m);
@@ -3049,6 +3172,7 @@ export class GameEngine {
       partnerDead: !!this.remote?.state?.dead || this.remoteCaught,
       spectating: this.spectating,
       watching: this.watchOnly,
+      dancing: this.danceT >= 0,
       versusRole: this.vsRole,
       timeLeft: this.vsRole ? this.timeLeft : null,
       race: this.net?.mode === 'race',
@@ -4407,7 +4531,14 @@ export class GameEngine {
       const spawns = this.map.monsterSpawns;
       // The spawn point furthest from the player, so nobody appears in your face
       const s = [...spawns].sort((a, b) => b.pos.distanceToSquared(this.player.position) - a.pos.distanceToSquared(this.player.position))[0];
-      const m = new MonsterAI(s.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.5, 0, (Math.random() - 0.5) * 1.5)), this.map.navNodes, this.map.patrolRoute, this.map.doors, (door) => this.setDoorOpen(door, true, true), s.routeIdx);
+      const at = s.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.5, 0, (Math.random() - 0.5) * 1.5));
+      if (this.survivalWave % 5 === 0) {
+        this.spawnNurse(at, this.map.patrolRoute, s.routeIdx);
+        this.shout('🧟 Vague ' + this.survivalWave + ' : une infirmière s\'est jointe à la chasse. Ne la quittez pas des yeux.', 0.3);
+        this.alertAll(this.player.position.clone(), 30);
+        return;
+      }
+      const m = new MonsterAI(at, this.map.navNodes, this.map.patrolRoute, this.map.doors, (door) => this.setDoorOpen(door, true, true), s.routeIdx);
       m.applyLook(this.localLook.monster);
       m.speedMul = 1 + Math.min(0.5, this.survivalWave * 0.03);
       if (this.lowEndGpu) m.mesh.traverse((o) => (o.castShadow = false));

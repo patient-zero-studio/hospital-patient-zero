@@ -1,9 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Crown, Loader2, Search, Send, Shield, X } from 'lucide-react';
 import { api, ClansView } from '../net/api';
-import { CLAN_COLORS, CLAN_EMBLEMS, CLAN_MAX, CLAN_PRICE } from '../clans';
+import { CLAN_CHEST_LEVELS, CLAN_COLORS, CLAN_EMBLEMS, CLAN_MAX, CLAN_PRICE, WAR_LOSS, WAR_TIE, WAR_WIN } from '../clans';
+import { cosmetic } from '../economy';
+import { CosmeticBadge } from './ShopMenu';
 import { levelColor } from '../levels';
 import { fmtCoins } from '../economy';
+
+const fmtLeft = (ms: number) => {
+  const d = Math.floor(ms / 86400000);
+  const h = Math.floor((ms % 86400000) / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return d > 0 ? `${d} j ${h} h` : h > 0 ? `${h} h ${m} min` : `${m} min`;
+};
 
 const DOT: Record<string, string> = { playing: '#f59e0b', online: '#22c55e', offline: '#52525b' };
 
@@ -137,6 +146,92 @@ export const ClansPanel: React.FC<Props> = ({ token, coins, admin, onWallet, onP
                   <div className="text-[10px] font-mono text-zinc-500">{mine.score} XP cette semaine</div>
                 </div>
               </div>
+              {/* ⚔️ Weekend war */}
+              <div className="p-3 border border-red-800/70 bg-red-950/15">
+                <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-red-300 mb-1">
+                  ⚔️ Guerre de clans {mine.warsPlayed > 0 && <span className="text-zinc-500 normal-case tracking-normal">· {mine.warsWon} victoire{mine.warsWon > 1 ? 's' : ''} sur {mine.warsPlayed}</span>}
+                </div>
+                {mine.war.active && mine.war.enemy ? (
+                  <>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-center flex-1">
+                        <ClanBadge emblem={mine.emblem} tag={mine.tag} color={mine.color} />
+                        <div className="text-3xl font-black font-mono text-zinc-100">{mine.war.us}</div>
+                      </div>
+                      <div className="text-zinc-500 font-mono text-sm">contre</div>
+                      <div className="text-center flex-1">
+                        <ClanBadge emblem={mine.war.enemy.emblem} tag={mine.war.enemy.tag} color={mine.war.enemy.color} />
+                        <div className="text-3xl font-black font-mono text-zinc-100">{mine.war.them}</div>
+                      </div>
+                    </div>
+                    <p className="text-[10px] font-mono text-zinc-400 mt-1">
+                      Chaque partie classée gagnée par un membre = 1 point. Fin dans {fmtLeft(mine.war.ends - Date.now())}. Gagnants : +{WAR_WIN} pièces chacun (égalité +{WAR_TIE}, perdants +{WAR_LOSS}).
+                    </p>
+                  </>
+                ) : mine.war.inWar ? (
+                  <p className="text-[11px] font-mono text-zinc-400">Pas encore d'adversaire : dès qu'un autre clan est libre, la guerre commence !</p>
+                ) : (
+                  <p className="text-[11px] font-mono text-zinc-400">
+                    Prochaine guerre dans {fmtLeft(mine.war.next - Date.now())} (samedi). Ton clan affrontera un clan de son niveau : chaque victoire classée du week-end compte !
+                  </p>
+                )}
+                {mine.lastWar && (
+                  <p className="text-[10px] font-mono mt-1" style={{ color: mine.lastWar.result === 'win' ? '#4ade80' : mine.lastWar.result === 'tie' ? '#fbbf24' : '#f87171' }}>
+                    Dernière guerre contre [{mine.lastWar.tag}] : {mine.lastWar.result === 'win' ? 'victoire' : mine.lastWar.result === 'tie' ? 'égalité' : 'défaite'} {mine.lastWar.us}-{mine.lastWar.them}
+                  </p>
+                )}
+              </div>
+
+              {/* 💰 Clan chest */}
+              <div className="p-3 border border-amber-800/60 bg-amber-950/10">
+                <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-amber-300 mb-1">💰 Coffre du clan · {mine.chest.coins} pièces</div>
+                <p className="text-[10px] text-zinc-400 mb-2">Mettez des pièces en commun : à chaque palier, tous les membres gagnent un skin exclusif (les nouveaux aussi).</p>
+                <div className="grid grid-cols-3 gap-1.5 mb-2">
+                  {CLAN_CHEST_LEVELS.map((lv) => {
+                    const item = cosmetic(lv.skin);
+                    const done = mine.chest.coins >= lv.coins;
+                    return (
+                      <div key={lv.skin} className={`flex flex-col items-center p-1.5 border ${done ? 'border-emerald-600 bg-emerald-950/20' : 'border-zinc-800'}`}>
+                        {item && <CosmeticBadge c={item} size={34} />}
+                        <span className="text-[9px] text-zinc-300 text-center leading-tight mt-1">{item?.name}</span>
+                        <span className={`text-[9px] font-mono ${done ? 'text-emerald-400' : 'text-amber-300'}`}>{done ? '✓ débloqué' : `${lv.coins} 🪙`}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {(() => {
+                  const next = CLAN_CHEST_LEVELS.find((lv) => mine.chest.coins < lv.coins);
+                  const prev = [...CLAN_CHEST_LEVELS].reverse().find((lv) => mine.chest.coins >= lv.coins)?.coins ?? 0;
+                  return next ? (
+                    <div className="h-2 bg-zinc-900 border border-zinc-800 mb-2">
+                      <div className="h-full bg-gradient-to-r from-amber-700 to-amber-400" style={{ width: `${Math.round(((mine.chest.coins - prev) / (next.coins - prev)) * 100)}%` }} />
+                    </div>
+                  ) : (
+                    <p className="text-[10px] font-mono text-emerald-400 mb-2">Coffre complet : tous les skins de clan sont débloqués !</p>
+                  );
+                })()}
+                <div className="flex gap-1.5">
+                  {[100, 500, 1000].map((n) => (
+                    <button
+                      key={n}
+                      disabled={!!busy || (!admin && coins < n)}
+                      onClick={async () => {
+                        const r = await act('dep' + n, () => api.clanDeposit(token, n));
+                        if (r) onWallet?.();
+                      }}
+                      className="flex-1 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-mono text-[11px] font-bold disabled:opacity-40"
+                    >
+                      +{n} 🪙
+                    </button>
+                  ))}
+                </div>
+                {mine.chest.top.length > 0 && (
+                  <div className="text-[10px] font-mono text-zinc-500 mt-2" data-no-i18n>
+                    Plus généreux : {mine.chest.top.map((x) => `${x.username} (${x.coins})`).join(' · ')}
+                  </div>
+                )}
+              </div>
+
               <p className="text-[10px] font-mono text-zinc-500">
                 🏆 Chaque lundi, les 3 meilleurs clans (XP gagnée par tous les membres) gagnent : 300 / 200 / 100 pièces pour chaque membre.
               </p>

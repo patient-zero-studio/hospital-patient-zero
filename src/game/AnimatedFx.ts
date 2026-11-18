@@ -197,6 +197,35 @@ export const buildFx = (id: string, track: Track, height: number, monster: boole
         },
       };
     }
+    case 'embers': {
+      // 🛡️ Clan: glowing embers rising around the body
+      const geo = track(new THREE.SphereGeometry(0.02, 5, 4));
+      const hot = glow(track, 0xff7a1a, 1);
+      const warm = glow(track, 0xffc04a, 1);
+      const sparks: { m: THREE.Mesh; p: number; a: number; r: number; s: number }[] = [];
+      for (let i = 0; i < 26; i++) {
+        const m = new THREE.Mesh(geo, i % 3 ? hot : warm);
+        sparks.push({ m, p: Math.random(), a: Math.random() * Math.PI * 2, r: 0.2 + Math.random() * 0.35, s: 0.3 + Math.random() * 0.4 });
+        g.add(m);
+      }
+      noShadow(g);
+      return {
+        group: g,
+        tick(dt) {
+          t += dt;
+          for (const e of sparks) {
+            e.p += dt * e.s;
+            if (e.p > 1) {
+              e.p -= 1;
+              e.a = Math.random() * Math.PI * 2;
+            }
+            const a = e.a + e.p * 2;
+            e.m.position.set(Math.cos(a) * e.r, e.p * (height + 0.3), Math.sin(a) * e.r);
+            e.m.scale.setScalar((1 - e.p) * (0.8 + Math.sin(t * 20 + e.a) * 0.3));
+          }
+        },
+      };
+    }
     case 'stars': {
       // 🏅 Ranked: golden stars circling the body on two rings
       const geo = track(new THREE.OctahedronGeometry(0.05));

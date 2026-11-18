@@ -42,7 +42,7 @@ import { debouncedSaver, makeStore } from './storage.ts';
 import { DAILY_XP, DEATH_XP, ESCAPE_XP, levelOf, levelReward } from '../src/levels.ts';
 import { censorText, isBadName } from '../src/moderation.ts';
 import { RANK_TIERS, RPASS_TIERS, RPASS_XP_PER_TIER, RPassReward, nextTier, rankLoss, rankWin, rpassReward, rpassWinXp, tierOf } from '../src/ranked.ts';
-import { CLAN_COLORS, CLAN_EMBLEMS, CLAN_MAX, CLAN_NAME_RE, CLAN_PRICE, CLAN_PRIZES, CLAN_TAG_RE } from '../src/clans.ts';
+import { CLAN_CHEST_LEVELS, CLAN_COLORS, CLAN_EMBLEMS, CLAN_MAX, CLAN_NAME_RE, CLAN_PRICE, CLAN_PRIZES, CLAN_TAG_RE, WAR_LOSS, WAR_TIE, WAR_WIN, nextWarStart, warEnds, warKey } from '../src/clans.ts';
 import { MENU_TRACKS } from '../src/music.ts';
 import { isEndingKey } from '../src/gallery.ts';
 import { isDocId } from '../src/galleryDocs.ts';
@@ -1812,6 +1812,7 @@ function rankEscape(u: User, difficulty: number, chapter: number) {
   r.wins++;
   const passXp = rpassWinXp(difficulty);
   rpassOf(u).xp += passXp;
+  warScore(u);
   r.best = Math.max(r.best, r.points);
   const after = tierOf(r.points);
   if (after.min >= 600) serverAch(u, 'rank_gold');
@@ -1902,6 +1903,13 @@ interface Clan {
   requests: string[];
   chat: { f: string; t: string; at: number }[];
   createdAt: number;
+  /** 💰 coins put in the chest, by member */
+  chest?: number;
+  gifts?: Record<string, number>;
+  /** ⚔️ wars won / played, and the last result */
+  warsWon?: number;
+  warsPlayed?: number;
+  lastWar?: { enemy: string; tag: string; us: number; them: number; result: 'win' | 'tie' | 'loss' };
 }
 const clans = new Map<string, Clan>();
 {
@@ -1959,6 +1967,17 @@ const clanView = (u: User) => {
             .sort((a, b) => b.weekXp - a.weekXp),
           requests: c.leader === me ? c.requests.map((r) => users.get(r)?.username ?? r) : [],
           chat: c.chat.slice(-40).map((m) => ({ from: users.get(m.f)?.username ?? m.f, text: m.t, at: m.at, mine: m.f === me })),
+          chest: {
+            coins: c.chest ?? 0,
+            top: Object.entries(c.gifts ?? {})
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 5)
+              .map(([n, v]) => ({ username: users.get(n)?.username ?? n, coins: v })),
+          },
+          war: warView(c),
+          warsWon: c.warsWon ?? 0,
+          warsPlayed: c.warsPlayed ?? 0,
+          lastWar: c.lastWar ?? null,
         }
       : null,
   };
@@ -1975,6 +1994,9 @@ const joinClan = (u: User, c: Clan) => {
   c.members = [...c.members.filter((m) => m !== me), me];
   u.clan = c.id;
   serverAch(u, 'clan');
+  // Skins the clan already unlocked
+  const w = walletOf(u);
+  for (const lv of CLAN_CHEST_LEVELS) if ((c.chest ?? 0) >= lv.coins && !w.owned.includes(lv.skin)) w.owned.push(lv.skin);
 };
 /** A member leaves (or is kicked): the clan gets a new leader, or disappears when empty. */
 const leaveClan = (u: User) => {
@@ -1998,6 +2020,7 @@ const leaveClan = (u: User) => {
 app.get('/api/clans', (req, res) => {
   const u = clanAuth(req, res);
   if (!u) return;
+  ensureWar();
   const view = clanView(u);
   const q = String(req.query.q ?? '').trim().toLowerCase();
   if (q) {
@@ -2125,6 +2148,133 @@ app.post('/api/clans/chat', (req, res) => {
   clansSaver.save();
   res.json(clanView(u));
 });
+
+
+// 💰 Clan chest: members put coins in, skins unlock for everybody
+app.post('/api/clans/deposit', (req, res) => {
+  const u = authUser(req);
+  if (!u) return res.status(401).json({ error: 'Session expirée.' });
+  const c = clanOf(u);
+  if (!c) return res.status(400).json({ error: 'Tu n\'es dans aucun clan.' });
+  const n = Math.floor(Number(req.body?.coins));
+  if (!(n >= 10 && n <= 100000)) return res.status(400).json({ error: 'De 10 à 100 000 pièces.' });
+  const w = walletOf(u);
+  if (w.coins < n) return res.status(400).json({ error: 'Pas assez de pièces.' });
+  if (!isAdmin(u)) w.coins -= n;
+  const me = u.username.toLowerCase();
+  const before = c.chest ?? 0;
+  c.chest = before + n;
+  c.gifts = { ...(c.gifts ?? {}), [me]: (c.gifts?.[me] ?? 0) + n };
+  c.chat.push({ f: me, t: `💰 ${u.username} met ${n} pièces dans le coffre du clan.`, at: Date.now() });
+  for (const lv of CLAN_CHEST_LEVELS) {
+    if (before < lv.coins && c.chest >= lv.coins) {
+      const item = cosmeticById(lv.skin)!;
+      for (const m of c.members) {
+        const x = users.get(m);
+        if (!x) continue;
+        const xw = walletOf(x);
+        if (!xw.owned.includes(item.id)) xw.owned.push(item.id);
+        x.inbox = [...(x.inbox ?? []), { from: c.name, text: `🛡️ Le coffre du clan [${c.tag}] est plein : tout le clan gagne le skin « ${item.name} » !`, at: Date.now() }].slice(-20);
+      }
+      c.chat.push({ f: me, t: `🎉 Coffre : ${lv.coins} pièces atteintes ! Tout le clan gagne « ${item.name} ».`, at: Date.now() });
+    }
+  }
+  if (c.chat.length > 80) c.chat.splice(0, c.chat.length - 80);
+  clansSaver.save();
+  saveUsers();
+  res.json({ message: `💰 ${n} pièces mises dans le coffre.`, ...clanView(u), wallet: walletView(u) });
+});
+
+// ⚔️ Weekend clan war: clans are paired on Saturday, every ranked win of a member scores a point
+interface ClanWar {
+  key: string;
+  pairs: { a: string; b: string; sa: number; sb: number }[];
+  paid: boolean;
+}
+let clanWar: ClanWar | null = await (async () => {
+  try {
+    const raw = await store.load('clanwar');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+})();
+const warSaver = debouncedSaver(store, 'clanwar', () => JSON.stringify(clanWar), 1000);
+function payWar(w: ClanWar) {
+  for (const p of w.pairs) {
+    const ca = clans.get(p.a);
+    const cb = clans.get(p.b);
+    for (const [c, us, them, other] of [[ca, p.sa, p.sb, cb], [cb, p.sb, p.sa, ca]] as const) {
+      if (!c) continue;
+      const result = us > them ? 'win' : us === them ? 'tie' : 'loss';
+      const prize = result === 'win' ? WAR_WIN : result === 'tie' ? WAR_TIE : WAR_LOSS;
+      c.warsPlayed = (c.warsPlayed ?? 0) + 1;
+      if (result === 'win') c.warsWon = (c.warsWon ?? 0) + 1;
+      c.lastWar = { enemy: other?.name ?? '?', tag: other?.tag ?? '?', us, them, result };
+      for (const m of c.members) {
+        const x = users.get(m);
+        if (!x) continue;
+        walletOf(x).coins += prize;
+        const word = result === 'win' ? 'VICTOIRE' : result === 'tie' ? 'Égalité' : 'Défaite';
+        x.inbox = [...(x.inbox ?? []), { from: c.name, text: `⚔️ Guerre de clans contre [${other?.tag ?? '?'}] : ${word} ${us} à ${them} ! +${prize} pièces.`, at: Date.now() }].slice(-20);
+      }
+    }
+  }
+  w.paid = true;
+}
+/** Starts the weekend war (pairs clans by weekly score) or pays the one that just ended */
+function ensureWar() {
+  const key = warKey(eventNow());
+  if (clanWar && !clanWar.paid && clanWar.key !== key) {
+    payWar(clanWar);
+    clansSaver.save();
+    saveUsers();
+    warSaver.save();
+  }
+  if (!key) return;
+  if (clanWar?.key === key) {
+    // Clans still without an opponent (new ones, the odd one out) are paired as soon as two are free
+    const busy = new Set(clanWar.pairs.flatMap((p) => [p.a, p.b]));
+    const free = [...clans.values()].filter((c) => c.members.length > 0 && !busy.has(c.id));
+    for (let i = 0; i + 1 < free.length; i += 2) clanWar.pairs.push({ a: free[i].id, b: free[i + 1].id, sa: 0, sb: 0 });
+    if (free.length > 1) warSaver.save();
+    return;
+  }
+  const ranked = [...clans.values()].filter((c) => c.members.length > 0).sort((a, b) => clanScore(b) - clanScore(a) || b.members.length - a.members.length);
+  const pairs: ClanWar['pairs'] = [];
+  for (let i = 0; i + 1 < ranked.length; i += 2) pairs.push({ a: ranked[i].id, b: ranked[i + 1].id, sa: 0, sb: 0 });
+  clanWar = { key, pairs, paid: false };
+  warSaver.save();
+  console.log(`[clans] guerre du week-end ${key} : ${pairs.length} duels`);
+}
+function warScore(u: User) {
+  ensureWar();
+  const c = clanOf(u);
+  if (!c || !clanWar || clanWar.paid || clanWar.key !== warKey(eventNow())) return;
+  const p = clanWar.pairs.find((x) => x.a === c.id || x.b === c.id);
+  if (!p) return;
+  if (p.a === c.id) p.sa++;
+  else p.sb++;
+  warSaver.save();
+}
+function warView(c: Clan) {
+  const now = eventNow();
+  const key = warKey(now);
+  const p = key && clanWar?.key === key ? clanWar.pairs.find((x) => x.a === c.id || x.b === c.id) : undefined;
+  if (!key || !p) return { active: false, inWar: !!key, ends: key ? warEnds(now) : 0, next: nextWarStart(now) };
+  const enemy = clans.get(p.a === c.id ? p.b : p.a);
+  return {
+    active: true,
+    inWar: true,
+    ends: warEnds(now),
+    next: nextWarStart(now),
+    us: p.a === c.id ? p.sa : p.sb,
+    them: p.a === c.id ? p.sb : p.sa,
+    enemy: enemy ? { name: enemy.name, tag: enemy.tag, emblem: enemy.emblem, color: enemy.color } : null,
+  };
+}
+setTimeout(ensureWar, 6000);
+setInterval(ensureWar, 10 * 60000);
 
 // Admin: remove a clan (bad name…)
 app.post('/api/admin/clans/delete', (req, res) => {

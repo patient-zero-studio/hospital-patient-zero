@@ -121,6 +121,7 @@ const EMPTY_HUD: HudSnapshot = {
   partnerDead: false,
   spectating: false,
   watching: false,
+  dancing: false,
   versusRole: null,
   race: false,
   canBlind: false,
@@ -1319,7 +1320,7 @@ export default function App() {
   };
 
   const engine = engineRef.current;
-  const showHud = isPlaying && !isPaused && !isGameOver && !victory && !versusResult && !isInventoryOpen && !hud.dying;
+  const showHud = isPlaying && !isPaused && !isGameOver && !victory && !versusResult && !isInventoryOpen && !hud.dying && !hud.dancing;
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-black font-sans">

@@ -582,6 +582,123 @@ export class RemotePlayer {
 
   /** ✨ Animated skin */
   private fx: FxHandle | null = null;
+  /** 💃 Victory dance ('' = wave) */
+  public danceId = '';
+  private danceT = 0;
+
+  /** 💃 One frame of the victory dance (poses the bones directly). */
+  public dance(delta: number, id = this.danceId) {
+    this.fx?.tick(delta);
+    this.danceT += delta;
+    const t = this.danceT;
+    const [L, R] = this.arms;
+    const [LL, RL] = this.legs;
+    this.hips.position.y = 0.92;
+    this.hips.rotation.set(0, 0, 0);
+    this.spine.rotation.set(0, 0, 0);
+    this.spine.scale.set(1, 1, 1);
+    this.head.rotation.set(0, 0, 0);
+    this.body.position.set(0, 0, 0);
+    for (const a of this.arms) {
+      a.root.rotation.set(0, 0, 0);
+      a.mid.rotation.set(0, 0, 0);
+    }
+    for (const l of this.legs) {
+      l.root.rotation.set(0, 0, 0);
+      l.mid.rotation.set(0, 0, 0);
+    }
+    L.root.rotation.z = -0.13;
+    R.root.rotation.z = 0.13;
+    switch (id) {
+      case 'jump': {
+        // Jumps for joy, arms up at the top
+        const up = Math.max(0, Math.sin(t * 6));
+        const land = Math.max(0, -Math.sin(t * 6));
+        this.hips.position.y = 0.92 + up * 0.32 - land * 0.18;
+        for (const l of this.legs) {
+          l.root.rotation.x = -land * 0.6;
+          l.mid.rotation.x = land * 1.2;
+        }
+        L.root.rotation.x = R.root.rotation.x = -0.4 - up * 2.5;
+        L.mid.rotation.x = R.mid.rotation.x = -0.2;
+        this.head.rotation.x = -up * 0.3;
+        break;
+      }
+      case 'salute': {
+        // Stands at attention, hand to the forehead
+        const s = Math.min(1, t * 2.5);
+        R.root.rotation.x = -2.1 * s;
+        R.root.rotation.z = 0.13 + 0.7 * s;
+        R.mid.rotation.x = -2.3 * s;
+        this.spine.rotation.x = -0.05;
+        this.head.rotation.x = -0.1;
+        break;
+      }
+      case 'guitar': {
+        // Air guitar and headbanging
+        L.root.rotation.x = -1.1;
+        L.root.rotation.z = -0.5;
+        L.mid.rotation.x = -1.0;
+        R.root.rotation.x = -0.6;
+        R.mid.rotation.x = -1.2 + Math.sin(t * 22) * 0.35;
+        this.spine.rotation.x = 0.15 + Math.sin(t * 8) * 0.12;
+        this.head.rotation.x = Math.sin(t * 8) * 0.45;
+        LL.root.rotation.x = -0.3;
+        RL.root.rotation.x = 0.3;
+        RL.mid.rotation.x = 0.4;
+        this.hips.position.y = 0.9 + Math.abs(Math.sin(t * 8)) * 0.03;
+        break;
+      }
+      case 'flex': {
+        // Shows the muscles, left then right
+        const side = Math.sin(t * 2.5) > 0;
+        for (const [a, on] of [[L, side], [R, !side]] as const) {
+          a.root.rotation.x = on ? -1.5 : -0.9;
+          a.root.rotation.z = (a === L ? -1 : 1) * (on ? 1.2 : 0.8);
+          a.mid.rotation.x = on ? -2.2 : -1.8;
+        }
+        this.spine.rotation.y = side ? 0.25 : -0.25;
+        this.spine.scale.set(1.06, 1, 1.06);
+        this.head.rotation.y = side ? 0.5 : -0.5;
+        break;
+      }
+      case 'robot': {
+        // Jerky robot moves (quantized)
+        const step = Math.floor(t * 3);
+        const q = step % 4;
+        L.root.rotation.x = q === 0 || q === 1 ? -1.57 : 0;
+        R.root.rotation.x = q === 1 || q === 2 ? -1.57 : 0;
+        L.mid.rotation.x = R.mid.rotation.x = -1.57;
+        this.head.rotation.y = [0.5, 0, -0.5, 0][q];
+        this.hips.rotation.y = [0, 0.3, 0, -0.3][q];
+        this.hips.position.y = 0.92 - (q % 2) * 0.05;
+        break;
+      }
+      case 'moon': {
+        // Moonwalk: slides back, one heel up
+        const ph = t * 3.2;
+        this.body.position.z = -((t * 0.35) % 1.4) + 0.7;
+        LL.mid.rotation.x = Math.max(0, Math.sin(ph)) * 0.9;
+        RL.mid.rotation.x = Math.max(0, -Math.sin(ph)) * 0.9;
+        LL.root.rotation.x = Math.sin(ph) * 0.15;
+        RL.root.rotation.x = -Math.sin(ph) * 0.15;
+        L.root.rotation.x = -Math.sin(ph) * 0.4;
+        R.root.rotation.x = Math.sin(ph) * 0.4;
+        L.mid.rotation.x = R.mid.rotation.x = -0.6;
+        this.spine.rotation.x = 0.12;
+        this.head.rotation.y = Math.sin(t) * 0.3;
+        break;
+      }
+      default: {
+        // Wave hello
+        R.root.rotation.x = -2.8;
+        R.root.rotation.z = 0.25 + Math.sin(t * 8) * 0.35;
+        R.mid.rotation.x = -0.35;
+        this.hips.rotation.y = Math.sin(t * 2) * 0.1;
+        this.head.rotation.z = Math.sin(t * 2) * 0.08;
+      }
+    }
+  }
   public applyLook(look: { skin: string; gown: string; hair: string; acc?: string; outfit?: string; char?: string; fx?: string }) {
     const outfit = look.outfit ? HUMAN_OUTFITS[look.outfit] : undefined;
     const gown = this.mats.gown;
@@ -621,6 +738,7 @@ export class RemotePlayer {
     }
     if (!this.cosmetic.parent) this.head.add(this.cosmetic);
     if (!this.cosmeticBody.parent) this.spine.add(this.cosmeticBody);
+    this.danceId = (look as { dance?: string }).dance ?? '';
     if (this.fx) this.group.remove(this.fx.group);
     this.fx = look.fx ? buildFx(look.fx, track, 1.75 * ch.height, false) : null;
     if (this.fx) this.group.add(this.fx.group);
