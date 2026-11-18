@@ -5,7 +5,7 @@ import { ENDING_CHAPTER, ENDING_FROM_ACH, ENDING_KEYS, ENDING_NOTES, EndingKey }
 import { GameState } from '../game/GameState';
 import type { GameEnding, GameItem } from '../types';
 
-const CH_NAME = ['', 'L\'Hôpital', 'Les Égouts', 'Le Dédale', 'La Forêt', 'Le Site B', 'Le Toit'];
+const CH_NAME = ['', 'L\'Hôpital', 'Les Égouts', 'Le Dédale', 'La Forêt', 'Le Site B', 'Le Toit', 'Le Cœur'];
 
 /** Title + text of an ending (the "+" version needs the documents) */
 const endingText = (key: EndingKey) => {
@@ -84,7 +84,7 @@ export const GalleryMenu: React.FC<Props> = ({ endings, docs, achDone, onClose }
           </div>
         ) : (
           <div className="space-y-3">
-            {[1, 2, 3, 4, 5, 6].map((ch) => (
+            {[1, 2, 3, 4, 5, 6, 7].map((ch) => (
               <div key={ch}>
                 <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-1">
                   Chapitre {ch} — {CH_NAME[ch]}

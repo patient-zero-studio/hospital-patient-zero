@@ -16,6 +16,7 @@ import { Labyrinth } from './Labyrinth';
 import { Forest, ForestNet, ForestPlayer } from './Forest';
 import { SiteB, SiteNet, SitePlayer } from './SiteB';
 import { Rooftop } from './Rooftop';
+import { BossArena } from './BossArena';
 import { GameState } from './GameState';
 import { ProceduralTextures } from '../textures/ProceduralTextures';
 import { MicListener, MicStatus } from '../audio/MicListener';
@@ -388,7 +389,7 @@ export class GameEngine {
   private forest: Forest | null = null;
   /** Chapter 5: Site B, the UV ramps and the final fight. */
   /** Chapter 5 (Site B) or chapter 6 (the roof): same kind of scripted level */
-  private site: SiteB | Rooftop | null = null;
+  private site: SiteB | Rooftop | BossArena | null = null;
   /** Battery drain before the UV lamp multiplies it. */
   private baseDrain = 1;
   /** Co-op: the forest / lab layout seed shared by both players (null = random, solo). */
@@ -839,7 +840,7 @@ export class GameEngine {
     this.builtChapter = this.chapter;
     this.monsters = [];
     this.crawler = null;
-    if (this.chapter === 5 || this.chapter === 6) this.spawnSite();
+    if (this.chapter === 5 || this.chapter === 6 || this.chapter === 7) this.spawnSite();
     else if (this.chapter === 4) this.spawnForest();
     else if (this.chapter === 3) this.spawnMaze();
     else if (this.chapter === 2) this.spawnSewerMonsters();
@@ -1103,7 +1104,7 @@ export class GameEngine {
   /** Chapter 3, [R]: a chalk arrow on the floor so you know where you've been. */
   public drawChalk() {
     const p = this.player;
-    if (this.site instanceof SiteB && this.running && !this.paused && !this.dying && !this.finished && !this.intro) {
+    if ((this.site instanceof SiteB || this.site instanceof BossArena) && this.running && !this.paused && !this.dying && !this.finished && !this.intro) {
       const on = this.site.toggleUV();
       if (on && !p.flashlightOn && p.flashlightBattery > 0) p.flashlightOn = true;
       sound.playFlashlightToggle(on);
@@ -1150,6 +1151,12 @@ export class GameEngine {
     this.stairsBuilt = true;
     this.ventOpen = false;
     this.ductWarned = true;
+    if (this.chapter === 7) {
+      this.site = new BossArena(this.map, this.scene, this.difficulty, this.lowEndGpu, (msg) => this.shout(msg), this.levelSeed ?? Math.random());
+      this.site.guest = this.net?.role === 'guest';
+      if (this.site.stalker) this.monsters.push(this.site.stalker);
+      return;
+    }
     if (this.chapter === 6) {
       this.site = new Rooftop(this.map, this.scene, this.difficulty, this.lowEndGpu, (msg) => this.shout(msg), this.levelSeed ?? Math.random());
       this.site.guest = this.net?.role === 'guest';
@@ -1529,7 +1536,13 @@ export class GameEngine {
       this.player.reset(lv.start.clone().add(off), lv.startYaw);
     } else this.player.reset(start, sewers ? this.map.sewer.startYaw : this.map.playerStartYaw);
     this.chapterToast = null;
-    if (this.site instanceof Rooftop)
+    if (this.site instanceof BossArena)
+      this.queueChapterToast(
+        this.difficulty >= 2
+          ? 'CHAPITRE 7 — LE CŒUR. Le vrai Patient Zéro, c\'est lui : le Dr Moreau s\'est injecté la souche d\'origine. [R] passe votre lampe en UV : brûlez-le, survivez à ses 3 phases… puis injectez l\'antidote [E].'
+          : 'CHAPITRE 7 — LE CŒUR (Exploration). Le Dr Moreau dort au centre de la salle. Lisez ses notes, puis injectez-lui l\'antidote [E].'
+      );
+    else if (this.site instanceof Rooftop)
       this.queueChapterToast(
         this.site.stalker
           ? 'CHAPITRE 6 — LE TOIT. La tempête cache vos pas… mais chaque éclair vous montre à lui. Réparez les 3 relais radio, allumez la balise de l\'héliport, puis tenez jusqu\'à l\'hélicoptère.'
@@ -1649,7 +1662,12 @@ export class GameEngine {
     this.hemi.groundColor.copy(this.baseHemi.ground);
     this.hemi.intensity = this.baseHemi.intensity;
     // Sewers: no windows, no white paint… a bit more fill light so the torch reveals the bricks
-    if (this.chapter === 6) {
+    if (this.chapter === 7) {
+      // The core: dark, cold, a little green from the cuve
+      this.hemi.intensity = this.baseHemi.intensity * 3.4;
+      this.hemi.color.set(0x6a8a7a);
+      this.hemi.groundColor.set(0x100808);
+    } else if (this.chapter === 6) {
       // Storm clouds over the city
       this.hemi.intensity = this.baseHemi.intensity * 4.5;
       this.hemi.color.set(0x5a6a8a);
@@ -2076,7 +2094,10 @@ export class GameEngine {
     this.stat('escapes');
     this.stat('coinsFound', this.state.runCoins);
     this.ach('first_escape');
-    if (ending === 'ROOFTOP') {
+    if (ending === 'MOREAU') {
+      this.ach('ch7_end');
+      if (this.state.notesCollected.length >= 2) this.ach('ch7_notes');
+    } else if (ending === 'ROOFTOP') {
       this.ach('ch6_escape');
       if (this.state.notesCollected.length >= 2) this.ach('ch6_notes');
     } else if (ending === 'DESTROY' || ending === 'LUCAS') {

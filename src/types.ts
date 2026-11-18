@@ -77,6 +77,6 @@ export interface ControlSettings {
 
 export type GraphicsQuality = 'auto' | 'low' | 'medium' | 'high' | 'ultra';
 
-export type GameEnding = 'SURVIVAL' | 'PURGE' | 'TRUTH' | 'SEWER' | 'MAZE' | 'RESCUE' | 'DESTROY' | 'LUCAS' | 'ROOFTOP';
+export type GameEnding = 'SURVIVAL' | 'PURGE' | 'TRUTH' | 'SEWER' | 'MAZE' | 'RESCUE' | 'DESTROY' | 'LUCAS' | 'ROOFTOP' | 'MOREAU';
 /** 1 = the hospital, 2 = the sewers */
-export type Chapter = 1 | 2 | 3 | 4 | 5 | 6;
+export type Chapter = 1 | 2 | 3 | 4 | 5 | 6 | 7;

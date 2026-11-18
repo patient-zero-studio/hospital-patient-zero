@@ -497,6 +497,13 @@ export class MonsterAI {
     // Tall and thin
     this.mesh.scale.set(0.92, 1.12, 0.9);
   }
+  /** A creature that keeps its own look (bosses), bigger or smaller */
+  public setFixedLook(look: { skin: string; eyes: string; gown: string; acc?: string; outfit?: string }, scale = 1) {
+    this.lookLocked = false;
+    this.applyLook(look);
+    this.lookLocked = true;
+    this.mesh.scale.setScalar(scale);
+  }
   /** Can someone at `eye` see her head (walls in between)? */
   public visibleFrom(eye: THREE.Vector3, boxes: CollisionBox[]) {
     return this.lineOfSight(eye, this.eye(), boxes);

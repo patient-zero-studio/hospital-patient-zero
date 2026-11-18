@@ -171,6 +171,14 @@ export class GameState {
           '« Lucas. » Le mot tombe dans le silence de la salle. La créature tressaille. Sous la peau grise, quelque chose bouge : un regard d\'enfant, perdu depuis des années. Les rampes UV s\'éteignent une à une. Il se recroqueville contre le fauteuil de contention et murmure, d\'une voix qui n\'est plus la sienne depuis longtemps : « …je veux rentrer. » Vous lui tendez la main. Pour la première fois, le Patient Zéro a un nom.',
       };
     }
+    if (endingType === 'MOREAU') {
+      return {
+        ending: 'MOREAU',
+        title: 'CHAPITRE 7 : LE DERNIER PATIENT',
+        narrative:
+          'L\'aiguille s\'enfonce dans le cou gris. Le Dr Moreau convulse, hurle, puis se tait. Sous la peau craquelée, les veines vertes pâlissent une à une. Quand il ouvre les yeux, ce sont ceux d\'un vieil homme fatigué. « Lucas… il va bien ? » Vous ne répondez pas. Au-dessus de vous, Saint-Aurore se tait enfin, pour la première fois depuis trente ans. Il n\'y a plus de Patient Zéro. Il n\'y a plus que des survivants.',
+      };
+    }
     if (endingType === 'ROOFTOP') {
       const all = this.notesCollected.length >= 2;
       return {

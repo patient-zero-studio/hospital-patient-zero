@@ -937,6 +937,11 @@ export const EN: Record<string, string> = {
   contre: 'vs',
   'Plus de danses dans la boutique 💃': 'More dances in the shop 💃',
   '👋 Coucou': '👋 Hi',
+  'Le Cœur': 'The Core',
+  'Boss final : le vrai Patient Zéro. (solo ou coop)': 'Final boss: the real Patient Zero. (solo or co-op)',
+  'Envolez-vous une fois du toit': 'Fly away from the roof once',
+  'Le dernier patient': 'The last patient',
+  'La formule': 'The formula',
   // ---- Ranked seasons ----
   '🏅 Saison classée': '🏅 Ranked season',
   Classé: 'Ranked',
