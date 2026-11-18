@@ -17,6 +17,7 @@ import { Forest, ForestNet, ForestPlayer } from './Forest';
 import { SiteB, SiteNet, SitePlayer } from './SiteB';
 import { Rooftop } from './Rooftop';
 import { BossArena } from './BossArena';
+import { DreamHouse, MEMORY_IDS } from './DreamHouse';
 import { GameState } from './GameState';
 import { ProceduralTextures } from '../textures/ProceduralTextures';
 import { MicListener, MicStatus } from '../audio/MicListener';
@@ -389,7 +390,7 @@ export class GameEngine {
   private forest: Forest | null = null;
   /** Chapter 5: Site B, the UV ramps and the final fight. */
   /** Chapter 5 (Site B) or chapter 6 (the roof): same kind of scripted level */
-  private site: SiteB | Rooftop | BossArena | null = null;
+  private site: SiteB | Rooftop | BossArena | DreamHouse | null = null;
   /** Battery drain before the UV lamp multiplies it. */
   private baseDrain = 1;
   /** Co-op: the forest / lab layout seed shared by both players (null = random, solo). */
@@ -840,7 +841,7 @@ export class GameEngine {
     this.builtChapter = this.chapter;
     this.monsters = [];
     this.crawler = null;
-    if (this.chapter === 5 || this.chapter === 6 || this.chapter === 7) this.spawnSite();
+    if (this.chapter >= 5) this.spawnSite();
     else if (this.chapter === 4) this.spawnForest();
     else if (this.chapter === 3) this.spawnMaze();
     else if (this.chapter === 2) this.spawnSewerMonsters();
@@ -1151,6 +1152,12 @@ export class GameEngine {
     this.stairsBuilt = true;
     this.ventOpen = false;
     this.ductWarned = true;
+    if (this.chapter === 8) {
+      this.site = new DreamHouse(this.map, this.scene, this.difficulty, this.lowEndGpu, (msg) => this.shout(msg), this.levelSeed ?? Math.random());
+      this.site.guest = this.net?.role === 'guest';
+      if (this.site.stalker) this.monsters.push(this.site.stalker);
+      return;
+    }
     if (this.chapter === 7) {
       this.site = new BossArena(this.map, this.scene, this.difficulty, this.lowEndGpu, (msg) => this.shout(msg), this.levelSeed ?? Math.random());
       this.site.guest = this.net?.role === 'guest';
@@ -1536,7 +1543,13 @@ export class GameEngine {
       this.player.reset(lv.start.clone().add(off), lv.startYaw);
     } else this.player.reset(start, sewers ? this.map.sewer.startYaw : this.map.playerStartYaw);
     this.chapterToast = null;
-    if (this.site instanceof BossArena)
+    if (this.site instanceof DreamHouse)
+      this.queueChapterToast(
+        this.difficulty >= 2
+          ? 'CHAPITRE SECRET — LE RÊVE DE LUCAS. Sa maison d\'enfance, comme il s\'en souvient. Retrouvez ses 5 souvenirs, puis sortez par le portail du jardin. Une ombre vous suit… elle ne bouge que quand personne ne la regarde.'
+          : 'CHAPITRE SECRET — LE RÊVE DE LUCAS (Exploration). Retrouvez ses 5 souvenirs, puis sortez par le portail du jardin.'
+      );
+    else if (this.site instanceof BossArena)
       this.queueChapterToast(
         this.difficulty >= 2
           ? 'CHAPITRE 7 — LE CŒUR. Le vrai Patient Zéro, c\'est lui : le Dr Moreau s\'est injecté la souche d\'origine. [R] passe votre lampe en UV : brûlez-le, survivez à ses 3 phases… puis injectez l\'antidote [E].'
@@ -1662,7 +1675,12 @@ export class GameEngine {
     this.hemi.groundColor.copy(this.baseHemi.ground);
     this.hemi.intensity = this.baseHemi.intensity;
     // Sewers: no windows, no white paint… a bit more fill light so the torch reveals the bricks
-    if (this.chapter === 7) {
+    if (this.chapter === 8) {
+      // A dream at dusk: soft purple light
+      this.hemi.intensity = this.baseHemi.intensity * 2.2;
+      this.hemi.color.set(0x9a80c0);
+      this.hemi.groundColor.set(0x2a1a20);
+    } else if (this.chapter === 7) {
       // The core: dark, cold, a little green from the cuve
       this.hemi.intensity = this.baseHemi.intensity * 3.4;
       this.hemi.color.set(0x6a8a7a);
@@ -2094,7 +2112,9 @@ export class GameEngine {
     this.stat('escapes');
     this.stat('coinsFound', this.state.runCoins);
     this.ach('first_escape');
-    if (ending === 'MOREAU') {
+    if (ending === 'SECRET') {
+      this.ach('ch8_end');
+    } else if (ending === 'MOREAU') {
       this.ach('ch7_end');
       if (this.state.notesCollected.length >= 2) this.ach('ch7_notes');
     } else if (ending === 'ROOFTOP') {
@@ -2989,6 +3009,7 @@ export class GameEngine {
         this.hemi.intensity = this.forestHemi + this.forest.flash * 6;
       }
       if (this.site) {
+        if (this.site instanceof DreamHouse) this.site.found = this.state.notesCollected.filter((n) => MEMORY_IDS.includes(n.id)).length;
         this.site.mirror(delta);
         this.applyUvLamp();
         this.hemi.intensity = this.forestHemi + this.site.flash * 3;
@@ -3048,6 +3069,7 @@ export class GameEngine {
     // Chapter 5: Site B (UV lamp, ramps, final purge)
     if (this.site) {
       const sb = this.site;
+      if (sb instanceof DreamHouse) sb.found = this.state.notesCollected.filter((n) => MEMORY_IDS.includes(n.id)).length;
       const dead = this.dying || this.finished || !!this.pendingEnding;
       if (!(this.dying && this.killer === sb.stalker)) {
         const pls: SitePlayer[] = [{ pos: p.position, yaw: p.yaw, pitch: p.pitch, flashlight: p.flashlightOn, crouch: p.isCrouching, uv: sb.uv, dead: meDead }];

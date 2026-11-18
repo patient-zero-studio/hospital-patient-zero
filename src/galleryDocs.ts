@@ -36,6 +36,15 @@ export const GALLERY_DOCS: DocEntry[] = [
   { id: 'note-r-message', chapter: 6, kind: 'note', name: 'Message gravé dans la rambarde', text: '« Il m\'a promis qu\'un hélicoptère viendrait me chercher. Que je verrais la mer. Je l\'ai attendu ici toute la nuit. L\'hélicoptère est venu. Il est reparti sans moi. — L. »' },
   { id: 'note-c-journal', chapter: 7, kind: 'note', name: 'Dernière page du Dr Moreau', text: '« Lucas guérit. Lucas guérit et je ne le supporte pas : c\'était MON protocole. Alors je me suis injecté la souche d\'origine, celle d\'avant les essais. Si quelqu\'un lit ceci, ne me tuez pas avec la lumière. Ou si. Je ne sais plus ce que je veux. J\'ai si faim. — É. M. »' },
   { id: 'note-c-antidote', chapter: 7, kind: 'note', name: 'Formule de l\'antidote', text: '« PROTOCOLE AURORE — INVERSION. La souche ne meurt pas : elle s\'endort. Affaiblir le sujet aux UV jusqu\'à l\'effondrement, puis injecter la dose inverse dans les 10 secondes. Sinon il se relève, plus fort. Trois seringues préparées. Il n\'en reste qu\'une. »' },
+  { id: 'mem-ours', chapter: 8, kind: 'note', name: 'Souvenir — Monsieur Pompon', text: '« Monsieur Pompon dormait toujours à gauche, contre le mur, pour me protéger des monstres. Je ne l\'ai pas emporté à l\'hôpital. Le docteur avait dit que je serais rentré avant mon anniversaire. »' },
+  { id: 'mem-lettre', chapter: 8, kind: 'note', name: 'Souvenir — La lettre de maman', text: '« Mon Lucas, le docteur Moreau dit que le traitement te rendra fort. Papa et moi venons te voir dimanche. Mange bien. Ne fais pas de bruit la nuit, les infirmières sont fatiguées. On t\'aime plus grand que le ciel. — Maman »' },
+  { id: 'mem-dessin', chapter: 8, kind: 'note', name: 'Souvenir — Le dessin du frigo', text: '« Une maison, un arbre, trois bonshommes qui se tiennent la main. En dessous, une écriture penchée : LUCAS, 6 ANS. QUAND JE SERAI GRAND JE SERAI DOCTEUR. »' },
+  { id: 'mem-photo', chapter: 8, kind: 'note', name: 'Souvenir — La photo de famille', text: '« Au dos : « Été 1986, avant Saint-Aurore ». Tout le monde sourit. Le petit garçon tient un vélo rouge trop grand pour lui. À côté de ses parents, un homme en blouse blanche pose la main sur son épaule. »' },
+  { id: 'mem-velo', chapter: 8, kind: 'note', name: 'Souvenir — Le vélo rouge', text: '« Papa me tenait la selle et puis il a lâché sans le dire. J\'ai roulé tout seul jusqu\'à l\'arbre. C\'est le dernier jour où je me souviens d\'avoir ri. »' },
 ];
 
 export const isDocId = (id: unknown): id is string => typeof id === 'string' && GALLERY_DOCS.some((d) => d.id === id);
+
+/** 🔐 The secret chapter opens when every document of chapters 1 to 7 is found */
+export const STORY_DOC_IDS = GALLERY_DOCS.filter((d) => d.chapter <= 7).map((d) => d.id);
+export const storyDocsFound = (docs: string[]) => STORY_DOC_IDS.filter((id) => docs.includes(id)).length;

@@ -35,7 +35,7 @@ export const nextTier = (points: number): RankTier | null => RANK_TIERS.find((x)
 
 /** Points for an escape: harder difficulty and later chapters give more */
 export const RANK_WIN: Record<number, number> = { 2: 20, 3: 30, 4: 45, 5: 60 };
-export const rankWin = (difficulty: number, chapter: number) => (RANK_WIN[difficulty] ?? 0) + Math.max(0, Math.min(7, chapter) - 1) * 3;
+export const rankWin = (difficulty: number, chapter: number) => (RANK_WIN[difficulty] ?? 0) + Math.max(0, Math.min(8, chapter) - 1) * 3;
 
 // ---------------------------------------------------------------------------
 // 🎁 Ranked pass: every ranked win gives pass XP, 20 tiers of rewards (monthly)

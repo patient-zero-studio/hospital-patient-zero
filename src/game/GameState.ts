@@ -171,6 +171,14 @@ export class GameState {
           '« Lucas. » Le mot tombe dans le silence de la salle. La créature tressaille. Sous la peau grise, quelque chose bouge : un regard d\'enfant, perdu depuis des années. Les rampes UV s\'éteignent une à une. Il se recroqueville contre le fauteuil de contention et murmure, d\'une voix qui n\'est plus la sienne depuis longtemps : « …je veux rentrer. » Vous lui tendez la main. Pour la première fois, le Patient Zéro a un nom.',
       };
     }
+    if (endingType === 'SECRET') {
+      return {
+        ending: 'SECRET',
+        title: 'FIN SECRÈTE : LE GARÇON QUI VOULAIT ÊTRE DOCTEUR',
+        narrative:
+          'Le portail grince et la lumière du jardin vous avale. Quand vous rouvrez les yeux, vous êtes assis dans l\'herbe, contre l\'arbre du dessin. À côté de vous, un petit garçon tient un vélo rouge trop grand pour lui. « Tu as retrouvé mes souvenirs », dit-il. « Maintenant je peux me réveiller. » Des années plus tard, dans un hôpital tout neuf, un médecin aux yeux très clairs accroche au mur de son bureau un vieux dessin d\'enfant : une maison, un arbre, trois bonshommes. Il s\'appelle Lucas. Il n\'a jamais fait de mal à personne.',
+      };
+    }
     if (endingType === 'MOREAU') {
       return {
         ending: 'MOREAU',

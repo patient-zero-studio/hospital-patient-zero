@@ -93,6 +93,8 @@ export const ACHIEVEMENTS: AchDef[] = [
   { id: 'rpass_done', name: 'Pass classé terminé', desc: 'Prendre le palier 20 du pass classé.', icon: '🏆', tier: 'platine', reward: 300, server: true },
   { id: 'clan', name: 'Frères d\'armes', desc: 'Créer ou rejoindre un clan.', icon: '🛡️', tier: 'bronze', reward: 30, server: true },
   { id: 'chat', name: 'Bavard', desc: 'Envoyer un message à un ami.', icon: '💬', tier: 'bronze', reward: 20, server: true },
+  // --- Secret chapter ---
+  { id: 'ch8_end', name: 'Le garçon qui voulait être docteur', desc: 'Terminer le chapitre secret : le Rêve de Lucas.', icon: '🌳', tier: 'platine', reward: 500, secret: true },
   // --- Chapter 7 ---
   { id: 'ch7_end', name: 'Le dernier patient', desc: 'Vaincre le Dr Moreau et lui injecter l\'antidote (Chapitre 7).', icon: '💉', tier: 'platine', reward: 400 },
   { id: 'ch7_notes', name: 'La formule', desc: 'Trouver les 2 documents du Cœur avant la fin.', icon: '🧪', tier: 'or', reward: 150 },

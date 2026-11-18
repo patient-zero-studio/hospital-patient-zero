@@ -96,19 +96,22 @@ interface StartScreenProps {
   menuMusic?: boolean;
   onToggleMusic?: () => void;
   onShop: () => void;
-  chapter?: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  chapter?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
   ch2Unlocked?: boolean;
   ch3Unlocked?: boolean;
   ch4Unlocked?: boolean;
   ch5Unlocked?: boolean;
   ch6Unlocked?: boolean;
   ch7Unlocked?: boolean;
+  ch8Unlocked?: boolean;
+  /** secret chapter: documents found so far / needed */
+  docsProgress?: [number, number];
   challenge?: ChallengeDef;
   challengeOn?: boolean;
   challengeDone?: boolean;
   onToggleChallenge?: () => void;
   onLeaderboard?: () => void;
-  onChangeChapter?: (c: 1 | 2 | 3 | 4 | 5 | 6 | 7) => void;
+  onChangeChapter?: (c: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => void;
   /** achievements unlocked (null = not logged in) */
   achCount?: number | null;
   onAchievements?: () => void;
@@ -161,6 +164,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   ch5Unlocked = false,
   ch6Unlocked = false,
   ch7Unlocked = false,
+  ch8Unlocked = false,
+  docsProgress,
   onChangeChapter,
   challenge,
   challengeOn = false,
@@ -311,14 +316,17 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                     { n: 4 as const, icon: '🌲', name: 'La Forêt', sub: 'Lampe allumée, il te voit de loin.' },
                     { n: 5 as const, icon: '🟣', name: 'Le Site B', sub: 'Finale : la lumière devient une arme.' },
                     { n: 6 as const, icon: '⛈️', name: 'Le Toit', sub: 'Épilogue : la tempête, et un hélicoptère.' },
-                    { n: 7 as const, icon: '💉', name: 'Le Cœur', sub: 'Boss final : le vrai Patient Zéro. (solo ou coop)' },
+                    { n: 7 as const, icon: '💉', name: 'Le Cœur', sub: 'Boss final : le vrai Patient Zéro.' },
+                    ch8Unlocked
+                      ? { n: 8 as const, icon: '🌳', name: 'Le Rêve de Lucas', sub: 'Chapitre secret : ses souvenirs, et une ombre.' }
+                      : { n: 8 as const, icon: '❔', name: '???', sub: 'Chapitre secret' },
                   ]).map((c) => {
-                    const unlocked = [true, ch2Unlocked, ch3Unlocked, ch4Unlocked, ch5Unlocked, ch6Unlocked, ch7Unlocked];
+                    const unlocked = [true, ch2Unlocked, ch3Unlocked, ch4Unlocked, ch5Unlocked, ch6Unlocked, ch7Unlocked, ch8Unlocked];
                     const locked = !unlocked[c.n - 1];
                     let eff: number = chapter;
                     while (eff > 1 && !unlocked[eff - 1]) eff--;
                     const active = eff === c.n;
-                    const lockText = c.n === 7 ? 'Envolez-vous une fois du toit' : c.n === 6 ? 'Terminez une fois le Site B' : c.n === 5 ? 'Soyez secouru une fois dans la forêt' : c.n === 4 ? 'Sortez une fois du Dédale' : c.n === 3 ? 'Sortez une fois des égouts' : 'Sortez une fois de l\'hôpital';
+                    const lockText = c.n === 8 ? `Trouvez tous les documents des chapitres 1 à 7${docsProgress ? ` (${docsProgress[0]}/${docsProgress[1]})` : ''}` : c.n === 7 ? 'Envolez-vous une fois du toit' : c.n === 6 ? 'Terminez une fois le Site B' : c.n === 5 ? 'Soyez secouru une fois dans la forêt' : c.n === 4 ? 'Sortez une fois du Dédale' : c.n === 3 ? 'Sortez une fois des égouts' : 'Sortez une fois de l\'hôpital';
                     return (
                       <button
                         key={c.n}

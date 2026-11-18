@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioSettings, Chapter, ControlSettings, GameEnding, GameItem } from './types';
 
 /** Chapters playable online (3 stays solo: the endless maze). */
-const toMpChapter = (c: unknown): 1 | 2 | 4 | 5 | 6 | 7 => (c === 2 || c === 4 || c === 5 || c === 6 || c === 7 ? c : 1);
+const toMpChapter = (c: unknown): 1 | 2 | 4 | 5 | 6 | 7 | 8 => (c === 2 || c === 4 || c === 5 || c === 6 || c === 7 || c === 8 ? c : 1);
 import { sound } from './audio/SoundSystem';
 import { CampaignCarry, GameEngine, HudSnapshot } from './game/Engine';
 import { CampaignCard } from './components/CampaignCard';
@@ -30,6 +30,7 @@ import { ClansPanel } from './components/ClansPanel';
 import { MusicMenu } from './components/MusicMenu';
 import { GalleryMenu } from './components/GalleryMenu';
 import { endingKey } from './gallery';
+import { STORY_DOC_IDS, storyDocsFound } from './galleryDocs';
 import { tierOf } from './ranked';
 import { RankedMenu } from './components/RankedMenu';
 import { CHAT_PRESETS } from './net/NetClient';
@@ -162,7 +163,7 @@ export default function App() {
   const [chapter, setChapter] = useState<Chapter>(() => {
     try {
       const v = localStorage.getItem('pz-chapter');
-      return v === '7' ? 7 : v === '6' ? 6 : v === '5' ? 5 : v === '4' ? 4 : v === '3' ? 3 : v === '2' ? 2 : 1;
+      return v === '8' ? 8 : v === '7' ? 7 : v === '6' ? 6 : v === '5' ? 5 : v === '4' ? 4 : v === '3' ? 3 : v === '2' ? 2 : 1;
     } catch {
       return 1;
     }
@@ -572,7 +573,7 @@ export default function App() {
     engineRef.current?.setNet(null);
     if (engineRef.current) engineRef.current.levelSeed = null;
     // Locked chapter picked earlier: fall back to the last one that is open
-    const open = [true, ch2Unlocked, ch3Unlocked, ch4Unlocked, ch5Unlocked, ch6Unlocked, ch7Unlocked];
+    const open = [true, ch2Unlocked, ch3Unlocked, ch4Unlocked, ch5Unlocked, ch6Unlocked, ch7Unlocked, ch8Unlocked];
     let ch: Chapter = chapter;
     while (ch > 1 && !open[ch - 1]) ch = (ch - 1) as Chapter;
     beginRun(hasStartedOnce.current, difficulty, ch);
@@ -895,6 +896,9 @@ export default function App() {
   const ch5Unlocked = !!wallet?.ach?.done.ch4_escape || !!wallet?.admin;
   const ch6Unlocked = !!wallet?.ach?.done.ch5_end || !!wallet?.admin;
   const ch7Unlocked = !!wallet?.ach?.done.ch6_escape || !!wallet?.admin;
+  // 🔐 Secret chapter: every document of chapters 1-7 (the gallery keeps them)
+  const docsFound = storyDocsFound(wallet?.gallery?.docs ?? []);
+  const ch8Unlocked = docsFound >= STORY_DOC_IDS.length || !!wallet?.admin;
 
   const tokenOrThrow = () => {
     const s = sessionRef.current;
@@ -1409,6 +1413,8 @@ export default function App() {
           ch5Unlocked={ch5Unlocked}
           ch6Unlocked={ch6Unlocked}
           ch7Unlocked={ch7Unlocked}
+          ch8Unlocked={ch8Unlocked}
+          docsProgress={[docsFound, STORY_DOC_IDS.length]}
           onCampaign={startCampaign}
           onTutorial={startTutorial}
           onSurvival={startSurvival}
@@ -1465,6 +1471,7 @@ export default function App() {
           ch5Unlocked={ch5Unlocked}
           ch6Unlocked={ch6Unlocked}
           ch7Unlocked={ch7Unlocked}
+          ch8Unlocked={ch8Unlocked}
           onUpdateSettings={(s) => {
             setLobby((l) => ({ ...l, ...s }));
             netRef.current?.updateSettings(s);
