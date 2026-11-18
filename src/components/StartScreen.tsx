@@ -604,6 +604,9 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             )}
             </div>
             <InstallButton />
+            <a href="/comment-jouer/" className="text-[11px] font-mono text-red-300 hover:text-red-200 underline">
+              📖 Comment jouer : touches, chapitres, monstres et astuces
+            </a>
             <span className="text-[11px] font-mono text-zinc-500 text-center">
               {touch ? '📱 Tiens ton téléphone en paysage : le jeu passe en plein écran.' : 'Un clic verrouillera la souris pour la vue 3D à la première personne'}
               {controlSettings.micEnabled && (

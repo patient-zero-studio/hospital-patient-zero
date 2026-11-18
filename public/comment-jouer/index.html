@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Comment jouer à Hospital Patient Zero — touches, chapitres, monstres et astuces</title>
+    <meta
+      name="description"
+      content="Guide de Hospital Patient Zero, le jeu d'horreur gratuit en ligne : les touches (PC, mobile, manette), les 7 chapitres et le chapitre secret, les monstres, les modes de jeu (solo, coop, chasse, survie, classé) et les meilleures astuces pour survivre."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://hospital-patient-zero.onrender.com/comment-jouer/" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <meta property="og:site_name" content="Hospital Patient Zero" />
+    <meta property="og:title" content="Comment jouer à Hospital Patient Zero" />
+    <meta property="og:description" content="Touches, chapitres, monstres, modes de jeu et astuces du jeu d'horreur gratuit en ligne." />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://hospital-patient-zero.onrender.com/comment-jouer/" />
+    <meta property="og:image" content="https://hospital-patient-zero.onrender.com/og-image.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "Hospital Patient Zero", "item": "https://hospital-patient-zero.onrender.com/" },
+              { "@type": "ListItem", "position": 2, "name": "Comment jouer", "item": "https://hospital-patient-zero.onrender.com/comment-jouer/" }
+            ]
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Hospital Patient Zero est-il gratuit ?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Oui. Le jeu est entièrement gratuit et se joue directement dans le navigateur, sans téléchargement. Les skins s'achètent uniquement avec des pièces gagnées en jouant." }
+              },
+              {
+                "@type": "Question",
+                "name": "Peut-on jouer à Hospital Patient Zero sur téléphone ?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Oui. Sur téléphone et tablette, des commandes tactiles apparaissent : un joystick pour marcher, glisser pour regarder, et des boutons pour la lampe, l'interaction et la course. Le jeu peut aussi être installé comme une application." }
+              },
+              {
+                "@type": "Question",
+                "name": "Comment jouer avec un ami ?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Ouvrez Multijoueur, créez une partie et envoyez le code à 6 lettres à votre ami (ou invitez-le depuis votre liste d'amis). Vous pouvez aussi cliquer sur « Trouver un partenaire au hasard »." }
+              },
+              {
+                "@type": "Question",
+                "name": "Comment débloquer le chapitre secret ?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Il faut avoir trouvé tous les documents des chapitres 1 à 7 (25 au total : notes, dossiers et cassettes). La Galerie indique ceux qui vous manquent." }
+              },
+              {
+                "@type": "Question",
+                "name": "Ma progression est-elle sauvegardée ?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Oui, si vous créez un compte (gratuit, juste un pseudo et un mot de passe). Pièces, skins, succès, niveau et chapitres débloqués sont gardés sur le serveur et vous suivent sur tous vos appareils." }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+    <style>
+      :root {
+        --bg: #0a0a0b;
+        --panel: #131316;
+        --line: #26262b;
+        --text: #e4e4e7;
+        --muted: #a1a1aa;
+        --red: #ef4444;
+        --red-dark: #7f1d1d;
+        --amber: #fbbf24;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: radial-gradient(ellipse at top, #1a0707 0%, var(--bg) 55%) fixed, var(--bg);
+        color: var(--text);
+        font-family: Georgia, 'Times New Roman', serif;
+        line-height: 1.6;
+      }
+      a {
+        color: #fca5a5;
+      }
+      header {
+        border-bottom: 1px solid var(--line);
+        padding: 14px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        max-width: 960px;
+        margin: 0 auto;
+      }
+      header a.brand {
+        font-family: 'Courier New', monospace;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--text);
+        text-decoration: none;
+        font-weight: bold;
+        font-size: 14px;
+      }
+      .play {
+        display: inline-block;
+        background: #b91c1c;
+        color: #fff;
+        text-decoration: none;
+        font-family: 'Courier New', monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        font-size: 13px;
+        padding: 10px 16px;
+        border: 1px solid #ef4444;
+      }
+      .play:hover {
+        background: #dc2626;
+      }
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 24px 16px 60px;
+      }
+      h1 {
+        font-size: clamp(28px, 6vw, 44px);
+        line-height: 1.15;
+        margin: 10px 0 8px;
+      }
+      h1 span {
+        color: var(--red);
+      }
+      h2 {
+        font-family: 'Courier New', monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        font-size: 17px;
+        color: #fecaca;
+        border-bottom: 1px solid var(--red-dark);
+        padding-bottom: 6px;
+        margin-top: 42px;
+      }
+      h3 {
+        margin: 18px 0 4px;
+        font-size: 18px;
+      }
+      .lead {
+        font-size: 18px;
+        color: #d4d4d8;
+      }
+      nav.toc {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        padding: 12px 16px;
+        margin: 20px 0;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+      }
+      nav.toc a {
+        margin-right: 14px;
+        white-space: nowrap;
+        line-height: 2;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 10px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        padding: 12px 14px;
+      }
+      .card b {
+        color: #fff;
+      }
+      .card p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 15px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 15px;
+      }
+      th,
+      td {
+        text-align: left;
+        border-bottom: 1px solid var(--line);
+        padding: 8px 6px;
+        vertical-align: top;
+      }
+      th {
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+      }
+      kbd {
+        font-family: 'Courier New', monospace;
+        background: #27272a;
+        border: 1px solid #3f3f46;
+        border-bottom-width: 3px;
+        padding: 1px 6px;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .tip {
+        border-left: 3px solid var(--amber);
+        background: rgba(251, 191, 36, 0.06);
+        padding: 8px 12px;
+        margin: 8px 0;
+      }
+      .table-wrap {
+        overflow-x: auto;
+      }
+      details {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        padding: 10px 14px;
+        margin: 8px 0;
+      }
+      summary {
+        cursor: pointer;
+        font-weight: bold;
+      }
+      footer {
+        text-align: center;
+        color: var(--muted);
+        font-size: 13px;
+        padding: 30px 16px;
+        border-top: 1px solid var(--line);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/">Hospital Patient Zero</a>
+      <a class="play" href="/">▶ Jouer gratuitement</a>
+    </header>
+    <main>
+      <h1>Comment jouer à <span>Hospital Patient Zero</span></h1>
+      <p class="lead">
+        <strong>Hospital Patient Zero</strong> est un jeu d'horreur et de survie en 3D, gratuit, qui se joue directement dans le navigateur. Vous vous réveillez
+        attaché dans la chambre 104 de l'hôpital psychiatrique Saint-Aurore. Une créature, le Patient Zéro, erre dans les couloirs. Votre but : sortir vivant… et
+        découvrir ce qui s'est passé ici.
+      </p>
+      <p><a class="play" href="/">▶ Lancer le jeu</a></p>
+
+      <nav class="toc" aria-label="Sommaire">
+        <a href="#touches">Touches</a>
+        <a href="#but">Le but</a>
+        <a href="#chapitres">Chapitres</a>
+        <a href="#monstres">Monstres</a>
+        <a href="#objets">Objets</a>
+        <a href="#modes">Modes de jeu</a>
+        <a href="#difficulte">Difficulté</a>
+        <a href="#astuces">Astuces</a>
+        <a href="#progression">Progression</a>
+        <a href="#faq">Questions</a>
+      </nav>
+
+      <h2 id="touches">Les touches</h2>
+      <h3>Sur ordinateur (clavier et souris)</h3>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Touche</th><th>Action</th></tr>
+          <tr><td><kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> ou <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Se déplacer</td></tr>
+          <tr><td>Souris</td><td>Regarder autour de soi (cliquez dans le jeu pour verrouiller la souris)</td></tr>
+          <tr><td><kbd>E</kbd></td><td>Interagir : ouvrir une porte, fouiller un meuble, ramasser un objet, se cacher dans un casier ou sous un lit</td></tr>
+          <tr><td><kbd>F</kbd></td><td>Allumer / éteindre la lampe torche (attention à la batterie)</td></tr>
+          <tr><td><kbd>Maj</kbd> (Shift)</td><td>Courir : plus rapide, mais bruyant et épuisant</td></tr>
+          <tr><td><kbd>C</kbd></td><td>S'accroupir : plus lent, mais presque silencieux</td></tr>
+          <tr><td><kbd>Tab</kbd></td><td>Inventaire et documents trouvés</td></tr>
+          <tr><td><kbd>1</kbd> à <kbd>5</kbd></td><td>Utiliser un objet de la barre (pile, adrénaline, sédatif, fumigène…)</td></tr>
+          <tr><td><kbd>X</kbd></td><td>Lâcher l'objet sélectionné (ou poser un réveil, un piège)</td></tr>
+          <tr><td><kbd>R</kbd></td><td>Chapitre 3 : tracer une flèche à la craie · Chapitres 5 et 7 : passer la lampe en mode UV</td></tr>
+          <tr><td><kbd>B</kbd> (maintenir)</td><td>Bottle flip avec une canette : lâcher au bon moment</td></tr>
+          <tr><td><kbd>6</kbd> à <kbd>9</kbd></td><td>Emotes en coop (salut, par ici, au secours, chut)</td></tr>
+          <tr><td><kbd>V</kbd></td><td>Couper / remettre votre micro (chat vocal de proximité en ligne)</td></tr>
+          <tr><td><kbd>Échap</kbd></td><td>Pause, réglages et son</td></tr>
+        </table>
+      </div>
+      <h3>Sur téléphone et tablette</h3>
+      <p>
+        Des commandes tactiles apparaissent : un joystick à gauche pour marcher, glissez sur la droite de l'écran pour regarder, et des boutons pour la lampe,
+        l'interaction, la course, l'accroupissement et les objets. Tournez le téléphone à l'horizontale. Le jeu peut être installé sur l'écran d'accueil
+        comme une application.
+      </p>
+      <h3>À la manette</h3>
+      <p>Branchez une manette (Xbox, PlayStation…) : le stick gauche fait marcher, le stick droit fait regarder, et les boutons reprennent les actions du clavier.</p>
+
+      <h2 id="but">Le but du jeu</h2>
+      <p>
+        Dans chaque chapitre, il faut trouver le moyen de sortir : clés, cartes d'accès, fusibles, générateurs, codes cachés dans des documents… L'objectif du
+        moment s'affiche toujours en haut à gauche de l'écran. Pendant ce temps, un ou plusieurs monstres patrouillent : ils <strong>entendent</strong> vos
+        pas, vos courses et les objets qui tombent, et ils <strong>voient</strong> votre lampe. Si l'un d'eux vous attrape, c'est fini.
+      </p>
+      <p>
+        Les <strong>documents</strong> (notes, dossiers, cassettes VHS) racontent l'histoire du Protocole Aurore, du Dr Moreau et de Lucas. Certains changent
+        la fin que vous obtenez.
+      </p>
+
+      <h2 id="chapitres">Les chapitres</h2>
+      <div class="grid">
+        <div class="card"><b>🏥 Chapitre 1 — L'Hôpital</b><p>Sortez de la chambre 104 et de l'hôpital. Trois fins différentes selon ce que vous trouvez.</p></div>
+        <div class="card"><b>🐀 Chapitre 2 — Les Égouts</b><p>Sous l'hôpital, une créature aveugle chasse au bruit. Ne courez jamais dans l'eau.</p></div>
+        <div class="card"><b>🌀 Chapitre 3 — Le Dédale</b><p>Un labyrinthe qui change, et un Traqueur qui suit votre trace. Marquez votre chemin à la craie.</p></div>
+        <div class="card"><b>🌲 Chapitre 4 — La Forêt</b><p>La nuit, sous la pluie : la Bête vous voit de loin si votre lampe est allumée. Allumez les fusées pour l'hélicoptère.</p></div>
+        <div class="card"><b>🟣 Chapitre 5 — Le Site B</b><p>Le laboratoire secret. La lumière UV devient votre arme contre le Patient Zéro.</p></div>
+        <div class="card"><b>⛈️ Chapitre 6 — Le Toit</b><p>Dans la tempête, réparez les relais radio et tenez jusqu'à l'hélicoptère. Chaque éclair vous montre au monstre.</p></div>
+        <div class="card"><b>💉 Chapitre 7 — Le Cœur</b><p>Le boss final, en trois phases, contre le vrai Patient Zéro. Lampe UV, projecteurs… et un antidote.</p></div>
+        <div class="card"><b>❔ Chapitre secret</b><p>Il existe un huitième chapitre. Pour l'ouvrir, il faut avoir trouvé tous les documents des chapitres 1 à 7.</p></div>
+      </div>
+      <p>Chaque chapitre se débloque en terminant le précédent. Le mode <strong>Campagne</strong> enchaîne les premiers chapitres d'affilée, avec vos objets.</p>
+
+      <h2 id="monstres">Les monstres</h2>
+      <div class="grid">
+        <div class="card"><b>Le Patient Zéro</b><p>Presque aveugle : il voit la lumière et les mouvements proches, et il entend tout. Cachez-vous et restez silencieux.</p></div>
+        <div class="card"><b>La créature du conduit</b><p>Elle vit dans les conduits d'aération de l'hôpital. Ne restez pas trop longtemps près des grilles.</p></div>
+        <div class="card"><b>L'Aveugle</b><p>Dans les égouts. Il ne voit rien mais entend une goutte tomber à cinquante mètres.</p></div>
+        <div class="card"><b>L'Infirmière</b><p>Elle ne bouge que quand personne ne la regarde. Ne la quittez pas des yeux… et en coop, surveillez-la à deux.</p></div>
+        <div class="card"><b>Le Traqueur</b><p>Dans le Dédale, il suit votre odeur et ne s'arrête jamais. Ne revenez pas sur vos pas.</p></div>
+        <div class="card"><b>La Bête</b><p>Dans la forêt, elle chasse à vue. Lampe éteinte, accroupi, vous lui échappez plus facilement.</p></div>
+      </div>
+
+      <h2 id="objets">Les objets utiles</h2>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Objet</th><th>Effet</th></tr>
+          <tr><td>🔋 Pile</td><td>Recharge la lampe torche</td></tr>
+          <tr><td>💉 Adrénaline</td><td>Endurance au maximum et 6 secondes de sprint illimité</td></tr>
+          <tr><td>🍫 Barre de céréales</td><td>Redonne un peu d'endurance</td></tr>
+          <tr><td>💤 Seringue de sédatif</td><td>Immobilise un monstre 5 secondes (à moins de 3 m, face à lui)</td></tr>
+          <tr><td>🥫 Canette</td><td>À lancer pour faire du bruit ailleurs et attirer le monstre</td></tr>
+          <tr><td>⏰ Réveil</td><td>Posez-le : il sonne au bout de 3 secondes et attire les monstres</td></tr>
+          <tr><td>💨 Fumigène</td><td>Un nuage épais pendant 12 secondes : les monstres ne voient plus à travers</td></tr>
+          <tr><td>🪤 Piège à mâchoires</td><td>Bloque 6 secondes le premier monstre qui marche dessus</td></tr>
+        </table>
+      </div>
+      <p>On trouve ces objets en fouillant les meubles. Un vieil SDF caché dans l'entrepôt de l'hôpital en vend aussi contre des pièces.</p>
+
+      <h2 id="modes">Les modes de jeu</h2>
+      <div class="grid">
+        <div class="card"><b>Solo</b><p>L'histoire, chapitre par chapitre, à votre rythme.</p></div>
+        <div class="card"><b>Coop en ligne</b><p>À deux contre les monstres, avec un inventaire d'équipe et un chat vocal de proximité. Perdu seulement si vous êtes attrapés tous les deux.</p></div>
+        <div class="card"><b>Chasse</b><p>Un joueur est le Patient Zéro et traque l'autre, qui doit s'échapper avant la fin du temps.</p></div>
+        <div class="card"><b>Course</b><p>Le premier sorti de l'hôpital gagne.</p></div>
+        <div class="card"><b>Survie infinie</b><p>Tenez le plus longtemps possible : une créature de plus arrive à chaque vague.</p></div>
+        <div class="card"><b>Saison classée</b><p>Chaque sortie rapporte des points : Bois, Bronze, Métal, Or, Diamant, Jade, puis Pro. Récompenses chaque mois.</p></div>
+        <div class="card"><b>Défi du jour</b><p>Une règle spéciale chaque jour (sans lampe, monstres plus rapides, brouillard…) et des pièces à gagner.</p></div>
+        <div class="card"><b>Regarder un ami</b><p>Suivez en direct la partie en coop d'un ami, depuis votre liste d'amis.</p></div>
+      </div>
+
+      <h2 id="difficulte">Les niveaux de difficulté</h2>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Niveau</th><th>Ce qui change</th></tr>
+          <tr><td>1 — Exploration</td><td>Aucun monstre : idéal pour découvrir les lieux et l'histoire</td></tr>
+          <tr><td>2 — Normal</td><td>Le Patient Zéro rôde dans les couloirs</td></tr>
+          <tr><td>3 — Difficile</td><td>Plus de créatures, dont l'Infirmière</td></tr>
+          <tr><td>4 — Cauchemar</td><td>Trois créatures en bas, une à l'étage, une au sous-sol</td></tr>
+          <tr><td>5 — Enfer</td><td>Le maximum de monstres, partout. Bonne chance.</td></tr>
+        </table>
+      </div>
+
+      <h2 id="astuces">Astuces pour survivre</h2>
+      <p class="tip"><strong>Marchez, ne courez pas.</strong> Courir fait du bruit et vide votre endurance. Accroupi, vous êtes presque silencieux.</p>
+      <p class="tip"><strong>Éteignez la lampe quand un monstre approche.</strong> C'est la lumière qu'il voit en premier.</p>
+      <p class="tip"><strong>Cachez-vous.</strong> Casiers et lits sont vos meilleurs amis. Mais ne parlez pas : avec le micro activé, le monstre entend votre vraie voix !</p>
+      <p class="tip"><strong>Faites diversion.</strong> Une canette lancée ou un réveil posé attire les monstres loin de votre chemin.</p>
+      <p class="tip"><strong>Lisez les documents.</strong> Ils donnent des codes, des indices… et ouvrent les meilleures fins.</p>
+      <p class="tip"><strong>Contre le boss,</strong> gardez des piles : la lumière UV vide la batterie six fois plus vite.</p>
+
+      <h2 id="progression">Pièces, skins et progression</h2>
+      <p>
+        Avec un compte gratuit, chaque sortie rapporte des <strong>pièces</strong> et de l'<strong>expérience</strong>. Les pièces achètent des skins dans la
+        boutique (tenues, accessoires, effets animés, danses de victoire), des boîtes mystère et des objets. Il y a aussi un cadeau quotidien, un pass de
+        saison gratuit, un pass classé, des défis de la semaine, près de 80 succès, des clans avec leur guerre du week-end, une galerie des fins et des
+        documents, et des événements (Halloween, Noël, Pâques…).
+      </p>
+
+      <h2 id="faq">Questions fréquentes</h2>
+      <details open>
+        <summary>Le jeu est-il gratuit ?</summary>
+        <p>Oui, entièrement. Il se joue dans le navigateur, sans téléchargement. Tout ce qui s'achète utilise des pièces gagnées en jouant.</p>
+      </details>
+      <details>
+        <summary>Ça marche sur téléphone ?</summary>
+        <p>Oui, avec des commandes tactiles. Tournez l'écran à l'horizontale. Un ordinateur récent donne les plus beaux graphismes, mais la qualité s'adapte à l'appareil.</p>
+      </details>
+      <details>
+        <summary>Comment jouer avec un ami ?</summary>
+        <p>Menu <em>Multijoueur</em> → <em>Créer une partie</em>, puis envoyez le code à 6 lettres. Ou ajoutez votre ami dans la liste d'amis et invitez-le d'un clic.</p>
+      </details>
+      <details>
+        <summary>Comment débloquer le chapitre secret ?</summary>
+        <p>Trouvez les 25 documents des chapitres 1 à 7. La Galerie montre ceux qui vous manquent.</p>
+      </details>
+      <details>
+        <summary>Ma progression est-elle sauvegardée ?</summary>
+        <p>Oui, sur votre compte. Connectez-vous sur n'importe quel appareil pour la retrouver.</p>
+      </details>
+      <details>
+        <summary>Le jeu met du temps à s'ouvrir, c'est normal ?</summary>
+        <p>Si personne n'a joué depuis un moment, le serveur se réveille : cela peut prendre une trentaine de secondes la première fois. Ensuite, c'est instantané.</p>
+      </details>
+
+      <p style="text-align: center; margin-top: 40px"><a class="play" href="/">▶ Jouer maintenant à Hospital Patient Zero</a></p>
+    </main>
+    <footer>Hospital Patient Zero — jeu d'horreur et de survie 3D gratuit, en ligne, en solo ou en coop.</footer>
+  </body>
+</html>
