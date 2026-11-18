@@ -1554,6 +1554,15 @@ server.on('upgrade', (req, socket, head) => {
           send(client, { t: 'chat', from: client.username, i });
           break;
         }
+        case 'lemote': {
+          // 🎭 Emote in the lobby (dance ids only, not too often)
+          const now = Date.now();
+          const id = String(msg.id ?? '');
+          if (!/^[a-z]{1,16}$/.test(id) || now - (client.lastChat ?? 0) < 700) break;
+          client.lastChat = now;
+          send(peerOf(client), { t: 'lemote', from: client.username, id });
+          break;
+        }
         case 'relay': {
           // Game traffic: forwarded untouched to the other player
           send(peerOf(client), { t: 'relay', d: msg.d });

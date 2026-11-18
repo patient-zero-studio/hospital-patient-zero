@@ -942,6 +942,22 @@ export default function App() {
   const refreshFriendsRef = useRef(refreshFriends);
   refreshFriendsRef.current = refreshFriends;
   const [redeemOpen, setRedeemOpen] = useState(false);
+  // 🎭 The partner's look, for the lobby stage
+  const [partnerLook, setPartnerLook] = useState<Appearance | null>(null);
+  useEffect(() => {
+    const name = lobby.partner;
+    const s = sessionRef.current;
+    setPartnerLook(null);
+    if (!name || !s) return;
+    let alive = true;
+    api
+      .player(s.token, name)
+      .then((pr) => alive && setPartnerLook(pr.look))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [lobby.partner]);
   const [clansOpen, setClansOpen] = useState(false);
   const [musicOpen, setMusicOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -1137,6 +1153,9 @@ export default function App() {
           error: e.t === 'room-closed' ? 'L\'hôte a quitté la partie.' : 'Connexion au serveur perdue.',
         }));
         if (e.t === 'disconnected') netRef.current = null;
+        break;
+      case 'lemote':
+        setLobby((l) => ({ ...l, emotes: { ...(l.emotes ?? {}), [e.from]: { id: e.id, at: Date.now() } } }));
         break;
       case 'chat':
         setLobby((l) => ({ ...l, chat: [...(l.chat ?? []), { from: e.from, text: CHAT_PRESETS[e.i] ?? '' }].slice(-20) }));
@@ -1431,6 +1450,14 @@ export default function App() {
           onFindMatch={findMatch}
           onCancelSearch={cancelSearch}
           onChat={(i) => netRef.current?.chat(i)}
+          myLook={look}
+          partnerLook={partnerLook}
+          owned={wallet?.wallet.owned ?? []}
+          onEmote={(id) => {
+            netRef.current?.lobbyEmote(id);
+            const me = session?.username;
+            if (me) setLobby((l) => ({ ...l, emotes: { ...(l.emotes ?? {}), [me]: { id, at: Date.now() } } }));
+          }}
           ch2Unlocked={ch2Unlocked}
           ch4Unlocked={ch4Unlocked}
           ch5Unlocked={ch5Unlocked}

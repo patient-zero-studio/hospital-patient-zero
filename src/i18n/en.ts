@@ -935,6 +935,8 @@ export const EN: Record<string, string> = {
   'Bête du clan': 'Clan beast',
   'Braises du clan': 'Clan embers',
   contre: 'vs',
+  'Plus de danses dans la boutique 💃': 'More dances in the shop 💃',
+  '👋 Coucou': '👋 Hi',
   // ---- Ranked seasons ----
   '🏅 Saison classée': '🏅 Ranked season',
   Classé: 'Ranked',

@@ -2,6 +2,8 @@ import { CHAT_PRESETS } from '../net/NetClient';
 import React, { useState } from 'react';
 import { Users, LogOut, Copy, Check, Loader2, X, Palette } from 'lucide-react';
 import { DIFFICULTIES, Difficulty } from '../game/Difficulty';
+import { LobbyStage, ownedEmotes } from './LobbyStage';
+import type { Appearance } from '../appearance';
 
 export type GameMode = 'coop' | 'versus' | 'race';
 
@@ -20,6 +22,8 @@ export interface LobbyState extends MatchSettings {
   waiting?: number;
   /** 💬 quick messages of the lobby */
   chat?: { from: string; text: string }[];
+  /** 🎭 last emote of each player (by name) */
+  emotes?: Record<string, { id: string; at: number }>;
   code?: string;
   partner?: string | null;
   error?: string | null;
@@ -52,6 +56,11 @@ interface Props {
   onClose: () => void;
   /** opens the friends list (to invite one) */
   onFriends?: () => void;
+  /** 🎭 the lobby stage: both looks, owned skins, send an emote */
+  myLook?: Appearance;
+  partnerLook?: Appearance | null;
+  owned?: string[];
+  onEmote?: (id: string) => void;
 }
 
 const input =
@@ -65,6 +74,39 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
   const [code, setCode] = useState('');
   const [draft, setDraft] = useState<MatchSettings>({ difficulty: p.lobby.difficulty, mode: p.lobby.mode, monster: p.lobby.monster, chapter: p.lobby.chapter ?? 1 });
   const [copied, setCopied] = useState(false);
+  const [emoteWait, setEmoteWait] = useState(false);
+
+  // 🎭 Both characters, and the emotes you can send
+  const stage =
+    p.lobby.partner && p.myLook && p.username ? (
+      <div className="space-y-1.5">
+        <LobbyStage
+          me={{ name: p.username, look: p.myLook, emote: p.lobby.emotes?.[p.username] ?? null }}
+          partner={{ name: p.lobby.partner, look: p.partnerLook ?? null, emote: p.lobby.emotes?.[p.lobby.partner] ?? null }}
+        />
+        {p.onEmote && (
+          <div className="flex flex-wrap gap-1 justify-center">
+            {ownedEmotes(p.owned ?? []).map((e) => (
+              <button
+                key={e.id}
+                disabled={emoteWait}
+                onClick={() => {
+                  p.onEmote!(e.id);
+                  setEmoteWait(true);
+                  setTimeout(() => setEmoteWait(false), 1200);
+                }}
+                className="px-2 py-1 border border-fuchsia-800 text-[11px] text-fuchsia-200 hover:border-fuchsia-400 disabled:opacity-40"
+              >
+                {e.label}
+              </button>
+            ))}
+          </div>
+        )}
+        {(p.owned ?? []).every((id) => !id.startsWith('d-')) && (
+          <p className="text-[10px] font-mono text-zinc-600 text-center">Plus de danses dans la boutique 💃</p>
+        )}
+      </div>
+    ) : null;
 
   const submitAuth = (e: React.FormEvent) => {
     e.preventDefault();
@@ -401,6 +443,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
                     </span>
                   )}
                 </div>
+                {stage}
                 {p.lobby.partner && p.onChat && (
                   <div className="space-y-1.5">
                     <div className="max-h-24 overflow-y-auto space-y-0.5 text-xs font-mono">
@@ -440,6 +483,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
                 <div className="text-xs font-mono text-zinc-500 inline-flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" /> En attente que l'hôte lance la partie…
                 </div>
+                {stage}
                 {p.lobby.partner && p.onChat && (
                   <div className="space-y-1.5">
                     <div className="max-h-24 overflow-y-auto space-y-0.5 text-xs font-mono">

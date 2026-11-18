@@ -24,6 +24,8 @@ export type LobbyEvent =
   | { t: 'error'; error: string }
   | { t: 'queued'; waiting: number }
   | { t: 'chat'; from: string; i: number }
+  /** 🎭 an emote in the lobby */
+  | { t: 'lemote'; from: string; id: string }
   | { t: 'unqueued' }
   /** 👀 spectator: the game you watch */
   | ({ t: 'watch-start'; seed?: number; player: string; other?: string } & RoomSettings)
@@ -104,6 +106,10 @@ export class NetClient {
   }
   public leave() {
     this.raw({ t: 'leave' });
+  }
+  /** 🎭 Emote / dance in the lobby */
+  public lobbyEmote(id: string) {
+    this.raw({ t: 'lemote', id });
   }
   /** 💬 Quick message (index in CHAT_PRESETS) */
   public chat(i: number) {
