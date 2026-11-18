@@ -1,4 +1,22 @@
 import React, { useEffect, useState } from 'react';
+/** Message du jour (une phrase d'ambiance différente chaque jour) */
+const DAILY_LINES = [
+  "Les casiers sont froids. Mais ils sont vides. Pour l'instant.",
+  "Il n'a pas d'yeux. Il n'en a jamais eu besoin.",
+  "Une goutte tombe dans les égouts. Quelque chose a entendu.",
+  "Ne courez pas dans les couloirs. Il aime qu'on coure.",
+  "La chambre 104 a encore ses sangles. Quelqu'un les a arrachées.",
+  "Éteignez la lampe. Écoutez. Respirez doucement.",
+  "L'Infirmière n'a pas bougé. Vous en êtes sûr ?",
+  "Le Dr Moreau prenait toujours des notes. Toujours.",
+  "Monsieur Pompon attend toujours, contre le mur de gauche.",
+  "Un réveil qui sonne peut vous sauver la vie. Ou vous la coûter.",
+  "Dans la forêt, chaque lumière se voit de loin.",
+  "Les murs du Dédale ne disent plus la même chose qu'hier.",
+  "Sur le toit, l'éclair vous montre. À lui aussi.",
+  "Il y a 25 documents. Et un chapitre que personne ne voit.",
+];
+
 import { RANK_TIERS } from '../ranked';
 import { Coins, Medal, Music, Play, ShoppingBag, Sliders, Trophy, Users, VolumeX } from 'lucide-react';
 import type { ChallengeDef } from '../challenges';
@@ -604,6 +622,9 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             )}
             </div>
             <InstallButton />
+            <p className="text-xs font-serif italic text-red-300/80 text-center max-w-md">
+              « {DAILY_LINES[Math.floor(Date.now() / 86400000) % DAILY_LINES.length]} »
+            </p>
             <a href="/comment-jouer/" className="text-[11px] font-mono text-red-300 hover:text-red-200 underline">
               📖 Comment jouer : touches, chapitres, monstres et astuces
             </a>
