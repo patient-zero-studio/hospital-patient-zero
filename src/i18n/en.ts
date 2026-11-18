@@ -945,6 +945,10 @@ export const EN: Record<string, string> = {
   'Le Rêve de Lucas': "Lucas's Dream",
   'Chapitre secret': 'Secret chapter',
   'Chapitre secret : ses souvenirs, et une ombre.': 'Secret chapter: his memories, and a shadow.',
+  'Dr Moreau (boss)': 'Dr Moreau (boss)',
+  'Blouse du Dr Moreau': "Dr Moreau's coat",
+  "L'Ombre": 'The Shadow',
+  'Pyjama de Lucas': "Lucas's pyjamas",
   // ---- Ranked seasons ----
   '🏅 Saison classée': '🏅 Ranked season',
   Classé: 'Ranked',

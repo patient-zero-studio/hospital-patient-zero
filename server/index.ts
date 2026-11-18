@@ -50,7 +50,7 @@ import { grantServerAch } from '../src/achievements.ts';
 import { PushSub, isPushSub, pushPublicKey, pushTo, setupPush } from './push.ts';
 import { LEVEL_SKINS, PASS_TIERS, PASS_XP_PER_TIER, nextWeek, passEnds, passKey, passName, passReward, weekKey, weeklyChallenges } from '../src/progression.ts';
 import { BOXES, SUPPLY_NAMES, TIER_LABEL, TIER_PRICE, cosmetic as cosmeticById } from '../src/economy.ts';
-import { CATALOG } from '../src/economy.ts';
+import { CATALOG, STORY_SKINS } from '../src/economy.ts';
 
 /** Admin accounts (lower case): infinite coins, can gift coins to anyone. */
 const ADMINS = new Set(['corrupted_wolf', ...(process.env.PZ_ADMINS ?? '').toLowerCase().split(',').filter(Boolean)]);
@@ -357,8 +357,22 @@ const reportAch = (u: User, unlock: unknown, stats: unknown, trusted: Partial<Re
     walletOf(u).coins += coins;
     addXp(u, coins / 2);
   }
+  grantStorySkins(u);
   return newly.map((a: AchDef) => a.id);
 };
+/** 🏆 Boss beaten / secret chapter finished: their skins (once) */
+function grantStorySkins(u: User) {
+  const done = achOf(u).done;
+  const w = walletOf(u);
+  for (const { ach, skins } of STORY_SKINS) {
+    if (!done[ach]) continue;
+    const missing = skins.filter((id) => !w.owned.includes(id));
+    if (!missing.length) continue;
+    w.owned.push(...missing);
+    const names = missing.map((id) => `« ${cosmeticById(id)?.name ?? id} »`).join(' et ');
+    u.inbox = [...(u.inbox ?? []), { from: 'Patient Zero', text: `🏆 Bravo ! Tu as gagné ${missing.length > 1 ? 'les skins' : 'le skin'} ${names}. Équipe-les dans Personnaliser.`, at: Date.now() }].slice(-20);
+  }
+}
 /** Unlocks achievements only the server can check, and pays them. */
 const serverAch = (u: User, ...ids: string[]) => {
   const newly = grantServerAch(achOf(u), ids);

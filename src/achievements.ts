@@ -94,9 +94,9 @@ export const ACHIEVEMENTS: AchDef[] = [
   { id: 'clan', name: 'Frères d\'armes', desc: 'Créer ou rejoindre un clan.', icon: '🛡️', tier: 'bronze', reward: 30, server: true },
   { id: 'chat', name: 'Bavard', desc: 'Envoyer un message à un ami.', icon: '💬', tier: 'bronze', reward: 20, server: true },
   // --- Secret chapter ---
-  { id: 'ch8_end', name: 'Le garçon qui voulait être docteur', desc: 'Terminer le chapitre secret : le Rêve de Lucas.', icon: '🌳', tier: 'platine', reward: 500, secret: true },
+  { id: 'ch8_end', name: 'Le garçon qui voulait être docteur', desc: 'Terminer le chapitre secret : le Rêve de Lucas. Récompense : skins de l\'Ombre et de Lucas.', icon: '🌳', tier: 'platine', reward: 500, secret: true },
   // --- Chapter 7 ---
-  { id: 'ch7_end', name: 'Le dernier patient', desc: 'Vaincre le Dr Moreau et lui injecter l\'antidote (Chapitre 7).', icon: '💉', tier: 'platine', reward: 400 },
+  { id: 'ch7_end', name: 'Le dernier patient', desc: 'Vaincre le Dr Moreau et lui injecter l\'antidote (Chapitre 7). Récompense : 2 skins du Dr Moreau.', icon: '💉', tier: 'platine', reward: 400 },
   { id: 'ch7_notes', name: 'La formule', desc: 'Trouver les 2 documents du Cœur avant la fin.', icon: '🧪', tier: 'or', reward: 150 },
   // --- Chapter 6 ---
   { id: 'ch6_escape', name: 'Au-dessus de la tempête', desc: 'S\'envoler du toit en hélicoptère (Chapitre 6).', icon: '🚁', tier: 'or', reward: 250 },
