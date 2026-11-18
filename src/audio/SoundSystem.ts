@@ -784,6 +784,28 @@ class SoundSystem {
     return !!this.ctx && this.ctx.state === 'running';
   }
 
+  /** 🎵 Menu track chosen by the player (see src/music.ts) */
+  public menuTrack = (() => {
+    try {
+      return localStorage.getItem('pz-menu-track') || 'aurore';
+    } catch {
+      return 'aurore';
+    }
+  })();
+  private menuRestart: number | null = null;
+  /** Switch the menu track (restarts it if it is playing). */
+  public setMenuTrack(id: string) {
+    if (id === this.menuTrack) return;
+    this.menuTrack = id;
+    if (!this.menuBus) return;
+    this.stopMenuMusic(0.4);
+    if (this.menuRestart) window.clearTimeout(this.menuRestart);
+    this.menuRestart = window.setTimeout(() => {
+      this.menuRestart = null;
+      this.startMenuMusic();
+    }, 500);
+  }
+
   public startMenuMusic() {
     if (!this.ctx || !this.musicGain || this.menuBus) return;
     const ctx = this.ctx;
@@ -801,6 +823,12 @@ class SoundSystem {
     this.menuBus = bus;
     // The in-game ambience steps back while the menu plays
     this.applyAmbience(1);
+    if (this.menuTrack !== 'aurore') {
+      this.menuStep = 0;
+      this.setupTrack(this.menuTrack, bus);
+      this.trackTick();
+      return;
+    }
 
     // 1. Drone: A1, B♭1 (a minor second: it never settles) and E2, slowly breathing filter
     const lp = ctx.createBiquadFilter();
@@ -967,6 +995,243 @@ class SoundSystem {
     }
 
     this.menuTimer = window.setTimeout(() => this.menuTick(), 820);
+  }
+
+  // ---------------------------------------------------------------------
+  // 🎵 Unlockable menu tracks
+  // ---------------------------------------------------------------------
+  /** Long-running layers (rain, wind, sub bass) */
+  private setupTrack(id: string, bus: GainNode) {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime;
+    const loopNoise = (type: BiquadFilterType, freq: number, q: number, vol: number, lfoHz = 0, lfoDepth = 0) => {
+      const src = this.noiseSource(1);
+      src.loop = true;
+      const f = ctx.createBiquadFilter();
+      f.type = type;
+      f.frequency.value = freq;
+      f.Q.value = q;
+      const g = ctx.createGain();
+      g.gain.value = vol;
+      src.connect(f);
+      f.connect(g);
+      g.connect(bus);
+      src.start(t);
+      this.menuNodes.push(src);
+      if (lfoHz) {
+        const lfo = ctx.createOscillator();
+        lfo.frequency.value = lfoHz;
+        const lg = ctx.createGain();
+        lg.gain.value = lfoDepth;
+        lfo.connect(lg);
+        lg.connect(f.frequency);
+        lfo.start(t);
+        this.menuNodes.push(lfo);
+      }
+    };
+    const drone = (freqs: number[], type: OscillatorType, vol: number, cutoff: number) => {
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = cutoff;
+      const g = ctx.createGain();
+      g.gain.value = vol;
+      f.connect(g);
+      g.connect(bus);
+      for (const fr of freqs) {
+        const o = ctx.createOscillator();
+        o.type = type;
+        o.frequency.value = fr;
+        o.detune.value = (Math.random() - 0.5) * 10;
+        o.connect(f);
+        o.start(t);
+        this.menuNodes.push(o);
+      }
+    };
+    switch (id) {
+      case 'orage':
+        loopNoise('bandpass', 1400, 0.6, 0.16); // rain
+        loopNoise('lowpass', 220, 0.7, 0.12, 0.07, 120); // gusts
+        break;
+      case 'foret':
+        loopNoise('lowpass', 380, 1.2, 0.2, 0.05, 260); // wind in the trees
+        break;
+      case 'battement':
+        drone([41.2, 61.7], 'sawtooth', 0.07, 120);
+        break;
+      case 'neons':
+        drone([110, 164.8], 'sawtooth', 0.025, 500);
+        break;
+      case 'choeur':
+        drone([73.4], 'sine', 0.08, 300);
+        break;
+    }
+  }
+
+  /** A plucked / struck note: sine + overtone, exponential decay. */
+  private pluck(out: AudioNode, t: number, f: number, vol: number, dur: number, type: OscillatorType = 'triangle', pan = 0) {
+    const ctx = this.ctx!;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const p = ctx.createStereoPanner?.();
+    if (p) {
+      p.pan.value = pan;
+      g.connect(p);
+      p.connect(out);
+    } else g.connect(out);
+    for (const [m, v] of [[1, 1], [2, 0.3]]) {
+      const o = ctx.createOscillator();
+      const og = ctx.createGain();
+      o.type = m === 1 ? type : 'sine';
+      o.frequency.value = f * m;
+      og.gain.value = v;
+      o.connect(og);
+      og.connect(g);
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    }
+  }
+
+  /** A slow swelling chord (strings / voices). */
+  private swell(out: AudioNode, t: number, freqs: number[], vol: number, dur: number, type: OscillatorType, cutoff: number, formant = 0) {
+    const ctx = this.ctx!;
+    const f = ctx.createBiquadFilter();
+    f.type = formant ? 'bandpass' : 'lowpass';
+    f.frequency.value = formant || cutoff;
+    f.Q.value = formant ? 2.5 : 0.7;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + dur * 0.4);
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    f.connect(g);
+    g.connect(out);
+    for (const fr of freqs)
+      for (const det of [-9, 0, 9]) {
+        const o = ctx.createOscillator();
+        o.type = type;
+        o.frequency.value = fr;
+        o.detune.value = det;
+        // a little vibrato: voices
+        if (formant) {
+          const v = ctx.createOscillator();
+          v.frequency.value = 4.5 + Math.random();
+          const vg = ctx.createGain();
+          vg.gain.value = 6;
+          v.connect(vg);
+          vg.connect(o.detune);
+          v.start(t);
+          v.stop(t + dur + 0.1);
+        }
+        o.connect(f);
+        o.start(t);
+        o.stop(t + dur + 0.1);
+      }
+  }
+
+  private kick(out: AudioNode, t: number, vol: number, f0 = 110) {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(38, t + 0.16);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    o.connect(g);
+    g.connect(out);
+    o.start(t);
+    o.stop(t + 0.32);
+  }
+
+  /** One step of the chosen track; schedules the next one. */
+  private trackTick() {
+    if (!this.ctx || !this.menuBus) return;
+    const ctx = this.ctx;
+    const bus = this.menuBus;
+    const t = ctx.currentTime + 0.05;
+    const step = this.menuStep++;
+    let next = 800;
+    switch (this.menuTrack) {
+      case 'berceuse': {
+        // A soft nursery rhyme in C… and sometimes a finger slips
+        const tune = [523.3, 659.3, 784, 659.3, 698.5, 659.3, 587.3, 0, 523.3, 659.3, 784, 1046.5, 987.8, 784, 659.3, 0, 698.5, 880, 784, 659.3, 587.3, 523.3, 493.9, 0, 523.3, 0, 0, 0];
+        const n = tune[step % tune.length];
+        if (n) {
+          const wrong = Math.random() < 0.08 ? Math.pow(2, -1 / 12) : 1;
+          this.musicBoxNote(bus, t, n * wrong);
+        }
+        if (step % 8 === 0) {
+          const chords = [[261.6, 329.6, 392], [174.6, 220, 261.6], [196, 246.9, 293.7], [261.6, 311.1, 392]];
+          this.swell(bus, t, chords[Math.floor(step / 8) % 4].map((f) => f / 2), 0.03, 5, 'sine', 800);
+        }
+        next = 620;
+        break;
+      }
+      case 'foret': {
+        // Crickets, an owl, twigs breaking somewhere close
+        if (Math.random() < 0.7)
+          for (let i = 0; i < 3; i++) this.pluck(bus, t + i * 0.06 + Math.random() * 0.02, 4200 + Math.random() * 300, 0.012, 0.04, 'sine', Math.random() * 2 - 1);
+        if (Math.random() < 0.05) {
+          const pan = Math.random() * 1.6 - 0.8;
+          for (const [dt, f] of [[0, 410], [0.45, 385], [0.75, 385]] as const) this.swell(bus, t + dt, [f], 0.04, 0.35, 'sine', 900);
+          void pan;
+        }
+        if (Math.random() < 0.04) this.burst(bus, t, 0.12, 0.12, 'highpass', 1800, 1, 0.002);
+        if (step % 16 === 0) this.swell(bus, t, [110, 130.8, 164.8], 0.02, 9, 'triangle', 500);
+        next = 700;
+        break;
+      }
+      case 'choeur': {
+        // Distant voices: a slow chord every 4 s ("ah" vowel)
+        const chords = [[146.8, 220, 293.7, 349.2], [116.5, 174.6, 233.1, 293.7], [174.6, 220, 261.6, 349.2], [110, 164.8, 220, 277.2]];
+        const ch = chords[step % chords.length];
+        this.swell(bus, t, ch, 0.05, 4.6, 'sawtooth', 0, 760);
+        this.swell(bus, t, ch.map((f) => f * 2), 0.018, 4.6, 'sawtooth', 0, 1150);
+        if (Math.random() < 0.3) this.burst(bus, t + 2, 1.5, 0.02, 'bandpass', 2600, 5, 0.5);
+        next = 4000;
+        break;
+      }
+      case 'orage': {
+        // Rain, a lonely piano, thunder far away
+        const scale = [220, 261.6, 293.7, 329.6, 392, 440, 523.3];
+        if (Math.random() < 0.55) this.pluck(bus, t, scale[Math.floor(Math.random() * scale.length)], 0.07, 3.5, 'triangle', Math.random() - 0.5);
+        if (step % 6 === 0) this.pluck(bus, t, 110, 0.08, 4, 'triangle');
+        if (Math.random() < 0.06) {
+          this.burst(bus, t, 0.25, 0.3, 'highpass', 900, 0.7, 0.002);
+          this.burst(bus, t + 0.15, 3.5, 0.35, 'lowpass', 140, 0.8, 0.3);
+        }
+        next = 1100;
+        break;
+      }
+      case 'neons': {
+        // 80s synths: bass, arpeggio, hats (8th notes)
+        const prog = [[220, 261.6, 329.6], [174.6, 220, 261.6], [130.8, 164.8, 196], [196, 246.9, 293.7]];
+        const ch = prog[Math.floor(step / 16) % 4];
+        const arp = [0, 1, 2, 1, 0, 2, 1, 2];
+        this.pluck(bus, t, ch[arp[step % 8]] * 2, 0.035, 0.25, 'square', ((step % 4) - 1.5) / 3);
+        if (step % 2 === 0) this.pluck(bus, t, ch[0] / 2, 0.08, 0.22, 'sawtooth');
+        if (step % 4 === 0) this.kick(bus, t, 0.35, 120);
+        this.burst(bus, t, 0.05, step % 2 ? 0.03 : 0.015, 'highpass', 7000, 1, 0.001);
+        if (step % 16 === 0) this.swell(bus, t, ch, 0.025, 4, 'sawtooth', 1400);
+        next = 240;
+        break;
+      }
+      case 'battement': {
+        // An affolé heartbeat (lub-dub) that speeds up, then calms down
+        const phase = step % 64;
+        const beat = phase < 32 ? 8 : 6;
+        if (step % beat === 0) {
+          this.kick(bus, t, 0.5, 70);
+          this.kick(bus, t + 0.18, 0.35, 60);
+        }
+        if (step % 2 === 1) this.burst(bus, t, 0.04, 0.012, 'highpass', 8000, 1, 0.001);
+        if (step % 32 === 16) this.swell(bus, t, [329.6, 349.2], 0.02, 3, 'sine', 3000);
+        if (Math.random() < 0.03) this.burst(bus, t, 1.2, 0.03, 'bandpass', 1400, 6, 0.4);
+        next = 125;
+        break;
+      }
+    }
+    this.menuTimer = window.setTimeout(() => this.trackTick(), next);
   }
 
   /** A music-box tine: bright attack, glassy overtone, long decay. */

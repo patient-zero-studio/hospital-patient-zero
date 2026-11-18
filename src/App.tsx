@@ -26,6 +26,10 @@ import { TUTO_STEPS, TutorialOverlay, markTutorialDone, tutorialDone } from './c
 import { levelReward } from './levels';
 import { FriendsPanel, InviteToast } from './components/FriendsPanel';
 import { RedeemCode } from './components/RedeemCode';
+import { ClansPanel } from './components/ClansPanel';
+import { MusicMenu } from './components/MusicMenu';
+import { GalleryMenu } from './components/GalleryMenu';
+import { endingKey } from './gallery';
 import { CHAT_PRESETS } from './net/NetClient';
 import { PlayerProfile } from './components/PlayerProfile';
 import { ShopMenu } from './components/ShopMenu';
@@ -288,6 +292,7 @@ export default function App() {
         onGameOver: () => {
           document.exitPointerLock?.();
           if (onlineRef.current?.watching) return stopWatchingRef.current('👀 La partie que tu regardais est terminée.');
+          reportGalleryRef.current();
           // Campaign: a failed attempt still counts in the total time
           const cp = campaignRef.current;
           if (cp && !onlineRef.current) cp.time += engineRef.current?.runTime ?? 0;
@@ -429,6 +434,7 @@ export default function App() {
   const onVictory = (ending: GameEnding) => {
     document.exitPointerLock?.();
     if (onlineRef.current?.watching) return stopWatchingRef.current('👀 Ils s\'en sont sortis ! La partie est terminée.');
+    reportGalleryRef.current(ending);
     const e = engineRef.current!;
     grantRewardRef.current(e.builtDifficulty ?? 2);
     bankTreatsRef.current();
@@ -930,6 +936,24 @@ export default function App() {
   const refreshFriendsRef = useRef(refreshFriends);
   refreshFriendsRef.current = refreshFriends;
   const [redeemOpen, setRedeemOpen] = useState(false);
+  const [clansOpen, setClansOpen] = useState(false);
+  const [musicOpen, setMusicOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  /** 🖼️ Documents picked up (and the ending reached) go to the gallery */
+  const reportGallery = (ending?: GameEnding) => {
+    const s = sessionRef.current;
+    const e = engineRef.current;
+    if (!s || !e || onlineRef.current?.watching) return;
+    const docs = e.state.notesCollected.map((n) => n.id);
+    const key = ending ? endingKey(ending, e.state.notesCollected.length) : undefined;
+    if (!docs.length && !key) return;
+    api
+      .gallery(s.token, docs, key)
+      .then((g) => setWallet((w) => (w ? { ...w, gallery: g.gallery } : w)))
+      .catch(() => {});
+  };
+  const reportGalleryRef = useRef(reportGallery);
+  reportGalleryRef.current = reportGallery;
   // ⏱️ Personal bests for the speedrun chrono
   useEffect(() => {
     if (engineRef.current && wallet?.bests) engineRef.current.speedBests = wallet.bests;
@@ -1254,6 +1278,7 @@ export default function App() {
 
   const handleMainMenu = () => {
     if (onlineRef.current?.watching) return stopWatching(null);
+    if (isPlaying) reportGallery();
     if (onlineRef.current) {
       leaveRoom();
       leaveOnlineGame();
@@ -1327,6 +1352,10 @@ export default function App() {
           onToggleNotifications={togglePush}
           boost={boost}
           onRedeem={session ? () => setRedeemOpen(true) : undefined}
+          onClans={session ? () => setClansOpen(true) : undefined}
+          clanTag={wallet?.clanTag ?? null}
+          onMusic={() => setMusicOpen(true)}
+          onGallery={session ? () => setGalleryOpen(true) : undefined}
           onFriends={
             session
               ? () => {
@@ -1462,6 +1491,23 @@ export default function App() {
         </div>
       )}
       {levelUp && <LevelUpToast level={levelUp.level} coins={levelUp.coins} onDone={() => setLevelUp(null)} />}
+      {clansOpen && session && !isPlaying && (
+        <ClansPanel
+          token={session.token}
+          coins={wallet?.wallet.coins ?? 0}
+          admin={!!wallet?.admin}
+          onWallet={() => refreshWallet()}
+          onProfile={setProfileOf}
+          onClose={() => {
+            setClansOpen(false);
+            refreshWallet();
+          }}
+        />
+      )}
+      {musicOpen && !isPlaying && <MusicMenu token={session?.token ?? null} wallet={wallet} onWallet={setWallet} onClose={() => setMusicOpen(false)} />}
+      {galleryOpen && session && !isPlaying && (
+        <GalleryMenu endings={wallet?.gallery?.endings ?? []} docs={wallet?.gallery?.docs ?? []} achDone={wallet?.ach?.done ?? {}} onClose={() => setGalleryOpen(false)} />
+      )}
       {redeemOpen && session && !isPlaying && <RedeemCode token={session.token} onWallet={setWallet} onClose={() => setRedeemOpen(false)} />}
       {notice && !isPlaying && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[95] px-4 py-2 bg-zinc-950 border border-sky-700 text-sky-100 font-mono text-xs shadow-lg">{notice}</div>

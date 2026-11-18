@@ -88,6 +88,7 @@ export const ACHIEVEMENTS: AchDef[] = [
   { id: 'referral', name: 'Recruteur', desc: 'Parrainer un ami qui s\'échappe une fois.', icon: '📣', tier: 'argent', reward: 100, server: true },
   { id: 'code', name: 'Code secret', desc: 'Utiliser un code cadeau.', icon: '🎟️', tier: 'bronze', reward: 20, server: true },
   { id: 'spectate', name: 'Dans les tribunes', desc: 'Regarder un ami jouer en direct.', icon: '👀', tier: 'bronze', reward: 30, server: true },
+  { id: 'clan', name: 'Frères d\'armes', desc: 'Créer ou rejoindre un clan.', icon: '🛡️', tier: 'bronze', reward: 30, server: true },
   { id: 'chat', name: 'Bavard', desc: 'Envoyer un message à un ami.', icon: '💬', tier: 'bronze', reward: 20, server: true },
   // --- Chapter 6 ---
   { id: 'ch6_escape', name: 'Au-dessus de la tempête', desc: 'S\'envoler du toit en hélicoptère (Chapitre 6).', icon: '🚁', tier: 'or', reward: 250 },

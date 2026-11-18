@@ -73,6 +73,11 @@ interface StartScreenProps {
   onFriends?: () => void;
   /** 🎟️ enter a gift code */
   onRedeem?: () => void;
+  /** 🛡️ clans, 🎵 menu music, 🖼️ gallery */
+  onClans?: () => void;
+  clanTag?: string | null;
+  onMusic?: () => void;
+  onGallery?: () => void;
   friendsOnline?: number | null;
   /** friend requests + invitations waiting */
   friendsAlert?: number;
@@ -131,6 +136,10 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   boost = null,
   onFriends,
   onRedeem,
+  onClans,
+  clanTag,
+  onMusic,
+  onGallery,
   friendsOnline = null,
   friendsAlert = 0,
   season = null,
@@ -501,6 +510,34 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                 {friendsAlert > 0 && (
                   <span className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1 rounded-full bg-red-600 text-white text-[11px] flex items-center justify-center animate-pulse">{friendsAlert}</span>
                 )}
+              </button>
+            )}
+            {onClans && (
+              <button
+                onClick={onClans}
+                className="px-6 py-2.5 bg-black/60 hover:bg-indigo-950/40 text-indigo-100 font-mono text-xs uppercase tracking-widest flex items-center gap-3 transition-all cursor-pointer border border-indigo-700/70 hover:border-indigo-400"
+              >
+                <span>🛡️</span>
+                <span>Clans</span>
+                {clanTag && <span data-no-i18n className="normal-case tracking-normal text-indigo-300">[{clanTag}]</span>}
+              </button>
+            )}
+            {onGallery && (
+              <button
+                onClick={onGallery}
+                className="px-6 py-2.5 bg-black/60 hover:bg-zinc-900 text-zinc-200 font-mono text-xs uppercase tracking-widest flex items-center gap-3 transition-all cursor-pointer border border-zinc-700 hover:border-amber-400"
+              >
+                <span>🖼️</span>
+                <span>Galerie</span>
+              </button>
+            )}
+            {onMusic && (
+              <button
+                onClick={onMusic}
+                className="px-6 py-2.5 bg-black/60 hover:bg-zinc-900 text-zinc-200 font-mono text-xs uppercase tracking-widest flex items-center gap-3 transition-all cursor-pointer border border-zinc-700 hover:border-pink-400"
+              >
+                <span>🎵</span>
+                <span>Musiques</span>
               </button>
             )}
             {onRedeem && (

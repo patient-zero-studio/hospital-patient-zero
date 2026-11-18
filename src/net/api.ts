@@ -60,6 +60,38 @@ export interface WalletView {
   /** 📣 friends brought in with your link (paid), and who brought you */
   referrals?: number;
   referredBy?: string | null;
+  /** 🎵 menu tracks bought */
+  tracks?: string[];
+  /** 🖼️ endings seen, documents found */
+  gallery?: { endings: string[]; docs: string[] };
+  /** 🛡️ your clan's tag */
+  clanTag?: string | null;
+}
+
+export interface ClanSummary {
+  id: string;
+  name: string;
+  tag: string;
+  emblem: string;
+  color: string;
+  open: boolean;
+  members: number;
+  score: number;
+}
+export interface ClansView {
+  price: number;
+  max: number;
+  top: (ClanSummary & { rank: number; requested: boolean })[];
+  mine:
+    | (ClanSummary & {
+        rank: number;
+        leader: string;
+        isLeader: boolean;
+        members: { username: string; level: number; weekXp: number; status: 'playing' | 'online' | 'offline'; leader: boolean }[];
+        requests: string[];
+        chat: { from: string; text: string; at: number; mine: boolean }[];
+      })
+    | null;
 }
 
 export interface DmView {
@@ -138,6 +170,7 @@ export interface PlayerProfileView {
   look: Appearance;
   friend: boolean;
   me: boolean;
+  clan?: { name: string; tag: string; emblem: string; color: string } | null;
 }
 
 export interface BoardEntry {
@@ -366,6 +399,23 @@ export const api = {
   friendRemove: (token: string, username: string): Promise<FriendsView> => post('/api/friends/remove', { username }, token),
   friendInvite: (token: string, username: string): Promise<FriendsView> => post('/api/friends/invite', { username }, token),
   inviteDismiss: (token: string, code: string): Promise<FriendsView> => post('/api/friends/invite/dismiss', { code }, token),
+
+  // ---- 🛡️ Clans, 🎵 music, 🖼️ gallery ----
+  clans: (token: string, q = ''): Promise<ClansView> => getJson('/api/clans' + (q ? `?q=${encodeURIComponent(q)}` : ''), token),
+  clanCreate: (token: string, c: { name: string; tag: string; emblem: string; color: string; open: boolean }): Promise<ClansView & { message: string }> =>
+    post('/api/clans/create', c, token),
+  clanJoin: (token: string, id: string): Promise<ClansView & { message: string }> => post('/api/clans/join', { id }, token),
+  clanLeave: (token: string): Promise<ClansView & { message: string }> => post('/api/clans/leave', {}, token),
+  clanManage: (
+    token: string,
+    action: 'accept' | 'refuse' | 'kick' | 'lead' | 'settings',
+    username?: string,
+    settings?: { open?: boolean; emblem?: string; color?: string }
+  ): Promise<ClansView> => post('/api/clans/manage', { action, username, ...settings }, token),
+  clanChat: (token: string, text: string): Promise<ClansView> => post('/api/clans/chat', { text }, token),
+  adminClanDelete: (token: string, id: string): Promise<{ message: string }> => post('/api/admin/clans/delete', { id }, token),
+  buyTrack: (token: string, id: string): Promise<WalletView & { message: string }> => post('/api/music/buy', { id }, token),
+  gallery: (token: string, docs: string[], ending?: string): Promise<{ gallery: { endings: string[]; docs: string[] } }> => post('/api/gallery', { docs, ending }, token),
 
   // ---- 🎟️ Codes, 💬 chat, 👀 spectator ----
   redeem: (token: string, code: string): Promise<WalletView & { message: string }> => post('/api/redeem', { code }, token),

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Loader2, UserPlus, X } from 'lucide-react';
+import { ClanBadge } from './ClansPanel';
 import { api, PlayerProfileView } from '../net/api';
 import { levelColor } from '../levels';
 import { characterOf } from '../characters';
@@ -48,8 +49,10 @@ export const PlayerProfile: React.FC<{ name: string; token: string; onAddFriend?
                   {p.admin ? '👑 ' : ''}
                   {p.username}
                 </div>
-                <div className="text-xs font-mono" style={{ color: levelColor(p.level.level) }}>
+                <div className="text-xs font-mono flex items-center gap-2" style={{ color: levelColor(p.level.level) }}>
                   ⭐ Niveau {p.level.level}
+                  {p.clan && <ClanBadge emblem={p.clan.emblem} tag={p.clan.tag} color={p.clan.color} />}
+                  {p.clan && <span className="text-zinc-400 text-[10px]" data-no-i18n>{p.clan.name}</span>}
                 </div>
                 <div className="text-[10px] font-mono flex items-center gap-1.5" style={{ color: STATUS[p.status][0] }}>
                   <span className="w-2 h-2 rounded-full" style={{ background: STATUS[p.status][0] }} /> {STATUS[p.status][1]}

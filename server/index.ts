@@ -41,6 +41,10 @@ import { challengeMet, dailyChallenge } from '../src/challenges.ts';
 import { debouncedSaver, makeStore } from './storage.ts';
 import { DAILY_XP, DEATH_XP, ESCAPE_XP, levelOf, levelReward } from '../src/levels.ts';
 import { censorText, isBadName } from '../src/moderation.ts';
+import { CLAN_COLORS, CLAN_EMBLEMS, CLAN_MAX, CLAN_NAME_RE, CLAN_PRICE, CLAN_PRIZES, CLAN_TAG_RE } from '../src/clans.ts';
+import { MENU_TRACKS } from '../src/music.ts';
+import { isEndingKey } from '../src/gallery.ts';
+import { isDocId } from '../src/galleryDocs.ts';
 import { grantServerAch } from '../src/achievements.ts';
 import { PushSub, isPushSub, pushPublicKey, pushTo, setupPush } from './push.ts';
 import { LEVEL_SKINS, PASS_TIERS, PASS_XP_PER_TIER, nextWeek, passEnds, passKey, passName, passReward, weekKey, weeklyChallenges } from '../src/progression.ts';
@@ -122,6 +126,14 @@ interface User {
   /** 💬 last message sent (anti-spam), last read per friend */
   lastDm?: number;
   dmRead?: Record<string, number>;
+  /** 🛡️ clan id */
+  clan?: string;
+  lastClanMsg?: number;
+  /** 🎵 menu tracks bought */
+  tracks?: string[];
+  /** 🖼️ gallery: endings seen, documents found */
+  endings?: string[];
+  docs?: string[];
 }
 
 const store = makeStore(DATA_DIR);
@@ -450,6 +462,9 @@ const shopOpenFor = (u: User) => isAdmin(u) || !!u.shopUnlocked || walletOf(u).o
 const SHOP_LOCKED = 'Boutique verrouillée : échappe-toi de l\'hôpital une fois (le mode Exploration suffit) pour la débloquer.';
 
 const walletView = (u: User) => ({
+  tracks: u.tracks ?? [],
+  gallery: { endings: u.endings ?? [], docs: u.docs ?? [] },
+  clanTag: u.clan ? (clans.get(u.clan)?.tag ?? null) : null,
   bests: bestsOf(u),
   referrals: u.referrals ?? 0,
   referredBy: u.referredBy ? (users.get(u.referredBy)?.username ?? null) : null,
@@ -905,6 +920,7 @@ app.get('/api/player/:name', (req, res) => {
     trophies: u.trophies ?? [],
     friend: friendsOf(me).includes(key),
     me: key === me.username.toLowerCase(),
+    clan: u.clan && clans.get(u.clan) ? { name: clans.get(u.clan)!.name, tag: clans.get(u.clan)!.tag, emblem: clans.get(u.clan)!.emblem, color: clans.get(u.clan)!.color } : null,
   });
 });
 
@@ -970,9 +986,23 @@ const payLastWeek = () => {
     serverAch(u, 'podium');
     notify(u, '🏅 Podium de la semaine !', `Tu finis ${i + 1}${i ? 'e' : 'er'} : +${WEEK_PRIZES[i]} pièces.`, 'podium');
   });
+  // 🛡️ The 3 best clans of last week: every member wins
+  const clanRank = [...clans.values()]
+    .map((c) => ({ c, score: clanScore(c, prev) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+  clanRank.forEach(({ c }, i) => {
+    for (const m of c.members) {
+      const u = users.get(m);
+      if (!u) continue;
+      walletOf(u).coins += CLAN_PRIZES[i];
+      u.inbox = [...(u.inbox ?? []), { from: c.name, text: `🛡️ Ton clan [${c.tag}] finit ${i + 1}${i ? 'e' : 'er'} de la semaine : +${CLAN_PRIZES[i]} pièces !`, at: Date.now() }].slice(-20);
+    }
+  });
   settings.weekPaid = cur;
   settingsSaver.save();
-  if (ranking.length) saveUsers();
+  if (ranking.length || clanRank.length) saveUsers();
 };
 setTimeout(() => {
   payLastWeek();
@@ -1718,6 +1748,297 @@ app.post('/api/friends/invite/dismiss', (req, res) => {
   res.json(friendsView(user));
 });
 
+
+
+// ---------------------------------------------------------------------------
+// 🛡️ Clans
+// ---------------------------------------------------------------------------
+interface Clan {
+  id: string;
+  name: string;
+  tag: string;
+  emblem: string;
+  color: string;
+  /** lower-case names */
+  leader: string;
+  members: string[];
+  /** open = anyone can join; closed = the leader accepts requests */
+  open: boolean;
+  requests: string[];
+  chat: { f: string; t: string; at: number }[];
+  createdAt: number;
+}
+const clans = new Map<string, Clan>();
+{
+  try {
+    const raw = await store.load('clans');
+    if (raw) for (const c of JSON.parse(raw) as Clan[]) clans.set(c.id, c);
+  } catch {
+    /* none yet */
+  }
+}
+const clansSaver = debouncedSaver(store, 'clans', () => JSON.stringify([...clans.values()]), remote ? 2000 : 300);
+/** Members' XP this week (or the week given) */
+function clanScore(c: Clan, week = weekKey()) {
+  let n = 0;
+  for (const m of c.members) {
+    const u = users.get(m);
+    if (u?.weekXp?.week === week) n += u.weekXp.xp;
+  }
+  return n;
+}
+const clanOf = (u: User) => {
+  const c = u.clan ? clans.get(u.clan) : undefined;
+  if (!c || !c.members.includes(u.username.toLowerCase())) {
+    u.clan = undefined;
+    return undefined;
+  }
+  return c;
+};
+const clanSummary = (c: Clan) => ({ id: c.id, name: c.name, tag: c.tag, emblem: c.emblem, color: c.color, open: c.open, members: c.members.length, score: clanScore(c) });
+const clanRanking = () => [...clans.values()].map(clanSummary).sort((a, b) => b.score - a.score || b.members - a.members);
+const clanView = (u: User) => {
+  const c = clanOf(u);
+  const me = u.username.toLowerCase();
+  const ranking = clanRanking();
+  return {
+    price: CLAN_PRICE,
+    max: CLAN_MAX,
+    top: ranking.slice(0, 30).map((x, i) => ({ ...x, rank: i + 1, requested: !!clans.get(x.id)?.requests.includes(me) })),
+    mine: c
+      ? {
+          ...clanSummary(c),
+          rank: ranking.findIndex((x) => x.id === c.id) + 1,
+          leader: users.get(c.leader)?.username ?? c.leader,
+          isLeader: c.leader === me,
+          members: c.members
+            .map((m) => users.get(m))
+            .filter((x): x is User => !!x)
+            .map((x) => ({
+              username: x.username,
+              level: levelOf(x.xp ?? 0).level,
+              weekXp: x.weekXp?.week === weekKey() ? x.weekXp.xp : 0,
+              status: statusOf(x.username.toLowerCase()),
+              leader: x.username.toLowerCase() === c.leader,
+            }))
+            .sort((a, b) => b.weekXp - a.weekXp),
+          requests: c.leader === me ? c.requests.map((r) => users.get(r)?.username ?? r) : [],
+          chat: c.chat.slice(-40).map((m) => ({ from: users.get(m.f)?.username ?? m.f, text: m.t, at: m.at, mine: m.f === me })),
+        }
+      : null,
+  };
+};
+const clanAuth = (req: express.Request, res: express.Response) => {
+  const u = authUser(req);
+  if (!u) res.status(401).json({ error: 'Session expirée.' });
+  return u;
+};
+const joinClan = (u: User, c: Clan) => {
+  const me = u.username.toLowerCase();
+  // leaving any request elsewhere
+  for (const o of clans.values()) o.requests = o.requests.filter((r) => r !== me);
+  c.members = [...c.members.filter((m) => m !== me), me];
+  u.clan = c.id;
+  serverAch(u, 'clan');
+};
+/** A member leaves (or is kicked): the clan gets a new leader, or disappears when empty. */
+const leaveClan = (u: User) => {
+  const c = clanOf(u);
+  const me = u.username.toLowerCase();
+  u.clan = undefined;
+  if (!c) return;
+  c.members = c.members.filter((m) => m !== me);
+  if (!c.members.length) {
+    clans.delete(c.id);
+    return;
+  }
+  if (c.leader === me) {
+    // The most active member takes over
+    const next = [...c.members].sort((a, b) => (users.get(b)?.xp ?? 0) - (users.get(a)?.xp ?? 0))[0];
+    c.leader = next;
+    c.chat.push({ f: next, t: `👑 ${users.get(next)?.username ?? next} devient le chef du clan.`, at: Date.now() });
+  }
+};
+
+app.get('/api/clans', (req, res) => {
+  const u = clanAuth(req, res);
+  if (!u) return;
+  const view = clanView(u);
+  const q = String(req.query.q ?? '').trim().toLowerCase();
+  if (q) {
+    const me = u.username.toLowerCase();
+    view.top = clanRanking()
+      .map((x, i) => ({ ...x, rank: i + 1, requested: !!clans.get(x.id)?.requests.includes(me) }))
+      .filter((x) => x.name.toLowerCase().includes(q) || x.tag.toLowerCase().includes(q))
+      .slice(0, 30);
+  }
+  res.json(view);
+});
+
+app.post('/api/clans/create', (req, res) => {
+  const u = clanAuth(req, res);
+  if (!u) return;
+  if (clanOf(u)) return res.status(400).json({ error: 'Tu es déjà dans un clan. Quitte-le d\'abord.' });
+  const name = String(req.body?.name ?? '').trim().replace(/\s+/g, ' ');
+  const tag = String(req.body?.tag ?? '').trim().toUpperCase();
+  if (!CLAN_NAME_RE.test(name)) return res.status(400).json({ error: 'Nom du clan : 3 à 20 caractères (lettres, chiffres, espaces, - ou _).' });
+  if (!CLAN_TAG_RE.test(tag)) return res.status(400).json({ error: 'Tag : 2 à 4 lettres ou chiffres (ex : PZ, LOUP).' });
+  if (isBadName(name) || isBadName(tag)) return res.status(400).json({ error: 'Ce nom n\'est pas autorisé. Choisis-en un autre (sans gros mots).' });
+  for (const c of clans.values()) {
+    if (c.name.toLowerCase() === name.toLowerCase()) return res.status(409).json({ error: 'Ce nom de clan est déjà pris.' });
+    if (c.tag === tag) return res.status(409).json({ error: 'Ce tag est déjà pris.' });
+  }
+  const emblem = CLAN_EMBLEMS.includes(req.body?.emblem) ? req.body.emblem : CLAN_EMBLEMS[0];
+  const color = CLAN_COLORS.includes(req.body?.color) ? req.body.color : CLAN_COLORS[0];
+  const w = walletOf(u);
+  if (w.coins < CLAN_PRICE) return res.status(400).json({ error: `Il faut ${CLAN_PRICE} pièces pour créer un clan.` });
+  if (!isAdmin(u)) w.coins -= CLAN_PRICE;
+  const me = u.username.toLowerCase();
+  const c: Clan = { id: crypto.randomBytes(6).toString('hex'), name, tag, emblem, color, leader: me, members: [], open: req.body?.open !== false, requests: [], chat: [], createdAt: Date.now() };
+  clans.set(c.id, c);
+  joinClan(u, c);
+  c.chat.push({ f: me, t: `🛡️ ${u.username} a fondé le clan ${name} !`, at: Date.now() });
+  clansSaver.save();
+  saveUsers();
+  res.json({ message: `🛡️ Clan [${tag}] ${name} créé !`, ...clanView(u), wallet: walletView(u) });
+});
+
+app.post('/api/clans/join', (req, res) => {
+  const u = clanAuth(req, res);
+  if (!u) return;
+  if (clanOf(u)) return res.status(400).json({ error: 'Tu es déjà dans un clan. Quitte-le d\'abord.' });
+  const c = clans.get(String(req.body?.id ?? ''));
+  if (!c) return res.status(404).json({ error: 'Ce clan n\'existe plus.' });
+  if (c.members.length >= CLAN_MAX) return res.status(400).json({ error: `Ce clan est complet (${CLAN_MAX} membres).` });
+  const me = u.username.toLowerCase();
+  if (!c.open) {
+    if (!c.requests.includes(me)) c.requests = [...c.requests, me].slice(-50);
+    notify(users.get(c.leader), '🛡️ Demande pour ton clan', `${u.username} veut rejoindre [${c.tag}] ${c.name}.`, 'clan');
+    clansSaver.save();
+    return res.json({ message: `📨 Demande envoyée au chef du clan [${c.tag}].`, ...clanView(u) });
+  }
+  joinClan(u, c);
+  c.chat.push({ f: me, t: `👋 ${u.username} a rejoint le clan.`, at: Date.now() });
+  clansSaver.save();
+  saveUsers();
+  res.json({ message: `🛡️ Bienvenue dans [${c.tag}] ${c.name} !`, ...clanView(u) });
+});
+
+app.post('/api/clans/leave', (req, res) => {
+  const u = clanAuth(req, res);
+  if (!u) return;
+  const c = clanOf(u);
+  if (!c) return res.status(400).json({ error: 'Tu n\'es dans aucun clan.' });
+  c.chat.push({ f: u.username.toLowerCase(), t: `🚪 ${u.username} a quitté le clan.`, at: Date.now() });
+  leaveClan(u);
+  clansSaver.save();
+  saveUsers();
+  res.json({ message: 'Tu as quitté le clan.', ...clanView(u) });
+});
+
+/** Leader: accept / refuse a request, kick a member, settings */
+app.post('/api/clans/manage', (req, res) => {
+  const u = clanAuth(req, res);
+  if (!u) return;
+  const c = clanOf(u);
+  const me = u.username.toLowerCase();
+  if (!c || c.leader !== me) return res.status(403).json({ error: 'Réservé au chef du clan.' });
+  const action = String(req.body?.action ?? '');
+  const name = String(req.body?.username ?? '').toLowerCase();
+  const target = users.get(name);
+  if (action === 'accept' || action === 'refuse') {
+    if (!c.requests.includes(name)) return res.status(404).json({ error: 'Plus de demande de ce joueur.' });
+    c.requests = c.requests.filter((r) => r !== name);
+    if (action === 'accept' && target) {
+      if (clanOf(target)) return res.status(400).json({ error: `${target.username} est déjà dans un autre clan.` });
+      if (c.members.length >= CLAN_MAX) return res.status(400).json({ error: `Clan complet (${CLAN_MAX} membres).` });
+      joinClan(target, c);
+      c.chat.push({ f: name, t: `👋 ${target.username} a rejoint le clan.`, at: Date.now() });
+      notify(target, '🛡️ Clan', `Tu fais maintenant partie de [${c.tag}] ${c.name} !`, 'clan');
+    }
+  } else if (action === 'kick') {
+    if (!target || name === me || !c.members.includes(name)) return res.status(400).json({ error: 'Ce joueur n\'est pas dans ton clan.' });
+    leaveClan(target);
+    c.chat.push({ f: me, t: `🚫 ${target.username} a été retiré du clan.`, at: Date.now() });
+  } else if (action === 'lead') {
+    if (!target || !c.members.includes(name)) return res.status(400).json({ error: 'Ce joueur n\'est pas dans ton clan.' });
+    c.leader = name;
+    c.chat.push({ f: me, t: `👑 ${target.username} devient le chef du clan.`, at: Date.now() });
+  } else if (action === 'settings') {
+    if (typeof req.body?.open === 'boolean') c.open = req.body.open;
+    if (CLAN_EMBLEMS.includes(req.body?.emblem)) c.emblem = req.body.emblem;
+    if (CLAN_COLORS.includes(req.body?.color)) c.color = req.body.color;
+  } else return res.status(400).json({ error: 'Action inconnue.' });
+  clansSaver.save();
+  saveUsers();
+  res.json(clanView(u));
+});
+
+app.post('/api/clans/chat', (req, res) => {
+  const u = clanAuth(req, res);
+  if (!u) return;
+  const c = clanOf(u);
+  if (!c) return res.status(400).json({ error: 'Tu n\'es dans aucun clan.' });
+  const raw = String(req.body?.text ?? '').replace(/[\u0000-\u001f]/g, ' ').trim();
+  if (!raw) return res.status(400).json({ error: 'Message vide.' });
+  if (raw.length > 200) return res.status(400).json({ error: '200 caractères maximum.' });
+  const now = Date.now();
+  if (u.lastClanMsg && now - u.lastClanMsg < 1000) return res.status(429).json({ error: 'Doucement ! Un message par seconde.' });
+  u.lastClanMsg = now;
+  c.chat.push({ f: u.username.toLowerCase(), t: censorText(raw), at: now });
+  if (c.chat.length > 80) c.chat.splice(0, c.chat.length - 80);
+  clansSaver.save();
+  res.json(clanView(u));
+});
+
+// Admin: remove a clan (bad name…)
+app.post('/api/admin/clans/delete', (req, res) => {
+  const user = authUser(req);
+  if (!user || !isAdmin(user)) return res.status(403).json({ error: 'Réservé aux admins.' });
+  const c = clans.get(String(req.body?.id ?? ''));
+  if (!c) return res.status(404).json({ error: 'Clan introuvable.' });
+  for (const m of c.members) {
+    const x = users.get(m);
+    if (x) x.clan = undefined;
+  }
+  clans.delete(c.id);
+  clansSaver.save();
+  saveUsers();
+  console.log(`[admin] ${user.username} supprime le clan ${c.name}`);
+  res.json({ message: `Clan ${c.name} supprimé.` });
+});
+
+// ---------------------------------------------------------------------------
+// 🎵 Menu music bought with coins
+// ---------------------------------------------------------------------------
+app.post('/api/music/buy', (req, res) => {
+  const u = authUser(req);
+  if (!u) return res.status(401).json({ error: 'Session expirée.' });
+  const t = MENU_TRACKS.find((x) => x.id === String(req.body?.id ?? ''));
+  if (!t || t.unlock.kind !== 'coins') return res.status(400).json({ error: 'Cette musique ne s\'achète pas.' });
+  if ((u.tracks ?? []).includes(t.id)) return res.status(400).json({ error: 'Tu l\'as déjà.' });
+  const w = walletOf(u);
+  if (w.coins < t.unlock.price) return res.status(400).json({ error: 'Pas assez de pièces.' });
+  if (!isAdmin(u)) w.coins -= t.unlock.price;
+  u.tracks = [...(u.tracks ?? []), t.id];
+  saveUsers();
+  res.json({ message: `🎵 « ${t.name} » débloquée !`, ...walletView(u) });
+});
+
+// ---------------------------------------------------------------------------
+// 🖼️ Gallery: endings seen and documents found (kept on the account)
+// ---------------------------------------------------------------------------
+app.post('/api/gallery', (req, res) => {
+  const u = authUser(req);
+  if (!u) return res.status(401).json({ error: 'Session expirée.' });
+  const docs = Array.isArray(req.body?.docs) ? req.body.docs.filter(isDocId).slice(0, 40) : [];
+  const ending = isEndingKey(req.body?.ending) ? req.body.ending : null;
+  const before = (u.endings?.length ?? 0) + (u.docs?.length ?? 0);
+  u.docs = [...new Set([...(u.docs ?? []), ...docs])];
+  if (ending) u.endings = [...new Set([...(u.endings ?? []), ending])];
+  if ((u.endings?.length ?? 0) + (u.docs?.length ?? 0) !== before) saveUsers();
+  res.json({ gallery: { endings: u.endings ?? [], docs: u.docs ?? [] } });
+});
 
 // ---------------------------------------------------------------------------
 // 🎟️ Gift codes (made by an admin, used once per player)
