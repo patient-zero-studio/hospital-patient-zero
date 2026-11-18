@@ -723,7 +723,7 @@ export default function App() {
       const r = await api.reward(s.token, diff, diff <= 1 ? 0 : (engineRef.current?.state.runCoins ?? 0), engineRef.current?.builtChapter ?? 1);
       const rg = r.rankGain;
       const rt = rg ? tierOf(rg.points) : null;
-      const rank = rg && rt ? `  ·  ${rt.emoji} +${rg.gain} pts${rg.promoted ? ` — PROMU ${rt.name.toUpperCase()} !` : ` (${rt.name} ${rg.points})`}` : '';
+      const rank = rg && rt ? `  ·  ${rt.emoji} +${rg.gain} pts${rg.promoted ? ` — PROMU ${rt.name.toUpperCase()} !` : ` (${rt.name} ${rg.points})`}${rg.passXp ? `  ·  🎁 +${rg.passXp} XP de pass classé` : ''}` : '';
       setWallet(r);
       if (wasLocked && r.shopUnlocked) setRewardMsg('🛒 BOUTIQUE DÉBLOQUÉE ! Skins, boîtes mystère et cadeau du jour t\'attendent au menu.');
       else {
@@ -1512,7 +1512,7 @@ export default function App() {
           }}
         />
       )}
-      {rankedOpen && session && !isPlaying && <RankedMenu token={session.token} me={session.username} onProfile={setProfileOf} onClose={() => setRankedOpen(false)} />}
+      {rankedOpen && session && !isPlaying && <RankedMenu token={session.token} me={session.username} onProfile={setProfileOf} onWallet={setWallet} onClose={() => setRankedOpen(false)} />}
       {musicOpen && !isPlaying && <MusicMenu token={session?.token ?? null} wallet={wallet} onWallet={setWallet} onClose={() => setMusicOpen(false)} />}
       {galleryOpen && session && !isPlaying && (
         <GalleryMenu endings={wallet?.gallery?.endings ?? []} docs={wallet?.gallery?.docs ?? []} achDone={wallet?.ach?.done ?? {}} onClose={() => setGalleryOpen(false)} />

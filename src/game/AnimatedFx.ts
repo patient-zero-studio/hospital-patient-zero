@@ -197,6 +197,33 @@ export const buildFx = (id: string, track: Track, height: number, monster: boole
         },
       };
     }
+    case 'stars': {
+      // 🏅 Ranked: golden stars circling the body on two rings
+      const geo = track(new THREE.OctahedronGeometry(0.05));
+      const mat = glow(track, 0xffd34a, 1);
+      const stars: { m: THREE.Mesh; ring: number; a: number }[] = [];
+      for (let i = 0; i < 12; i++) {
+        const m = new THREE.Mesh(geo, mat);
+        m.scale.set(1, 1.6, 1);
+        stars.push({ m, ring: i % 2, a: (i / 12) * Math.PI * 2 });
+        g.add(m);
+      }
+      noShadow(g);
+      return {
+        group: g,
+        tick(dt) {
+          t += dt;
+          for (const s of stars) {
+            const dir = s.ring ? 1 : -1;
+            const a = s.a + t * 1.4 * dir;
+            const y = s.ring ? height * 0.75 : height * 0.3;
+            s.m.position.set(Math.cos(a) * 0.5, y + Math.sin(t * 3 + s.a * 4) * 0.06, Math.sin(a) * 0.5);
+            s.m.rotation.y += dt * 5;
+            s.m.scale.setScalar(0.8 + 0.4 * Math.abs(Math.sin(t * 4 + s.a * 3)));
+          }
+        },
+      };
+    }
     case 'rainbow': {
       const c = new THREE.Color();
       return {

@@ -41,7 +41,7 @@ import { challengeMet, dailyChallenge } from '../src/challenges.ts';
 import { debouncedSaver, makeStore } from './storage.ts';
 import { DAILY_XP, DEATH_XP, ESCAPE_XP, levelOf, levelReward } from '../src/levels.ts';
 import { censorText, isBadName } from '../src/moderation.ts';
-import { RANK_TIERS, nextTier, rankLoss, rankWin, tierOf } from '../src/ranked.ts';
+import { RANK_TIERS, RPASS_TIERS, RPASS_XP_PER_TIER, RPassReward, nextTier, rankLoss, rankWin, rpassReward, rpassWinXp, tierOf } from '../src/ranked.ts';
 import { CLAN_COLORS, CLAN_EMBLEMS, CLAN_MAX, CLAN_NAME_RE, CLAN_PRICE, CLAN_PRIZES, CLAN_TAG_RE } from '../src/clans.ts';
 import { MENU_TRACKS } from '../src/music.ts';
 import { isEndingKey } from '../src/gallery.ts';
@@ -138,6 +138,8 @@ interface User {
   /** 🏅 ranked season (month): points, best tier; past seasons */
   rank?: { season: string; points: number; best: number; wins: number; losses: number };
   rankHistory?: { season: string; tier: string; points: number }[];
+  /** 🎁 ranked pass of the month: XP from ranked wins, tiers taken */
+  rpass?: { season: string; xp: number; claimed: number[] };
 }
 
 const store = makeStore(DATA_DIR);
@@ -863,8 +865,15 @@ app.post('/api/pass/claim', (req, res) => {
   if (!(t >= 1 && t <= PASS_TIERS)) return res.status(400).json({ error: 'Palier inconnu.' });
   if (t > Math.floor(p.xp / PASS_XP_PER_TIER)) return res.status(400).json({ error: 'Palier pas encore atteint : joue encore un peu !' });
   if (p.claimed.includes(t)) return res.status(400).json({ error: 'Déjà pris.' });
+  const result = grantPassReward(user, passReward(t));
+  p.claimed.push(t);
+  saveUsers();
+  res.json({ result, ...walletView(user) });
+});
+
+/** Gives a pass reward (season pass or ranked pass) */
+function grantPassReward(user: User, r: RPassReward) {
   const w = walletOf(user);
-  const r = passReward(t);
   let result: { kind: string; coins?: number; skin?: string; text: string };
   if (r.kind === 'coins') {
     w.coins += r.coins;
@@ -894,10 +903,8 @@ app.post('/api/pass/claim', (req, res) => {
       result = { kind: 'skin', skin: item.id, text: `${item.name} — ${TIER_LABEL[item.tier]} !` };
     }
   }
-  p.claimed.push(t);
-  saveUsers();
-  res.json({ result, ...walletView(user) });
-});
+  return result;
+}
 
 // 👤 Public profile of a player (anyone logged in can look)
 app.get('/api/player/:name', (req, res) => {
@@ -1776,7 +1783,24 @@ function rankView(u: User) {
   const r = rankOf(u);
   const t = tierOf(r.points);
   const n = nextTier(r.points);
-  return { season: r.season, name: passName(r.season), ends: passEnds(eventNow()), points: r.points, tier: t.id, next: n ? { id: n.id, min: n.min } : null, wins: r.wins, losses: r.losses, history: (u.rankHistory ?? []).slice(-12) };
+  const p = rpassOf(u);
+  return {
+    season: r.season,
+    name: passName(r.season),
+    ends: passEnds(eventNow()),
+    points: r.points,
+    tier: t.id,
+    next: n ? { id: n.id, min: n.min } : null,
+    wins: r.wins,
+    losses: r.losses,
+    history: (u.rankHistory ?? []).slice(-12),
+    pass: { xp: p.xp, tier: Math.min(RPASS_TIERS, Math.floor(p.xp / RPASS_XP_PER_TIER)), claimed: p.claimed },
+  };
+}
+function rpassOf(u: User) {
+  const season = rankSeason();
+  if (!u.rpass || u.rpass.season !== season) u.rpass = { season, xp: 0, claimed: [] };
+  return u.rpass;
 }
 /** Escape in Normal or harder: points (and maybe a promotion) */
 function rankEscape(u: User, difficulty: number, chapter: number) {
@@ -1786,11 +1810,13 @@ function rankEscape(u: User, difficulty: number, chapter: number) {
   const gain = rankWin(difficulty, chapter);
   r.points += gain;
   r.wins++;
+  const passXp = rpassWinXp(difficulty);
+  rpassOf(u).xp += passXp;
   r.best = Math.max(r.best, r.points);
   const after = tierOf(r.points);
   if (after.min >= 600) serverAch(u, 'rank_gold');
   if (after.id === 'pro') serverAch(u, 'rank_pro');
-  return { gain, points: r.points, tier: after.id, promoted: after.id !== before.id };
+  return { gain, points: r.points, tier: after.id, promoted: after.id !== before.id, passXp };
 }
 /** Caught: points lost (never below the tier you reached) */
 function rankDeath(u: User) {
@@ -1826,6 +1852,21 @@ function payRankedSeason() {
   if (n) saveUsers();
   console.log(`[ranked] saison ${prev} terminée : ${n} joueurs récompensés`);
 }
+
+app.post('/api/rpass/claim', (req, res) => {
+  const u = authUser(req);
+  if (!u) return res.status(401).json({ error: 'Session expirée.' });
+  const t = Math.floor(Number(req.body?.tier));
+  const p = rpassOf(u);
+  if (!(t >= 1 && t <= RPASS_TIERS)) return res.status(400).json({ error: 'Palier inconnu.' });
+  if (t > Math.floor(p.xp / RPASS_XP_PER_TIER)) return res.status(400).json({ error: 'Palier pas encore atteint : gagne encore des parties classées !' });
+  if (p.claimed.includes(t)) return res.status(400).json({ error: 'Déjà pris.' });
+  const result = grantPassReward(u, rpassReward(t));
+  p.claimed.push(t);
+  if (t === RPASS_TIERS) serverAch(u, 'rpass_done');
+  saveUsers();
+  res.json({ result, ...walletView(u) });
+});
 
 app.get('/api/ranked', (req, res) => {
   const u = authUser(req);

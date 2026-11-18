@@ -919,6 +919,11 @@ export const EN: Record<string, string> = {
   'Ce pseudo est déjà pris.': 'This name is already taken.',
   "Ce pseudo n'est pas autorisé. Choisis-en un autre (sans gros mots).": 'This name is not allowed. Pick another one (no swear words).',
   'Ce compte a été banni par un administrateur.': 'This account has been banned by an administrator.',
+  'Gladiateur de l\'arène': 'Arena gladiator',
+  'Étoiles du classement': 'Ranked stars',
+  'Champion classé': 'Ranked champion',
+  'Pass classé terminé': 'Ranked pass complete',
+  'Prendre le palier 20 du pass classé.': 'Claim tier 20 of the ranked pass.',
   // ---- Ranked seasons ----
   '🏅 Saison classée': '🏅 Ranked season',
   Classé: 'Ranked',

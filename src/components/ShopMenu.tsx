@@ -189,6 +189,7 @@ export const CosmeticBadge: React.FC<{ c: Cosmetic; size?: number }> = ({ c, siz
     fishhat: '🐟', clownnose: '🔴', clown: '🤡', clownm: '🤡',
     evilsanta: '🎅',
     crown: '👑', toxic: '☣️', hazmat: '☢️', nightvision: '🥽', abyss: '🌊', veteran: '🎖️', legend: '🩸',
+    gladiator: '⚔️', stars: '🌟', champion: '🏆',
     aura: '🔮', smoke: '💨', halo: '😇', sparks: '⚡', flames: '🔥', rainbow: '🌈',
     witchhat: '🧙', pumpkinhead: '🎃', witch: '🧙', vampire: '🧛', reaper: '💀', mummy: '🧻', pumpking: '🎃',
   };

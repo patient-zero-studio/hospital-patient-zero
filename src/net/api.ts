@@ -80,6 +80,8 @@ export interface RankedSelf {
   wins: number;
   losses: number;
   history: { season: string; tier: string; points: number }[];
+  /** 🎁 ranked pass */
+  pass: { xp: number; tier: number; claimed: number[] };
 }
 export interface RankedView extends RankedSelf {
   rank: number | null;
@@ -318,7 +320,8 @@ export const api = {
     return data;
   },
   ranked: (token: string): Promise<RankedView> => getJson('/api/ranked', token),
-  reward: (token: string, difficulty: number, found: number, chapter = 1): Promise<WalletView & { gained: number; xp?: number; rankGain?: { gain: number; points: number; tier: string; promoted: boolean } | null }> =>
+  claimRankedPass: (token: string, tier: number): Promise<WalletView & { result: BoxResult }> => post('/api/rpass/claim', { tier }, token),
+  reward: (token: string, difficulty: number, found: number, chapter = 1): Promise<WalletView & { gained: number; xp?: number; rankGain?: { gain: number; points: number; tier: string; promoted: boolean; passXp?: number } | null }> =>
     post('/api/wallet/reward', { difficulty, found, chapter }, token),
   claimWeekly: (token: string, id: string): Promise<WalletView & { result: BoxResult }> => post('/api/weekly/claim', { id }, token),
   claimPass: (token: string, tier: number): Promise<WalletView & { result: BoxResult }> => post('/api/pass/claim', { tier }, token),

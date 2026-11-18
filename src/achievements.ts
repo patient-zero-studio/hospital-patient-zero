@@ -90,6 +90,7 @@ export const ACHIEVEMENTS: AchDef[] = [
   { id: 'spectate', name: 'Dans les tribunes', desc: 'Regarder un ami jouer en direct.', icon: '👀', tier: 'bronze', reward: 30, server: true },
   { id: 'rank_gold', name: 'Rang Or', desc: 'Atteindre le rang Or en saison classée.', icon: '🥇', tier: 'argent', reward: 100, server: true },
   { id: 'rank_pro', name: 'Pro', desc: 'Atteindre le rang Pro en saison classée.', icon: '👑', tier: 'platine', reward: 500, server: true },
+  { id: 'rpass_done', name: 'Pass classé terminé', desc: 'Prendre le palier 20 du pass classé.', icon: '🏆', tier: 'platine', reward: 300, server: true },
   { id: 'clan', name: 'Frères d\'armes', desc: 'Créer ou rejoindre un clan.', icon: '🛡️', tier: 'bronze', reward: 30, server: true },
   { id: 'chat', name: 'Bavard', desc: 'Envoyer un message à un ami.', icon: '💬', tier: 'bronze', reward: 20, server: true },
   // --- Chapter 6 ---

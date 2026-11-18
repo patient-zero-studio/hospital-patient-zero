@@ -22,7 +22,7 @@ export interface Cosmetic {
   /** Only in the advent calendar (never sold) */
   calendarOnly?: boolean;
   /** Earned, never sold: season pass tier or player level */
-  unlock?: 'pass' | 'level' | 'xmas';
+  unlock?: 'pass' | 'level' | 'xmas' | 'ranked';
 }
 
 export const TIER_PRICE: Record<Tier, number> = { petit: 100, moyen: 500, style: 1000, exclusif: 2000 };
@@ -143,6 +143,10 @@ export const CATALOG: Cosmetic[] = [
   ev('poisson', 'm-pa-clown', 'Clown maléfique', 'monster', 'outfit', 'clownm', 'exclusif'),
 
   // ---- 🏆 Pass de saison (paliers 10, 20, 30) ----
+  // 🏅 Ranked pass (earned, never sold)
+  { ...c('m-rank-gladiator', 'Gladiateur de l\'arène', 'monster', 'outfit', 'gladiator', 'exclusif'), unlock: 'ranked' },
+  { ...c('hfx-rank-stars', 'Étoiles du classement', 'human', 'fx', 'stars', 'exclusif'), unlock: 'ranked' },
+  { ...c('h-rank-champion', 'Champion classé', 'human', 'outfit', 'champion', 'exclusif'), unlock: 'ranked' },
   // ✨ Animated skins
   c('hfx-aura', 'Aura spectrale', 'human', 'fx', 'aura', 'exclusif'),
   c('hfx-smoke', 'Traînée de fumée', 'human', 'fx', 'smoke', 'style'),

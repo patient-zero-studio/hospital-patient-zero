@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, X } from 'lucide-react';
-import { api, RankedView } from '../net/api';
-import { RANK_TIERS, RANK_WIN, tierOf } from '../ranked';
+import { Check, Loader2, Lock, X } from 'lucide-react';
+import { api, RankedView, WalletView } from '../net/api';
+import { BOXES, cosmetic } from '../economy';
+import { CosmeticBadge } from './ShopMenu';
+import { RANK_TIERS, RANK_WIN, RPASS_TIERS, RPASS_XP_PER_TIER, rpassReward, rpassWinXp, tierOf } from '../ranked';
 import { passName } from '../progression';
 import { levelColor } from '../levels';
 
@@ -28,10 +30,32 @@ const fmtLeft = (ms: number) => {
 };
 
 /** 🏅 Ranked season: your rank, the 7 tiers and their rewards, the top 50 */
-export const RankedMenu: React.FC<{ token: string; me: string; onProfile?: (name: string) => void; onClose: () => void }> = ({ token, me, onProfile, onClose }) => {
+export const RankedMenu: React.FC<{ token: string; me: string; onProfile?: (name: string) => void; onWallet?: (w: WalletView) => void; onClose: () => void }> = ({
+  token,
+  me,
+  onProfile,
+  onWallet,
+  onClose,
+}) => {
   const [v, setV] = useState<RankedView | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [tab, setTab] = useState<'me' | 'top'>('me');
+  const [tab, setTab] = useState<'me' | 'pass' | 'top'>('me');
+  const [busy, setBusy] = useState<number | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const claim = async (tier: number) => {
+    setBusy(tier);
+    setMsg(null);
+    try {
+      const r = await api.claimRankedPass(token, tier);
+      onWallet?.(r);
+      setMsg({ ok: true, text: `🎁 Palier ${tier} : ${r.result.text}` });
+      setV(await api.ranked(token));
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  };
   useEffect(() => {
     api.ranked(token).then(setV).catch((e) => setErr((e as Error).message));
   }, [token]);
@@ -69,8 +93,10 @@ export const RankedMenu: React.FC<{ token: string; me: string; onProfile?: (name
             </p>
             <div className="flex gap-1 mb-4">
               {tabBtn('me', 'Mon rang')}
+              {tabBtn('pass', `🎁 Pass${v.pass.tier > v.pass.claimed.length ? ` (${v.pass.tier - v.pass.claimed.length})` : ''}`)}
               {tabBtn('top', `Top 50`)}
             </div>
+            {msg && <p className={`text-xs font-mono mb-3 ${msg.ok ? 'text-emerald-400' : 'text-red-400'}`}>{msg.text}</p>}
 
             {tab === 'me' ? (
               <div className="space-y-4">
@@ -135,6 +161,48 @@ export const RankedMenu: React.FC<{ token: string; me: string; onProfile?: (name
                     </div>
                   </div>
                 )}
+              </div>
+            ) : tab === 'pass' ? (
+              <div className="space-y-3">
+                <p className="text-[11px] text-zinc-400">
+                  Chaque <b className="text-zinc-200">partie classée gagnée</b> remplit ce pass : Normal +{rpassWinXp(2)} XP, Difficile +{rpassWinXp(3)}, Cauchemar +{rpassWinXp(4)}, Enfer +{rpassWinXp(5)}. Un palier tous les {RPASS_XP_PER_TIER} XP. 3 skins exclusifs aux paliers 10, 15 et 20 ! Il repart à zéro avec la saison.
+                </p>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-2.5 bg-zinc-900 border border-zinc-800">
+                    <div className="h-full bg-gradient-to-r from-rose-700 to-amber-400" style={{ width: `${Math.min(100, (v.pass.xp / (RPASS_TIERS * RPASS_XP_PER_TIER)) * 100)}%` }} />
+                  </div>
+                  <span className="text-[11px] font-mono text-rose-200">
+                    Palier {v.pass.tier}/{RPASS_TIERS} · {v.pass.xp} XP
+                  </span>
+                </div>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {Array.from({ length: RPASS_TIERS }, (_, i) => {
+                    const n = i + 1;
+                    const r = rpassReward(n);
+                    const got = v.pass.claimed.includes(n);
+                    const open = n <= v.pass.tier;
+                    const skin = r.kind === 'skin' ? cosmetic(r.skin) : undefined;
+                    const big = r.kind === 'skin' || r.kind === 'box';
+                    return (
+                      <button
+                        key={n}
+                        disabled={!open || got || busy !== null}
+                        onClick={() => claim(n)}
+                        title={r.kind === 'coins' ? `${r.coins} pièces` : r.kind === 'supplies' ? `${r.count} ressources` : r.kind === 'box' ? BOXES.find((b) => b.id === r.box)!.name : skin?.name}
+                        className={`relative flex flex-col items-center gap-1 p-1.5 border text-center ${
+                          got ? 'border-zinc-800 opacity-50' : open ? 'border-rose-400 bg-rose-950/40 animate-pulse cursor-pointer' : big ? 'border-amber-700/60 bg-black/40' : 'border-zinc-800 bg-black/40'
+                        }`}
+                      >
+                        <span className="text-[9px] font-mono text-zinc-500">{n}</span>
+                        {skin ? <CosmeticBadge c={skin} size={34} /> : <span className="text-2xl leading-[34px]">{r.kind === 'coins' ? '🪙' : r.kind === 'supplies' ? '📦' : '🎁'}</span>}
+                        <span className="text-[9px] font-mono text-zinc-400 leading-tight truncate w-full">
+                          {busy === n ? '…' : r.kind === 'coins' ? r.coins : r.kind === 'supplies' ? `${r.count}×` : r.kind === 'box' ? r.box : skin?.name}
+                        </span>
+                        {got ? <Check className="absolute top-1 right-1 w-3 h-3 text-emerald-400" /> : !open ? <Lock className="absolute top-1 right-1 w-2.5 h-2.5 text-zinc-600" /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ) : v.top.length === 0 ? (
               <p className="text-sm text-zinc-500 font-serif italic text-center py-6">Personne n'a encore de points ce mois-ci. À toi de jouer !</p>
