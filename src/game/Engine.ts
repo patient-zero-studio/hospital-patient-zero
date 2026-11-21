@@ -156,8 +156,15 @@ export interface HudSnapshot {
   pact: number | null;
   /** 🔪 Imposteur mode */
   imp: {
-    me: 'imp' | 'crew';
+    me: 'imp' | 'doc' | 'det' | 'crew';
+    self: string;
     ph: 'night' | 'morning' | 'over';
+    /** 🩺 Medic: my pick for the coming night, and who I can't pick again */
+    prot: string | null;
+    lastProt: string | null;
+    /** 🔍 Detective: the one investigation (used = true), and its result */
+    invUsed: boolean;
+    inv: string | null;
     n: number;
     nights: number;
     t: number;
@@ -532,6 +539,12 @@ export class GameEngine {
   private impGhoul: MonsterAI | null = null;
   private impDone = false;
   private impMyVote: string | null = null;
+  private impMyProt: string | null = null;
+  private impLastProt: string | null = null;
+  private impInv: string | null = null;
+  private get impRole() {
+    return this.imp && this.net?.selfName ? this.imp.roleOf(this.net.selfName) : 'crew';
+  }
   private get amImp() {
     return !!this.imp && this.imp.impostor === this.net?.selfName;
   }
@@ -669,6 +682,9 @@ export class GameEngine {
     this.impDone = false;
     this.impPrev = 'night|1';
     this.impMyVote = null;
+    this.impMyProt = null;
+    this.impLastProt = null;
+    this.impInv = null;
     this.impSendT = 0;
     const pl = this.net?.imp ? this.net.players : undefined;
     this.imp = pl && pl.length >= 2 ? new ImpostorGame(pl, this.levelSeed ?? 0.5) : null;
@@ -676,7 +692,12 @@ export class GameEngine {
     this.queueChapterToast(
       this.amImp
         ? `🔪 VOUS ÊTES L'IMPOSTEUR. Personne ne le sait. La nuit, approchez-vous d'un joueur et appuyez sur [K] pour le tuer. Le matin, votez comme les autres… sans vous faire démasquer.`
-        : `🧍 L'un de vous ${pl!.length} est un monstre déguisé. Survivez ${this.imp.nights} nuits. Chaque matin, votez pour bannir le suspect.`
+        : `🧍 L'un de vous ${pl!.length} est un monstre déguisé. Survivez ${this.imp.nights} nuits. Chaque matin, votez pour bannir le suspect.` +
+            (this.impRole === 'doc'
+              ? ' 🩺 VOUS ÊTES LE MÉDECIN : chaque matin, choisissez qui protéger la nuit suivante (pas deux fois de suite le même).'
+              : this.impRole === 'det'
+                ? " 🔍 VOUS ÊTES LE DÉTECTIVE : une fois dans la partie, un matin, découvrez si quelqu'un est l'imposteur."
+                : '')
     );
   }
 
@@ -730,6 +751,30 @@ export class GameEngine {
     this.pushHud();
   }
 
+  /** 🩺 Medic: protect someone for the coming night */
+  private impProtect(target: string) {
+    const g = this.imp;
+    const me = this.net?.selfName;
+    if (!g || !this.net || !me || g.ph !== 'morning' || this.impRole !== 'doc' || this.spectating || g.dead.has(me)) return;
+    if (target === this.impLastProt) return this.state.showToast('🩺 Pas deux nuits de suite la même personne.');
+    this.impMyProt = target;
+    if (this.net.role === 'host') g.protectFor(me, target);
+    else this.net.send({ k: 'iprot', t: target });
+    this.state.showToast(`🩺 Cette nuit, vous veillez sur ${target === me ? 'vous-même' : target}.`);
+    this.pushHud();
+  }
+
+  /** 🔍 Detective: one look behind a mask, once per game */
+  private impInvestigate(target: string) {
+    const g = this.imp;
+    const me = this.net?.selfName;
+    if (!g || !me || g.ph !== 'morning' || this.impRole !== 'det' || this.impInv || this.spectating || g.dead.has(me)) return;
+    const res = target === g.impostor ? `🔍 ${target} EST l'imposteur !` : `🔍 ${target} n'est pas l'imposteur.`;
+    this.impInv = res;
+    this.state.showToast(res);
+    this.pushHud();
+  }
+
   /** Host: carry out what the game decided. */
   private applyImpEvents(evs: ImpEvent[]) {
     const g = this.imp;
@@ -739,6 +784,13 @@ export class GameEngine {
         const at = this.impPosOf(g.impostor) ?? this.player.position.clone();
         if (ev.victim === this.net.selfName) this.impDie(at.x, at.z);
         else this.net.send({ k: 'imkill', x: at.x, z: at.z, to: ev.victim } as unknown as GameMsg);
+      } else if (ev.e === 'saved') {
+        const toV = '🩺 Quelque chose vous a frôlé dans le noir… le médecin vous a sauvé !';
+        const toI = `🩺 ${ev.victim} était protégé par le médecin ! Attendez avant de retenter.`;
+        if (ev.victim === this.net.selfName) this.state.showToast(toV);
+        else this.net.send({ k: 'toast', msg: toV, to: ev.victim } as unknown as GameMsg);
+        if (g.impostor === this.net.selfName) this.state.showToast(toI);
+        else this.net.send({ k: 'toast', msg: toI, to: g.impostor } as unknown as GameMsg);
       } else if (ev.e === 'banish') {
         if (ev.victim === this.net.selfName) this.impOut();
         else this.net.send({ k: 'imout', to: ev.victim } as unknown as GameMsg);
@@ -766,6 +818,10 @@ export class GameEngine {
     if (key === this.impPrev) return;
     this.impPrev = key;
     this.impMyVote = null;
+    if (g.ph === 'night') {
+      this.impLastProt = this.impMyProt;
+      this.impMyProt = null;
+    }
     if (g.ph === 'morning') {
       this.state.showToast(`${g.log} 🌅 Le jour se lève : votez ! Qui est l'imposteur ?`);
       document.exitPointerLock?.();
@@ -824,6 +880,8 @@ export class GameEngine {
         ? `🗳 ${who} était l'imposteur… et vous l'avez démasqué !`
         : `🌅 Les ${g.nights} nuits sont passées ! ${who} était l'imposteur, mais ${g.crewAlive().join(', ')} a survécu.`;
     } else text = `🔪 ${who} était l'imposteur. Le monstre a eu tout le monde.`;
+    if (g.doctor) text += ` 🩺 Médecin : ${g.doctor}.`;
+    if (g.detective) text += ` 🔍 Détective : ${g.detective}.`;
     if (won) this.ach(me ? 'imp_win' : 'imp_crew');
     this.finished = true;
     this.running = false;
@@ -1062,6 +1120,8 @@ export class GameEngine {
       if (e.code === 'KeyK' && !e.repeat) this.impTryKill();
     }) as EventListener);
     this.listen(window, 'pz-vote', ((e: CustomEvent<string>) => this.impVote(String(e.detail))) as EventListener);
+    this.listen(window, 'pz-prot', ((e: CustomEvent<string>) => this.impProtect(String(e.detail))) as EventListener);
+    this.listen(window, 'pz-inv', ((e: CustomEvent<string>) => this.impInvestigate(String(e.detail))) as EventListener);
     this.mic.onPcm = (s, r) => this.voice.onMic(s, r);
     // Phones keep audio asleep until a touch
     this.listen(window, 'pointerdown', (() => {
@@ -2700,6 +2760,9 @@ export class GameEngine {
           this.impSendT = 0;
         }
         break;
+      case 'iprot':
+        if (host && this.imp) this.imp.protectFor(this.peerName, msg.t);
+        break;
       case 'imkill':
         this.impDie(msg.x, msg.z);
         break;
@@ -3699,7 +3762,12 @@ export class GameEngine {
       hideCount: this.hideSeek && this.hideCount > 0 ? Math.ceil(this.hideCount) : null,
       imp: this.imp
         ? {
-            me: this.amImp ? 'imp' : 'crew',
+            me: this.impRole,
+            self: this.net?.selfName ?? '',
+            prot: this.impMyProt,
+            lastProt: this.impLastProt,
+            invUsed: !!this.impInv,
+            inv: this.impInv,
             ph: this.imp.ph,
             n: this.imp.n,
             nights: this.imp.nights,

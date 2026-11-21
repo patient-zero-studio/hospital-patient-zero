@@ -324,7 +324,13 @@ export const HUD: React.FC<HUDProps> = ({
                     : imp.near
                       ? '🔪 [K] TUER'
                       : "🔪 Imposteur — approchez-vous d'une proie"
-                : '🧍 Survivant — méfiez-vous de tout le monde'}
+                : imp.me === 'doc'
+                  ? "🩺 Médecin — le matin, protégez quelqu'un"
+                  : imp.me === 'det'
+                    ? imp.invUsed
+                      ? '🔍 Détective — enquête utilisée'
+                      : '🔍 Détective — 1 enquête, le matin'
+                    : '🧍 Survivant — méfiez-vous de tout le monde'}
             </div>
           )}
         </div>
@@ -356,6 +362,48 @@ export const HUD: React.FC<HUDProps> = ({
               {imp.voted ? `Votre vote : ${imp.voted === 'skip' ? 'personne' : imp.voted}. ` : ''}
               {imp.nvoted} vote{imp.nvoted > 1 ? 's' : ''} · il faut au moins 2 voix et une majorité.
             </div>
+            {imp.me === 'doc' && (
+              <div className="mt-4 pt-3 border-t border-emerald-900">
+                <p className="text-xs font-mono text-emerald-300 mb-2">🩺 Médecin (secret) : qui protéger cette nuit ?</p>
+                <div className="flex flex-wrap gap-1.5 justify-center">
+                  {[imp.self, ...imp.alive].map((n, i) => {
+                    const off = n === imp.lastProt;
+                    return (
+                      <button
+                        key={n}
+                        disabled={off}
+                        onClick={() => window.dispatchEvent(new CustomEvent('pz-prot', { detail: n }))}
+                        className={`px-3 py-1.5 font-mono text-xs border ${imp.prot === n ? 'bg-emerald-700 border-emerald-400 text-white' : off ? 'border-zinc-800 text-zinc-600 line-through' : 'border-emerald-900 text-emerald-200 hover:border-emerald-500'}`}
+                      >
+                        {i === 0 ? 'Moi' : n}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {imp.me === 'det' && (
+              <div className="mt-4 pt-3 border-t border-sky-900">
+                {imp.inv ? (
+                  <p className="text-sm font-mono text-sky-200">{imp.inv}</p>
+                ) : (
+                  <>
+                    <p className="text-xs font-mono text-sky-300 mb-2">🔍 Détective (secret) : enquêter sur… (une seule fois dans la partie)</p>
+                    <div className="flex flex-wrap gap-1.5 justify-center">
+                      {imp.alive.map((n) => (
+                        <button
+                          key={n}
+                          onClick={() => window.dispatchEvent(new CustomEvent('pz-inv', { detail: n }))}
+                          className="px-3 py-1.5 font-mono text-xs border border-sky-900 text-sky-200 hover:border-sky-500"
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

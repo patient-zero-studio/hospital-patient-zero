@@ -14,6 +14,10 @@ export const IMP_COOLDOWN = 25;
 export const IMP_FIRST = 12;
 export const IMP_RANGE = 2.6;
 export const IMP_MIN_PLAYERS = 4;
+/** 🔍 the Detective joins from this many players (the Medic is always there) */
+export const IMP_DET_PLAYERS = 5;
+
+export type ImpRole = 'imp' | 'doc' | 'det' | 'crew';
 
 export type ImpPhase = 'night' | 'morning' | 'over';
 export interface ImpNet {
@@ -34,6 +38,7 @@ export interface ImpNet {
 
 export type ImpEvent =
   | { e: 'kill'; victim: string }
+  | { e: 'saved'; victim: string }
   | { e: 'banish'; victim: string; wasImp: boolean }
   | { e: 'over'; res: 'crew' | 'imp' };
 
@@ -54,12 +59,35 @@ export class ImpostorGame {
   public log = '';
   public readonly nights: number;
   public readonly impostor: string;
+  /** 🩺 the Medic and 🔍 the Detective (secret, like the impostor) */
+  public readonly doctor: string | null;
+  public readonly detective: string | null;
+  /** 🩺 protected for the coming night / the one before (no twice in a row) */
+  public protect: string | null = null;
+  public lastProtect: string | null = null;
   /** killed during the current night (told at dawn) */
   private tonight: string[] = [];
+  private savedTonight = false;
 
   constructor(public players: string[], seed: number) {
     this.impostor = pickImpostor(players, seed);
     this.nights = players.length;
+    // Same draw on every screen, from the same seed
+    const rest = players.filter((p) => p !== this.impostor);
+    const k = Math.floor(Math.abs(seed) * 1e9);
+    this.doctor = rest.length >= 3 ? rest.splice(k % rest.length, 1)[0] : null;
+    this.detective = players.length >= IMP_DET_PLAYERS && rest.length >= 2 ? rest[Math.floor(k / 7) % rest.length] : null;
+  }
+
+  public roleOf(name: string): ImpRole {
+    return name === this.impostor ? 'imp' : name === this.doctor ? 'doc' : name === this.detective ? 'det' : 'crew';
+  }
+
+  /** 🩺 Host: the Medic picks who to protect next night (in the morning). */
+  public protectFor(by: string, target: string) {
+    if (this.ph !== 'morning' || by !== this.doctor || !this.isAlive(by) || !this.isAlive(target) || target === this.lastProtect) return false;
+    this.protect = target;
+    return true;
   }
 
   public isAlive(name: string) {
@@ -84,8 +112,12 @@ export class ImpostorGame {
         this.ph = 'morning';
         this.t = IMP_MORNING;
         this.votes.clear();
-        this.log = this.tonight.length ? `☠ Cette nuit : ${this.tonight.join(', ')}.` : '🌅 Personne n\'est mort cette nuit.';
+        this.log = this.tonight.length ? `☠ Cette nuit : ${this.tonight.join(', ')}.` : "🌅 Personne n'est mort cette nuit.";
+        if (this.savedTonight) this.log += " 🩺 Le médecin a sauvé quelqu'un !";
         this.tonight = [];
+        this.savedTonight = false;
+        this.lastProtect = this.protect;
+        this.protect = null;
       }
     } else if (this.ph === 'morning') {
       const voters = this.players.filter((p) => !this.dead.has(p));
@@ -105,6 +137,13 @@ export class ImpostorGame {
   public kill(victim: string): ImpEvent[] {
     const ev: ImpEvent[] = [];
     if (!this.canKill() || victim === this.impostor || !this.isAlive(victim)) return ev;
+    if (victim === this.protect) {
+      // 🩺 the Medic was there: the blow misses, the impostor must wait again
+      this.cooldown = IMP_COOLDOWN;
+      this.savedTonight = true;
+      ev.push({ e: 'saved', victim });
+      return ev;
+    }
     this.dead.add(victim);
     this.tonight.push(victim);
     this.cooldown = IMP_COOLDOWN;

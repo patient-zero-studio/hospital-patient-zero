@@ -122,6 +122,7 @@ export type GameMsg =
   | { k: 'imps'; s: ImpNet }
   | { k: 'ikill'; t: string }
   | { k: 'ivote'; t: string }
+  | { k: 'iprot'; t: string }
   | { k: 'imkill'; x: number; z: number }
   | { k: 'imout' };
 

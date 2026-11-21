@@ -316,7 +316,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
           <p className="text-[10px] font-mono text-zinc-500 leading-relaxed">
             🔪 De 4 à 8 joueurs, dans l'hôpital. L'un de vous est tiré au sort en secret : c'est un monstre déguisé. La nuit, il peut tuer
             quelqu'un en s'approchant ([K]). Chaque matin, tout le monde vote pour bannir un suspect. Les survivants gagnent s'ils le
-            démasquent, ou si l'un d'eux tient autant de nuits qu'il y a de joueurs.
+            démasquent, ou si l'un d'eux tient autant de nuits qu'il y a de joueurs. Rôles secrets : 🩺 un Médecin protège quelqu'un chaque nuit, et dès 5 joueurs 🔍 un Détective peut démasquer une personne.
           </p>
         ) : value.mode === 'versus' ? (
           <>
