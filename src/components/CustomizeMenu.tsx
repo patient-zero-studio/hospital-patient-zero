@@ -23,7 +23,7 @@ interface Props {
 type Tab = 'human' | 'monster';
 
 /** Rotating 3D preview of the real in-game models. */
-const Preview: React.FC<{ look: Appearance; tab: Tab }> = ({ look, tab }) => {
+export const Preview: React.FC<{ look: Appearance; tab: Tab }> = ({ look, tab }) => {
   const mount = useRef<HTMLDivElement>(null);
   const models = useRef<{ human: RemotePlayer; monster: MonsterAI } | null>(null);
   const tabRef = useRef(tab);

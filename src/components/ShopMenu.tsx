@@ -4,6 +4,18 @@ import { ADVENT, BOXES, EVENT_BOX_PRICE, TREATS_PER_CHEST, BoxId, BoxResult, CAT
 import { api, AdminUser, Boost, BoostKind, WalletView } from '../net/api';
 import { SEASON_INFO, Season, SeasonSetting } from '../seasons';
 import { AdminDashboard } from './AdminDashboard';
+import { Preview } from './CustomizeMenu';
+import { Appearance, DEFAULT_APPEARANCE } from '../appearance';
+
+/** 👁 Your current look, wearing the item you want to try */
+const withItem = (look: Appearance, c: Cosmetic): Appearance => {
+  const h = { ...look.human };
+  const m = { ...look.monster };
+  if (c.target === 'human') (h as Record<string, string>)[c.slot] = c.value;
+  else (m as Record<string, string>)[c.slot] = c.value;
+  // an outfit replaces the colours: keep it readable by clearing a clashing accessory
+  return { human: h, monster: m };
+};
 
 /** Admin: start or stop an event (Christmas / Halloween) for every player. */
 const SeasonSwitch: React.FC<{ value: SeasonSetting; onSet: (s: SeasonSetting) => Promise<void> }> = ({ value, onSet }) => {
@@ -248,6 +260,8 @@ interface Props {
   onClose: () => void;
   /** needed for the admin panel */
   token?: string | null;
+  /** 👁 your look, to try items on */
+  look?: Appearance;
 }
 
 /** Admin: gift coins to any player. */
@@ -338,7 +352,8 @@ const AdminPanel: React.FC<{ token: string }> = ({ token }) => {
 };
 
 /** Cosmetics shop: today's offers (change every day) and mystery boxes. */
-export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, onClaimDaily, onClaimAdvent, onSetSeason, onExplore, onOpenEventBox, onBoost, onLogin, onCustomize, onClose, token }) => {
+export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, onClaimDaily, onClaimAdvent, onSetSeason, onExplore, onOpenEventBox, onBoost, onLogin, onCustomize, onClose, token, look }) => {
+  const [trying, setTrying] = useState<Cosmetic | null>(null);
   const season: Season | null = wallet?.season ?? null;
   const [tab, setTab] = useState<'event' | 'shop' | 'boxes' | 'mine' | 'admin'>(season ? 'event' : 'shop');
   const [busy, setBusy] = useState<string | null>(null);
@@ -383,6 +398,13 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
             {TIER_LABEL[c.tier]} · {c.target === 'human' ? 'Humain' : 'Monstre'}
           </div>
         </div>
+        <button
+          onClick={() => setTrying(c)}
+          title="Essayer"
+          className="px-2 py-1.5 font-mono text-xs border border-zinc-700 text-zinc-300 hover:border-sky-500 hover:text-sky-300"
+        >
+          👁
+        </button>
         {have ? (
           <span className="text-[10px] font-mono text-emerald-400 uppercase">Possédé</span>
         ) : (
@@ -429,6 +451,32 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
         className="relative w-full max-w-3xl max-h-[92vh] overflow-y-auto bg-zinc-950 border border-zinc-800 p-6 shadow-[0_0_60px_rgba(250,180,0,0.15)]"
         onClick={(e) => e.stopPropagation()}
       >
+        {trying && (
+          <div className="fixed inset-0 z-[95] bg-black/85 flex items-center justify-center p-3" onClick={() => setTrying(null)}>
+            <div className="bg-zinc-950 border border-sky-700 p-4 flex flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
+              <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-sky-400">👁 Essayer</div>
+              <div className="text-sm text-zinc-100">
+                {trying.name} <span className="text-zinc-500 text-xs">· {trying.target === 'human' ? 'Humain' : 'Monstre'}</span>
+              </div>
+              <Preview look={withItem(look ?? DEFAULT_APPEARANCE, trying)} tab={trying.target === 'human' ? 'human' : 'monster'} />
+              {trying.slot === 'dance' && <p className="text-[11px] font-mono text-zinc-400">💃 La danse se joue en boucle.</p>}
+              <div className="flex gap-2 w-full">
+                <button onClick={() => setTrying(null)} className="flex-1 py-2 border border-zinc-700 text-zinc-300 font-mono text-xs uppercase tracking-wider hover:border-zinc-500">
+                  Fermer
+                </button>
+                {!owned.has(trying.id) && ((wallet?.shop ?? []).includes(trying.id) || (wallet?.seasonShop ?? []).includes(trying.id)) && (
+                  <button
+                    disabled={!!busy || coins < TIER_PRICE[trying.tier]}
+                    onClick={() => run(trying.id, () => onBuy(trying.id)).then(() => setTrying(null))}
+                    className="flex-1 py-2 border border-amber-600 text-amber-300 font-mono text-xs uppercase tracking-wider hover:bg-amber-900/40 disabled:opacity-40 flex items-center justify-center gap-1"
+                  >
+                    <Coins className="w-3 h-3" /> Acheter {TIER_PRICE[trying.tier]}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         <button onClick={onClose} className="absolute top-3 right-3 text-zinc-500 hover:text-zinc-200">
           <X className="w-5 h-5" />
         </button>

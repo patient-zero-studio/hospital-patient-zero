@@ -4,6 +4,56 @@ import type { MicStatus } from '../audio/MicListener';
 import type { GameItem } from '../types';
 import type { HudSnapshot } from '../game/Engine';
 import { ItemIcon } from './ItemIcon';
+import { EMOTES as EMOTE_LABELS } from '../net/protocol';
+import { IMP_SAY } from '../game/Impostor';
+
+/** 🗣 Imposteur: quick sentences before the vote */
+const ImpTalk: React.FC<{ alive: string[]; chat: string[] }> = ({ alive, chat }) => {
+  const [who, setWho] = React.useState(alive[0] ?? '');
+  const target = alive.includes(who) ? who : (alive[0] ?? '');
+  const say = (i: number) => window.dispatchEvent(new CustomEvent('pz-say', { detail: { i, t: IMP_SAY[i].who ? target : undefined } }));
+  return (
+    <div className="mb-3 text-left">
+      <div className="max-h-28 overflow-y-auto mb-2 px-2 py-1 bg-black/60 border border-zinc-800 space-y-0.5">
+        {chat.length === 0 ? (
+          <p className="text-[11px] font-mono text-zinc-600 italic">Personne n'a encore parlé… Accusez, défendez-vous !</p>
+        ) : (
+          chat.map((l, i) => (
+            <p key={i} className="text-[11px] font-mono text-zinc-200">
+              {l}
+            </p>
+          ))
+        )}
+      </div>
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <span className="text-[10px] font-mono text-zinc-500 uppercase">Parler de</span>
+        <select
+          value={target}
+          onChange={(e) => setWho(e.target.value)}
+          className="flex-1 bg-black border border-zinc-700 text-xs font-mono text-zinc-100 px-1 py-1"
+        >
+          {alive.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {IMP_SAY.map((p, i) => (
+          <button
+            key={i}
+            disabled={p.who && !target}
+            onClick={() => say(i)}
+            className="px-2 py-1 border border-zinc-700 text-[11px] font-mono text-zinc-200 hover:border-amber-500 disabled:opacity-40"
+          >
+            {p.who && target ? p.label.replace(' …', ` ${target}`).replace('…', ` ${target}`) : p.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
 import { getScreamerFace } from './screamerFace';
 
 /** Must match MIC_THRESHOLD in the engine. */
@@ -41,6 +91,8 @@ interface HUDProps {
   imp?: HudSnapshot['imp'];
   /** 🫣 hide-and-seek countdown */
   hideCount?: number | null;
+  /** 🎡 the emote wheel [T] is open */
+  emoteWheel?: boolean;
   /** ⏱️ Speedrun chrono */
   speedrun?: { time: number; best: number | null } | null;
   treatEmoji?: string | null;
@@ -113,6 +165,7 @@ export const HUD: React.FC<HUDProps> = ({
   survival = null,
   speedrun = null,
   hideCount = null,
+  emoteWheel = false,
   pact = null,
   imp = null,
   treatEmoji = null,
@@ -308,6 +361,38 @@ export const HUD: React.FC<HUDProps> = ({
         </div>
       )}
 
+      {/* 🎡 Emote wheel [T] */}
+      {emoteWheel && (
+        <div
+          className="absolute inset-0 z-[60] flex items-center justify-center bg-black/30"
+          onClick={() => window.dispatchEvent(new CustomEvent('pz-emote', { detail: -1 }))}
+        >
+          <div className="relative w-[300px] h-[300px]" onClick={(e) => e.stopPropagation()}>
+            <div className="absolute inset-[22%] rounded-full border border-zinc-700 bg-black/70 flex items-center justify-center text-center">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-400 leading-tight">
+                Emotes
+                <br />
+                <span className="text-zinc-600 normal-case">[T] fermer</span>
+              </span>
+            </div>
+            {EMOTE_LABELS.map((label, i) => {
+              const a = (i / EMOTE_LABELS.length) * Math.PI * 2 - Math.PI / 2;
+              return (
+                <button
+                  key={i}
+                  onClick={() => window.dispatchEvent(new CustomEvent('pz-emote', { detail: i }))}
+                  className="absolute -translate-x-1/2 -translate-y-1/2 w-[92px] py-2 rounded-full border border-emerald-700 bg-zinc-950/90 hover:bg-emerald-900 hover:border-emerald-400 text-xs font-mono text-zinc-100"
+                  style={{ left: `${50 + Math.cos(a) * 40}%`, top: `${50 + Math.sin(a) * 40}%` }}
+                >
+                  {label}
+                  {i < 4 && <span className="block text-[9px] text-zinc-500">[{i + 6}]</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* 🔪 Imposteur: night clock, your role, the morning vote */}
       {imp && imp.ph !== 'over' && (
         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 text-center pointer-events-none">
@@ -337,9 +422,10 @@ export const HUD: React.FC<HUDProps> = ({
       )}
       {imp && imp.ph === 'morning' && !imp.dead && (
         <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
-          <div className="pointer-events-auto max-w-md mx-4 p-5 bg-black/90 border-2 border-amber-600 text-center">
+          <div className="pointer-events-auto max-w-md mx-4 p-5 bg-black/90 border-2 border-amber-600 text-center max-h-[92vh] overflow-y-auto">
             <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-amber-400 mb-1">Le jour se lève — {imp.t} s pour voter</div>
             {imp.log && <p className="text-sm text-zinc-200 mb-3">{imp.log}</p>}
+            <ImpTalk alive={imp.alive} chat={imp.chat} />
             <p className="font-serif italic text-zinc-100 mb-3">Qui est l'imposteur ?</p>
             <div className="flex flex-wrap gap-1.5 justify-center">
               {imp.alive.map((n) => (
@@ -670,7 +756,7 @@ export const HUD: React.FC<HUDProps> = ({
           <span className={`w-2 h-2 rounded-full ${partnerDead ? 'bg-red-600' : 'bg-emerald-400 animate-pulse'}`} />
           <span className="text-zinc-300">{partnerName}</span>
           <span className={partnerDead ? 'text-red-400' : 'text-zinc-500'}>{partnerDead ? 'ATTRAPÉ' : 'en vie'}</span>
-          {!touch && <span className="text-zinc-600">· [6-9] emotes</span>}
+          {!touch && <span className="text-zinc-600">· [T] emotes</span>}
         </div>
       )}
 

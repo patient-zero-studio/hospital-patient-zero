@@ -136,6 +136,7 @@ const EMPTY_HUD: HudSnapshot = {
   hideCount: null,
   pact: null,
   imp: null,
+  emoteWheel: false,
   treatEmoji: null,
   selectedSlot: 0,
   voice: null,
@@ -1658,6 +1659,7 @@ export default function App() {
 
       {shopOpen && (
         <ShopMenu
+          look={look}
           username={session?.username ?? null}
           wallet={wallet}
           onBuy={buyCosmetic}
@@ -1773,6 +1775,7 @@ export default function App() {
           survival={hud.survival}
           speedrun={hud.speedrun}
           hideCount={hud.hideCount}
+          emoteWheel={hud.emoteWheel}
           pact={hud.pact}
           imp={hud.imp}
           treatEmoji={hud.treatEmoji}

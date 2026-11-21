@@ -19,6 +19,17 @@ export const IMP_DET_PLAYERS = 5;
 
 export type ImpRole = 'imp' | 'doc' | 'det' | 'crew';
 
+/** 🗣 Morning talk: quick sentences (those with a name use the player picked in the list) */
+export const IMP_SAY: { label: string; text: (t: string) => string; who: boolean }[] = [
+  { label: '🤔 Je soupçonne…', text: (t) => `🤔 Je soupçonne ${t} !`, who: true },
+  { label: "🤝 J'étais avec…", text: (t) => `🤝 J'étais avec ${t}.`, who: true },
+  { label: '👀 J\u2019ai vu… rôder', text: (t) => `👀 J'ai vu ${t} rôder dans le noir…`, who: true },
+  { label: '✅ … est innocent', text: (t) => `✅ ${t} est innocent, j'en suis sûr.`, who: true },
+  { label: "🙅 Ce n'est pas moi !", text: () => "🙅 Ce n'est pas moi !", who: false },
+  { label: '🤷 Je ne sais pas', text: () => '🤷 Je ne sais pas…', who: false },
+  { label: '⏭ On passe ?', text: () => '⏭ On ne bannit personne ?', who: false },
+];
+
 export type ImpPhase = 'night' | 'morning' | 'over';
 export interface ImpNet {
   ph: ImpPhase;

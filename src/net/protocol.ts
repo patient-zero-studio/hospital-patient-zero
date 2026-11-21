@@ -26,6 +26,8 @@ export interface PlayerNetState {
   st?: boolean;
   /** chapter 5: lamp in UV mode */
   uv?: boolean;
+  /** 😨 fear 0..1 (the face shows it) */
+  fe?: number;
 }
 
 export type InteractRequest =
@@ -123,11 +125,12 @@ export type GameMsg =
   | { k: 'ikill'; t: string }
   | { k: 'ivote'; t: string }
   | { k: 'iprot'; t: string }
+  | { k: 'isay'; i: number; t?: string }
   | { k: 'imkill'; x: number; z: number }
   | { k: 'imout' };
 
 /** Emotes, keys 6 → 9 */
-export const EMOTES = ['👋 Salut !', '👉 Par ici !', '😱 Au secours !', '🤫 Chut !'];
+export const EMOTES = ['👋 Salut !', '👉 Par ici !', '😱 Au secours !', '🤫 Chut !', '🙋 Viens !', '✋ Stop !', '👏 Bravo !', '😂 Mdr !'];
 
 /** Link between the engine and the other player. */
 export interface GameLink {

@@ -1689,7 +1689,8 @@ server.on('upgrade', (req, socket, head) => {
           const room = client.room;
           if (!room) break;
           const k = (msg.d as { k?: string } | null)?.k;
-          const personal = k === 'p' || k === 'look' || k === 'emote';
+          // 🗣 Imposteur morning talk goes to everyone too
+          const personal = k === 'p' || k === 'look' || k === 'emote' || k === 'isay';
           const out = { t: 'relay', d: msg.d, from: client.username };
           for (const c of membersOf(room)) if (c !== client && (room.host === client || c === room.host || personal)) send(c, out);
           // 👀 …and to the spectators: the world comes from the host, the view from the player they follow

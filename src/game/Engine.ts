@@ -48,7 +48,7 @@ const VERSUS_TIME = 12 * 60;
 const HIDE_COUNT = 30;
 const HIDE_TIME = 3 * 60;
 import type { MonsterSenses } from './MonsterAI';
-import { ImpostorGame, ImpEvent, IMP_RANGE } from './Impostor';
+import { IMP_SAY, ImpostorGame, ImpEvent, IMP_RANGE } from './Impostor';
 import { EMOTES, GameLink, GameMsg, InteractRequest, MONSTER_STATES, PlayerNetState, WorldSnapshot } from '../net/protocol';
 
 /** Voice level above which the creature can hear you. */
@@ -165,6 +165,8 @@ export interface HudSnapshot {
     /** 🔍 Detective: the one investigation (used = true), and its result */
     invUsed: boolean;
     inv: string | null;
+    /** 🗣 this morning's talk */
+    chat: string[];
     n: number;
     nights: number;
     t: number;
@@ -178,6 +180,8 @@ export interface HudSnapshot {
   } | null;
   /** 🫣 hide-and-seek: the seeker is still counting */
   hideCount: number | null;
+  /** 🎡 the emote wheel is open */
+  emoteWheel: boolean;
   /** 💃 victory dance on screen: no HUD */
   dancing: boolean;
   /** 👀 watching a friend's game */
@@ -542,6 +546,9 @@ export class GameEngine {
   private impMyProt: string | null = null;
   private impLastProt: string | null = null;
   private impInv: string | null = null;
+  /** 🗣 what was said this morning */
+  private impChat: { n: number; line: string }[] = [];
+  private impSayT = 0;
   private get impRole() {
     return this.imp && this.net?.selfName ? this.imp.roleOf(this.net.selfName) : 'crew';
   }
@@ -685,6 +692,7 @@ export class GameEngine {
     this.impMyProt = null;
     this.impLastProt = null;
     this.impInv = null;
+    this.impChat = [];
     this.impSendT = 0;
     const pl = this.net?.imp ? this.net.players : undefined;
     this.imp = pl && pl.length >= 2 ? new ImpostorGame(pl, this.levelSeed ?? 0.5) : null;
@@ -764,6 +772,30 @@ export class GameEngine {
     this.pushHud();
   }
 
+  /** 🗣 Morning talk: say a quick sentence to everyone */
+  private impSay(i: number, target?: string) {
+    const g = this.imp;
+    const me = this.net?.selfName;
+    const p = IMP_SAY[i];
+    if (!g || !this.net || !me || !p || g.ph !== 'morning' || this.spectating || g.dead.has(me)) return;
+    if (p.who && (!target || !g.isAlive(target) || target === me)) return;
+    const now = performance.now();
+    if (now < this.impSayT) return;
+    this.impSayT = now + 1500;
+    this.net.send({ k: 'isay', i, t: p.who ? target : undefined });
+    this.impHear(me, i, target);
+  }
+  private impHear(from: string, i: number, target?: string) {
+    const g = this.imp;
+    const p = IMP_SAY[i];
+    if (!g || !p || g.ph !== 'morning' || !g.isAlive(from)) return;
+    if (p.who && (!target || !g.isAlive(target))) return;
+    const text = p.text(target ?? '');
+    this.impChat = [...this.impChat, { n: g.n, line: `${from} : ${text}` }].slice(-8);
+    if (from !== this.net?.selfName) this.peers.find((q) => q.name === from)?.remote?.showEmote(text.length > 22 ? text.slice(0, 21) + '…' : text);
+    this.pushHud();
+  }
+
   /** 🔍 Detective: one look behind a mask, once per game */
   private impInvestigate(target: string) {
     const g = this.imp;
@@ -823,6 +855,8 @@ export class GameEngine {
       this.impMyProt = null;
     }
     if (g.ph === 'morning') {
+      // a new morning: yesterday's talk goes (what was already said this morning stays)
+      this.impChat = this.impChat.filter((c) => c.n === g.n);
       this.state.showToast(`${g.log} 🌅 Le jour se lève : votez ! Qui est l'imposteur ?`);
       document.exitPointerLock?.();
       sound.playDistantSlam(0.4);
@@ -1127,12 +1161,16 @@ export class GameEngine {
       if (e.code === 'KeyR' && !e.repeat) this.drawChalk();
       const em = ['Digit6', 'Digit7', 'Digit8', 'Digit9'].indexOf(e.code);
       if (em >= 0 && !e.repeat) this.sendEmote(em);
+      if (e.code === 'KeyT' && !e.repeat) this.toggleEmoteWheel();
+      if (e.code === 'Escape' && this.emoteWheel) this.toggleEmoteWheel(false);
       if ((e.code === 'Space' || e.code === 'Enter') && this.intro) this.skipIntro();
       if (e.code === 'KeyO' && !e.repeat) this.answerPact(true);
       if (e.code === 'KeyN' && !e.repeat) this.answerPact(false);
       if (e.code === 'KeyK' && !e.repeat) this.impTryKill();
     }) as EventListener);
     this.listen(window, 'pz-vote', ((e: CustomEvent<string>) => this.impVote(String(e.detail))) as EventListener);
+    this.listen(window, 'pz-say', ((e: CustomEvent<{ i: number; t?: string }>) => this.impSay(Number(e.detail?.i), e.detail?.t)) as EventListener);
+    this.listen(window, 'pz-emote', ((e: CustomEvent<number>) => this.pickEmote(Number(e.detail))) as EventListener);
     this.listen(window, 'pz-prot', ((e: CustomEvent<string>) => this.impProtect(String(e.detail))) as EventListener);
     this.listen(window, 'pz-inv', ((e: CustomEvent<string>) => this.impInvestigate(String(e.detail))) as EventListener);
     this.mic.onPcm = (s, r) => this.voice.onMic(s, r);
@@ -1156,7 +1194,9 @@ export class GameEngine {
       const locked = document.pointerLockElement === this.renderer.domElement;
       this.player.isLocked = locked;
       if (locked) this.player.freeLook = false;
-      if (!locked && this.running && !this.dying && !this.finished) this.cb.onPointerUnlock();
+      // The emote wheel and the Imposteur morning vote free the mouse on purpose: no pause menu over them
+      const voting = !!this.imp && this.imp.ph === 'morning' && !this.spectating;
+      if (!locked && this.running && !this.dying && !this.finished && !this.emoteWheel && !voting) this.cb.onPointerUnlock();
     });
 
     this.rafId = requestAnimationFrame(this.tick);
@@ -2449,6 +2489,7 @@ export class GameEngine {
       hs: p.isHidden ? (p.currentHidingSpotId ?? '') : '',
       st: this.monsterStunTimer > 0,
       uv: this.site?.uv || undefined,
+      fe: this.fear > 0.05 ? Math.round(this.fear * 10) / 10 : undefined,
     };
   }
 
@@ -2723,7 +2764,21 @@ export class GameEngine {
     this.cb.onGameOver();
   }
 
-  /** 👋 Emotes (keys 6-9) in co-op and race: shown above your head on the partner's screen. */
+  /** 🎡 Emote wheel [T]: the 8 emotes, picked with the mouse */
+  public emoteWheel = false;
+  private toggleEmoteWheel(open = !this.emoteWheel) {
+    if (open && (!this.running || !this.net || this.net.mode === 'versus' || this.partnerGone)) return;
+    this.emoteWheel = open;
+    if (open) document.exitPointerLock?.();
+    this.pushHud();
+  }
+  public pickEmote(i: number) {
+    this.toggleEmoteWheel(false);
+    if (i >= 0) this.sendEmote(i);
+    this.requestLock();
+  }
+
+  /** 👋 Emotes (keys 6-9, and the wheel [T]) in co-op and race: shown above your head on the partner's screen. */
   private emoteCooldown = 0;
   private sendEmote(i: number) {
     if (!this.running || !this.net || this.net.mode === 'versus' || this.partnerGone) return;
@@ -2774,6 +2829,9 @@ export class GameEngine {
           this.imp.vote(this.peerName, msg.t);
           this.impSendT = 0;
         }
+        break;
+      case 'isay':
+        if (this.imp && typeof msg.i === 'number') this.impHear(this.peerName, msg.i, typeof msg.t === 'string' ? msg.t : undefined);
         break;
       case 'iprot':
         if (host && this.imp) this.imp.protectFor(this.peerName, msg.t);
@@ -3776,6 +3834,7 @@ export class GameEngine {
       versusRole: this.vsRole,
       timeLeft: this.vsRole ? this.timeLeft : null,
       hideCount: this.hideSeek && this.hideCount > 0 ? Math.ceil(this.hideCount) : null,
+      emoteWheel: this.emoteWheel,
       imp: this.imp
         ? {
             me: this.impRole,
@@ -3784,6 +3843,7 @@ export class GameEngine {
             lastProt: this.impLastProt,
             invUsed: !!this.impInv,
             inv: this.impInv,
+            chat: this.impChat.filter((c) => c.n === this.imp!.n).map((c) => c.line),
             ph: this.imp.ph,
             n: this.imp.n,
             nights: this.imp.nights,

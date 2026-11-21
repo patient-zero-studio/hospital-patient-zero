@@ -411,7 +411,25 @@ export class RemotePlayer {
       const brow = mesh(new THREE.CapsuleGeometry(0.0032, 0.026, 3, 8), hair, this.head, b.x, b.y, b.z + 0.002);
       brow.rotation.z = Math.PI / 2 - s * 0.18;
       brow.rotation.y = s * 0.3;
+      this.brows.push({ m: brow, s, y: b.y });
     }
+    // 😮 Mouth: a dark opening (scared / laughing) and a smile line (happy)
+    {
+      const mp = onFace(0, -0.465);
+      const inside = t(new THREE.MeshStandardMaterial({ color: 0x2a0808, roughness: 0.6 }));
+      const open = mesh(new THREE.CircleGeometry(0.0125, 20), inside, this.head, mp.x, mp.y, mp.z + 0.0015);
+      open.castShadow = false;
+      open.scale.set(1.3, 0.05, 1);
+      open.visible = false;
+      this.mouth = open;
+      const lipLine = t(new THREE.MeshStandardMaterial({ color: 0x6a2e2a, roughness: 0.5 }));
+      const smile = mesh(new THREE.TorusGeometry(0.014, 0.0018, 4, 14, Math.PI * 0.85), lipLine, this.head, mp.x, mp.y + 0.006, mp.z + 0.001);
+      smile.rotation.z = Math.PI + Math.PI * 0.075;
+      smile.castShadow = false;
+      smile.visible = false;
+      this.smile = smile;
+    }
+
     // Ears: folded rim + lobe, flat against the head
     for (const s of [-1, 1]) {
       const ep = sculpt(s * 0.995, 0.02, -0.1);
@@ -477,6 +495,36 @@ export class RemotePlayer {
 
   private lipsMat!: THREE.MeshPhysicalMaterial;
   private lids: THREE.Mesh[] = [];
+  private brows: { m: THREE.Mesh; s: number; y: number }[] = [];
+  private mouth: THREE.Mesh | null = null;
+  private smile: THREE.Mesh | null = null;
+  /** 😨 / 😄 current expression (0..1 each) and the partner's fear from the network */
+  private scared = 0;
+  private happy = 0;
+  private mouthOpen = 0;
+  public fearNet = 0;
+
+  /** Face: brows, eyelids and mouth follow the mood */
+  private face(delta: number, scaredT: number, happyT: number, openT: number) {
+    const k = 1 - Math.exp(-8 * delta);
+    this.scared += (scaredT - this.scared) * k;
+    this.happy += (happyT - this.happy) * k;
+    this.mouthOpen += (openT - this.mouthOpen) * k;
+    for (const b of this.brows) {
+      // scared: brows up, inner ends raised; happy: lifted a little
+      b.m.position.y = b.y + this.scared * 0.006 + this.happy * 0.003;
+      b.m.rotation.z = Math.PI / 2 - b.s * 0.18 - b.s * 0.4 * this.scared + b.s * 0.1 * this.happy;
+    }
+    if (this.mouth) {
+      const o = Math.max(this.mouthOpen, this.scared * 0.75);
+      this.mouth.visible = o > 0.05;
+      this.mouth.scale.set(1.3 - o * 0.35 + this.happy * 0.3, 0.05 + o * 0.95, 1);
+    }
+    if (this.smile) {
+      this.smile.visible = this.happy > 0.08 && this.mouthOpen < 0.5;
+      this.smile.scale.set(0.6 + this.happy * 0.5, 0.4 + this.happy * 0.6, 1);
+    }
+  }
   private hands: THREE.Group[] = [];
   /** 😉 blinking: time to the next blink, and the blink in progress */
   private blinkIn = 2 + Math.random() * 3;
@@ -506,7 +554,7 @@ export class RemotePlayer {
       close = Math.sin(Math.min(1, this.blinkT / 0.16) * Math.PI);
       if (this.blinkT > 0.16) this.blinkT = -1;
     }
-    for (const l of this.lids) l.rotation.x = 0.45 + close * 1.25;
+    for (const l of this.lids) l.rotation.x = 0.45 - this.scared * 0.35 + close * (1.25 + this.scared * 0.35);
   }
 
   /** Shop accessories & outfit pieces currently worn (rebuilt on every look change). */
@@ -629,6 +677,7 @@ export class RemotePlayer {
   public dance(delta: number, id = this.danceId) {
     this.fx?.tick(delta);
     this.blink(delta);
+    this.face(delta, 0, 1, id === 'jump' || id === 'chicken' || id === 'breakdance' ? 0.6 : 0);
     this.danceT += delta;
     const t = this.danceT;
     const [L, R] = this.arms;
@@ -1076,9 +1125,35 @@ export class RemotePlayer {
           blend(right.mid, -2.55);
           blend(this.head, 0.15);
           break;
+        case 4: // come here: arm out, forearm beckoning
+          blend(right.root, -1.25, 0.1);
+          blend(right.mid, -0.5 - (0.5 + 0.5 * Math.sin(T * 9)) * 1.3);
+          blend(this.head, -0.05);
+          break;
+        case 5: // stop: arm out, palm up and facing them
+          blend(right.root, -1.55, 0.15);
+          blend(right.mid, -1.35);
+          this.spine.rotation.x += (-0.06 - this.spine.rotation.x) * w;
+          break;
+        case 6: // clapping
+          blend(left.root, -1.15, 0.28 + Math.max(0, Math.sin(T * 15)) * 0.22);
+          blend(right.root, -1.15, -0.28 - Math.max(0, Math.sin(T * 15)) * 0.22);
+          blend(left.mid, -1.0);
+          blend(right.mid, -1.0);
+          break;
+        case 7: // laughing: hands on the belly, shaking, head thrown back
+          blend(left.root, -0.45, 0.3);
+          blend(right.root, -0.45, -0.3);
+          blend(left.mid, -1.75);
+          blend(right.mid, -1.75);
+          this.spine.rotation.x += (-0.12 + Math.sin(T * 20) * 0.05 - this.spine.rotation.x) * w;
+          this.head.rotation.x += (-0.35 + Math.sin(T * 20) * 0.06 - this.head.rotation.x) * w;
+          break;
       }
       if (this.gestureT <= 0) this.body.position.x = 0;
     }
+    const g = this.gestureT > 0 ? this.gestureId : -1;
+    this.face(delta, g === 2 ? 1 : Math.min(1, Math.max(0, (this.fearNet - 0.35) * 1.6)), g === 6 || g === 7 || g === 0 ? 1 : 0, g === 7 ? 1 : 0);
   }
 
   /** Customisation preview: idle breathing, flashlight in hand. */
@@ -1110,6 +1185,7 @@ export class RemotePlayer {
     this.body.rotation.y = this.yaw + Math.PI;
     const speed = prev.distanceTo(this.position) / Math.max(delta, 1e-3);
     this.speed += (speed - this.speed) * Math.min(1, delta * 6);
+    this.fearNet = s.fe ?? 0;
     this.pose(delta, this.speed, s.cr, s.fl, !!s.sp);
 
     // Their flashlight lights up our world too
