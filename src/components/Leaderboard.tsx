@@ -1,5 +1,6 @@
 import { levelColor } from '../levels';
 import React, { useEffect, useState } from 'react';
+import { ImpBoard } from './ImpBoard';
 import { Loader2, Medal, X } from 'lucide-react';
 import { api, BoardEntry } from '../net/api';
 import { fmtTime } from '../challenges';
@@ -14,6 +15,7 @@ export const LeaderboardMenu: React.FC<{ me: string | null; onProfile?: (name: s
   const [diff, setDiff] = useState(2);
   const [week, setWeek] = useState(false);
   const [surv, setSurv] = useState(false);
+  const [impB, setImpB] = useState(false);
 
   useEffect(() => {
     api
@@ -48,41 +50,46 @@ export const LeaderboardMenu: React.FC<{ me: string | null; onProfile?: (name: s
 
         <div className="p-4 space-y-2">
           <div className="flex gap-2 flex-wrap">
-            <button className={tab(week)} onClick={() => (setWeek(true), setSurv(false))}>
+            <button className={tab(week)} onClick={() => (setWeek(true), setSurv(false), setImpB(false))}>
               🏅 Semaine
             </button>
-            <button className={tab(surv)} onClick={() => (setSurv(true), setWeek(false))}>
+            <button className={tab(surv)} onClick={() => (setSurv(true), setWeek(false), setImpB(false))}>
               🧟 Survie
             </button>
-            <button className={tab(!week && !surv && chapter === 1)} onClick={() => (setWeek(false), setSurv(false), setChapter(1))}>
+            <button className={tab(impB)} onClick={() => (setImpB(true), setWeek(false), setSurv(false))}>
+              🔪 Imposteur
+            </button>
+            <button className={tab(!week && !surv && !impB && chapter === 1)} onClick={() => (setWeek(false), setSurv(false), setImpB(false), setChapter(1))}>
               🏥 Chapitre 1
             </button>
-            <button className={tab(!week && !surv && chapter === 2)} onClick={() => (setWeek(false), setSurv(false), setChapter(2))}>
+            <button className={tab(!week && !surv && !impB && chapter === 2)} onClick={() => (setWeek(false), setSurv(false), setImpB(false), setChapter(2))}>
               🐀 Chapitre 2
             </button>
-            <button className={tab(!week && !surv && chapter === 3)} onClick={() => (setWeek(false), setSurv(false), setChapter(3))}>
+            <button className={tab(!week && !surv && !impB && chapter === 3)} onClick={() => (setWeek(false), setSurv(false), setImpB(false), setChapter(3))}>
               🌀 Chapitre 3
             </button>
-            <button className={tab(!week && !surv && chapter === 4)} onClick={() => (setWeek(false), setSurv(false), setChapter(4))}>
+            <button className={tab(!week && !surv && !impB && chapter === 4)} onClick={() => (setWeek(false), setSurv(false), setImpB(false), setChapter(4))}>
               🌲 Chapitre 4
             </button>
-            <button className={tab(!week && !surv && chapter === 5)} onClick={() => (setWeek(false), setSurv(false), setChapter(5))}>
+            <button className={tab(!week && !surv && !impB && chapter === 5)} onClick={() => (setWeek(false), setSurv(false), setImpB(false), setChapter(5))}>
               🟣 Chapitre 5
             </button>
-            <button className={tab(!week && !surv && chapter === 6)} onClick={() => (setWeek(false), setSurv(false), setChapter(6))}>
+            <button className={tab(!week && !surv && !impB && chapter === 6)} onClick={() => (setWeek(false), setSurv(false), setImpB(false), setChapter(6))}>
               ⛈️ Chapitre 6
             </button>
-            <button className={tab(!week && !surv && chapter === 7)} onClick={() => (setWeek(false), setSurv(false), setChapter(7))}>
+            <button className={tab(!week && !surv && !impB && chapter === 7)} onClick={() => (setWeek(false), setSurv(false), setImpB(false), setChapter(7))}>
               💉 Chapitre 7
             </button>
-            <button className={tab(!week && !surv && chapter === 8)} onClick={() => (setWeek(false), setSurv(false), setChapter(8))}>
+            <button className={tab(!week && !surv && !impB && chapter === 8)} onClick={() => (setWeek(false), setSurv(false), setImpB(false), setChapter(8))}>
               🌳 Secret
             </button>
-            <button className={tab(!week && !surv && chapter === 0)} onClick={() => (setWeek(false), setSurv(false), setChapter(0))}>
+            <button className={tab(!week && !surv && !impB && chapter === 0)} onClick={() => (setWeek(false), setSurv(false), setImpB(false), setChapter(0))}>
               🏆 Campagne
             </button>
           </div>
-          {surv ? (
+          {impB ? (
+            <ImpBoard me={me} onProfile={onProfile} />
+          ) : surv ? (
             <div className="mt-3 border border-zinc-800">
               {(boards?.survival ?? []).length === 0 ? (
                 <div className="p-6 text-center text-zinc-500 text-xs font-mono">Personne n'a encore joué la Survie infinie. Lance-toi !</div>
@@ -164,7 +171,11 @@ export const LeaderboardMenu: React.FC<{ me: string | null; onProfile?: (name: s
           </div>
           </>
           )}
-          <p className="text-[10px] font-mono text-zinc-600">Il faut être connecté et sortir de l'hôpital (difficulté 2 ou plus) pour apparaître ici.</p>
+          <p className="text-[10px] font-mono text-zinc-600">
+            {impB
+              ? "Classé par victoires (en imposteur 🔪 + en survivant 🧍). À égalité, celui qui a joué le moins de parties passe devant."
+              : "Il faut être connecté et sortir de l'hôpital (difficulté 2 ou plus) pour apparaître ici."}
+          </p>
         </div>
       </div>
     </div>

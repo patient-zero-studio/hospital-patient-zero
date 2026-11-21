@@ -578,6 +578,26 @@ app.get('/api/rooms', (_req, res) => {
   res.set('Cache-Control', 'no-store').json({ rooms: list });
 });
 
+// 🔪 Imposteur leaderboard: most wins (impostor + survivor), recomputed at most once a minute
+let impBoardCache: { at: number; list: unknown[] } | null = null;
+app.get('/api/imp-board', (_req, res) => {
+  if (!impBoardCache || Date.now() - impBoardCache.at > 60_000) {
+    const rows: { username: string; level: number; games: number; wins: number; impWins: number; crewWins: number; asImp: number; caught: number }[] = [];
+    for (const u of users.values()) {
+      if (u.banned) continue;
+      const st = achOf(u).stats;
+      const games = st.impGames ?? 0;
+      if (!games) continue;
+      const impWins = st.impWins ?? 0;
+      const crewWins = st.crewWins ?? 0;
+      rows.push({ username: u.username, level: levelOf(u.xp ?? 0).level, games, wins: impWins + crewWins, impWins, crewWins, asImp: st.impAsImp ?? 0, caught: st.impCaught ?? 0 });
+    }
+    rows.sort((a, b) => b.wins - a.wins || a.games - b.games || b.impWins - a.impWins);
+    impBoardCache = { at: Date.now(), list: rows.slice(0, 20) };
+  }
+  res.json({ board: impBoardCache.list });
+});
+
 app.get('/api/leaderboard', (_req, res) => {
   const out: Record<string, BoardEntry[]> = {};
   for (const [k, list] of Object.entries(boards))

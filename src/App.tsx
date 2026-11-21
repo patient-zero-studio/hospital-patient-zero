@@ -35,6 +35,7 @@ import { tierOf } from './ranked';
 import { RankedMenu } from './components/RankedMenu';
 import { CHAT_PRESETS } from './net/NetClient';
 import { PlayerProfile } from './components/PlayerProfile';
+import { PublicRoomBanner } from './components/PublicRoomBanner';
 import { ShopMenu } from './components/ShopMenu';
 import { HoboShop } from './components/HoboShop';
 import { IS_TOUCH, RotateHint, TouchControls, enterMobileFullscreen } from './components/TouchControls';
@@ -1563,6 +1564,14 @@ export default function App() {
       {progOpen && session && !isPlaying && (
         <ProgressionMenu wallet={wallet} onClaimWeekly={claimWeekly} onClaimPass={claimPass} onClose={() => setProgOpen(false)} />
       )}
+      <PublicRoomBanner
+        me={session?.username ?? null}
+        active={!isPlaying && !mpOpen && lobby.status === 'idle'}
+        onJoin={(code) => {
+          setMpOpen(true);
+          if (session) joinRoom(code);
+        }}
+      />
       {!isPlaying && session && (wallet?.inbox?.length ?? 0) > 0 && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[91] w-[min(92vw,440px)] p-3 border border-pink-500 bg-zinc-950/95 shadow-[0_0_30px_rgba(236,72,153,0.35)]">
           <div className="space-y-1 mb-2">
