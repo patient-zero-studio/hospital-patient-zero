@@ -20,10 +20,12 @@ export interface AchDef {
   server?: boolean;
 }
 
-export type StatKey = 'escapes' | 'deaths' | 'hides' | 'coinsFound' | 'boxes' | 'flips';
-export const STAT_KEYS: StatKey[] = ['escapes', 'deaths', 'hides', 'coinsFound', 'boxes', 'flips'];
+/** 🔪 impGames: Imposteur games played · impAsImp: as the impostor · impWins: won as the impostor
+ *  · crewWins: won with the survivors · impCaught: unmasked by the vote */
+export type StatKey = 'escapes' | 'deaths' | 'hides' | 'coinsFound' | 'boxes' | 'flips' | 'impGames' | 'impAsImp' | 'impWins' | 'crewWins' | 'impCaught';
+export const STAT_KEYS: StatKey[] = ['escapes', 'deaths', 'hides', 'coinsFound', 'boxes', 'flips', 'impGames', 'impAsImp', 'impWins', 'crewWins', 'impCaught'];
 /** Max a single report may add to a counter (anti-abuse). */
-const STAT_STEP_MAX: Record<StatKey, number> = { escapes: 1, deaths: 3, hides: 30, coinsFound: 200, boxes: 0, flips: 30 };
+const STAT_STEP_MAX: Record<StatKey, number> = { escapes: 1, deaths: 3, hides: 30, coinsFound: 200, boxes: 0, flips: 30, impGames: 1, impAsImp: 1, impWins: 1, crewWins: 1, impCaught: 1 };
 
 export const ACHIEVEMENTS: AchDef[] = [
   // --- Escapes & endings ---
@@ -143,7 +145,7 @@ export interface AchState {
   stats: Record<StatKey, number>;
 }
 
-export const NEW_ACH = (): AchState => ({ done: {}, stats: { escapes: 0, deaths: 0, hides: 0, coinsFound: 0, boxes: 0, flips: 0 } });
+export const NEW_ACH = (): AchState => ({ done: {}, stats: { escapes: 0, deaths: 0, hides: 0, coinsFound: 0, boxes: 0, flips: 0, impGames: 0, impAsImp: 0, impWins: 0, crewWins: 0, impCaught: 0 } });
 
 export const sanitizeAch = (x: unknown): AchState => {
   const src = (x ?? {}) as Partial<AchState>;

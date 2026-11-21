@@ -888,6 +888,11 @@ export class GameEngine {
     if (g.doctor) text += ` 🩺 Médecin : ${g.doctor}.`;
     if (g.detective) text += ` 🔍 Détective : ${g.detective}.`;
     if (won) this.ach(me ? 'imp_win' : 'imp_crew');
+    // 📊 profile counters
+    this.stat('impGames');
+    if (me) this.stat('impAsImp');
+    if (won) this.stat(me ? 'impWins' : 'crewWins');
+    if (me && caught) this.stat('impCaught');
     this.finished = true;
     this.running = false;
     this.player.inputEnabled = false;

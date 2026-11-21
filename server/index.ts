@@ -568,6 +568,16 @@ function bestsOf(u: User) {
 }
 const saveBoards = () => boardsSaver.save();
 
+// 🌍 Public games: the open rooms anyone can join (not started, not full)
+app.get('/api/rooms', (_req, res) => {
+  const list = [...rooms.values()]
+    .filter((r) => r.pub && !r.started && 1 + r.guests.length < roomMax(r) && !users.get(r.host.username.toLowerCase())?.banned)
+    .map((r) => ({ code: r.code, host: r.host.username, players: 1 + r.guests.length, max: roomMax(r), ...roomSettings(r) }))
+    .sort((a, b) => b.players - a.players)
+    .slice(0, 30);
+  res.set('Cache-Control', 'no-store').json({ rooms: list });
+});
+
 app.get('/api/leaderboard', (_req, res) => {
   const out: Record<string, BoardEntry[]> = {};
   for (const [k, list] of Object.entries(boards))
@@ -1349,6 +1359,8 @@ interface Room {
   hide?: boolean;
   /** 🔪 co-op variant: Imposteur (4 to 8 players, hospital) */
   imp?: boolean;
+  /** 🌍 listed in the public games: anyone can join */
+  pub?: boolean;
   hideRound?: number;
   /** 👀 friends watching */
   spectators?: Client[];
@@ -1364,7 +1376,7 @@ const roomSettings = (r: Room) => {
     r.chapter = 1;
     r.difficulty = 1;
   }
-  return { difficulty: r.difficulty, mode: r.mode, monster: r.monster, chapter: r.chapter, hide: !!r.hide, imp: !!r.imp };
+  return { difficulty: r.difficulty, mode: r.mode, monster: r.monster, chapter: r.chapter, hide: !!r.hide, imp: !!r.imp, pub: !!r.pub };
 };
 const parseChapter = (v: unknown): 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9 => {
   const n = Number(v);
@@ -1501,6 +1513,7 @@ server.on('upgrade', (req, socket, head) => {
             started: false,
             hide: msg.hide === true,
             imp: msg.imp === true,
+            pub: msg.pub === true,
           };
           rooms.set(room.code, room);
           client.room = room;
@@ -1533,6 +1546,7 @@ server.on('upgrade', (req, socket, head) => {
           if (msg.chapter !== undefined) room.chapter = parseChapter(msg.chapter);
           if (msg.hide !== undefined) room.hide = msg.hide === true;
           if (msg.imp !== undefined) room.imp = msg.imp === true;
+          if (msg.pub !== undefined) room.pub = msg.pub === true;
           if (msg.hide !== undefined || msg.mode !== undefined) room.hideRound = 0;
           const s = { t: 'settings', ...roomSettings(room) };
           for (const c of membersOf(room)) send(c, s);

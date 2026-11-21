@@ -1160,16 +1160,16 @@ export default function App() {
     const engine = engineRef.current;
     switch (e.t) {
       case 'created':
-        setLobby({ status: 'hosting', code: e.code, partner: null, players: sessionRef.current ? [sessionRef.current.username] : [], difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), hide: !!e.hide, imp: !!e.imp, error: null });
+        setLobby({ status: 'hosting', code: e.code, partner: null, players: sessionRef.current ? [sessionRef.current.username] : [], difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), hide: !!e.hide, imp: !!e.imp, pub: !!e.pub, error: null });
         break;
       case 'joined':
-        setLobby({ status: 'joined', code: e.code, partner: e.host, players: e.players ?? [e.host], difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), hide: !!e.hide, imp: !!e.imp, error: null });
+        setLobby({ status: 'joined', code: e.code, partner: e.host, players: e.players ?? [e.host], difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), hide: !!e.hide, imp: !!e.imp, pub: !!e.pub, error: null });
         break;
       case 'peer-joined':
         setLobby((l) => ({ ...l, partner: l.partner ?? e.username, players: e.players ?? l.players, error: null }));
         break;
       case 'settings':
-        setLobby((l) => ({ ...l, difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), hide: !!e.hide, imp: !!e.imp }));
+        setLobby((l) => ({ ...l, difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), hide: !!e.hide, imp: !!e.imp, pub: !!e.pub }));
         break;
       case 'peer-left':
         setLobby((l) => {

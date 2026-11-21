@@ -1,5 +1,5 @@
-import { CHAT_PRESETS } from '../net/NetClient';
-import React, { useState } from 'react';
+import { CHAT_PRESETS, fetchPublicRooms, type PublicRoom } from '../net/NetClient';
+import React, { useEffect, useState } from 'react';
 import { Users, LogOut, Copy, Check, Loader2, X, Palette } from 'lucide-react';
 import { DIFFICULTIES, Difficulty } from '../game/Difficulty';
 import { LobbyStage, ownedEmotes } from './LobbyStage';
@@ -18,7 +18,83 @@ export interface MatchSettings {
   hide?: boolean;
   /** 🔪 Imposteur (co-op, 4 to 8 players) */
   imp?: boolean;
+  /** 🌍 listed in the public games */
+  pub?: boolean;
 }
+
+const roomLabel = (r: PublicRoom) =>
+  r.imp
+    ? '🔪 Imposteur'
+    : r.mode === 'versus'
+      ? r.hide
+        ? '🫣 Cache-cache'
+        : '🧟 Chasse'
+      : r.mode === 'race'
+        ? '🏁 Course'
+        : r.chapter === 9
+          ? '🎪 La Nuit du Cirque'
+          : `🤝 Coop · chapitre ${r.chapter}`;
+
+/** 🌍 The open public games, refreshed every few seconds */
+const PublicGames: React.FC<{ onJoin: (code: string) => void }> = ({ onJoin }) => {
+  const [rooms, setRooms] = useState<PublicRoom[] | null>(null);
+  const [err, setErr] = useState(false);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      fetchPublicRooms()
+        .then((r) => live && (setRooms(r), setErr(false)))
+        .catch(() => live && setErr(true));
+    load();
+    const id = window.setInterval(load, 5000);
+    return () => {
+      live = false;
+      window.clearInterval(id);
+    };
+  }, [tick]);
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">🌍 Parties publiques</div>
+        <button onClick={() => setTick((t) => t + 1)} className="text-[10px] font-mono text-zinc-500 hover:text-zinc-200">
+          ↻ Actualiser
+        </button>
+      </div>
+      {rooms === null ? (
+        <p className="text-xs font-mono text-zinc-600">{err ? 'Liste indisponible pour le moment.' : 'Chargement…'}</p>
+      ) : rooms.length === 0 ? (
+        <p className="text-xs font-mono text-zinc-600">
+          Aucune partie publique ouverte. Crée la tienne et coche « 🌍 Partie publique » pour que d'autres joueurs te rejoignent.
+        </p>
+      ) : (
+        <div className="space-y-1 max-h-48 overflow-y-auto">
+          {rooms.map((r) => (
+            <div key={r.code} className="flex items-center gap-2 px-2 py-1.5 border border-zinc-800 bg-black/40">
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-mono text-zinc-100 truncate">{roomLabel(r)}</div>
+                <div className="text-[10px] font-mono text-zinc-500 truncate">
+                  👑 <span data-no-i18n>{r.host}</span> · {r.players}/{r.max} joueurs
+                  {r.imp && r.players < 4 ? ` · encore ${4 - r.players} pour lancer` : ''}
+                </div>
+              </div>
+              <button onClick={() => onJoin(r.code)} className="px-3 py-1.5 text-[11px] font-mono uppercase tracking-wider bg-emerald-800 hover:bg-emerald-700 text-white">
+                Rejoindre
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const PubToggle: React.FC<{ on: boolean; onChange: (v: boolean) => void }> = ({ on, onChange }) => (
+  <label className="flex items-center gap-2 text-xs font-mono text-zinc-300 cursor-pointer select-none">
+    <input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked)} className="accent-emerald-500" />
+    🌍 Partie publique <span className="text-zinc-500">(visible dans la liste, n'importe qui peut rejoindre)</span>
+  </label>
+);
 
 export interface LobbyState extends MatchSettings {
   status: 'idle' | 'connecting' | 'hosting' | 'joined' | 'searching';
@@ -455,6 +531,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
                 <div className="space-y-2">
                   <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Créer une partie</div>
                   <SettingsEditor value={draft} onChange={(s) => setDraft((d) => ({ ...d, ...s }))} iAm="host" />
+                  <PubToggle on={!!draft.pub} onChange={(v) => setDraft((d) => ({ ...d, pub: v }))} />
                   <button onClick={() => p.onCreate(draft)} className={`${btn} w-full bg-red-700 hover:bg-red-600 text-white`}>
                     Créer et obtenir un code
                   </button>
@@ -505,6 +582,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
                     </button>
                   </div>
                 </div>
+                <PublicGames onJoin={p.onJoin} />
               </>
             )}
 
@@ -523,6 +601,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
                   </button>
                 )}
                 <SettingsEditor value={p.lobby} onChange={p.onUpdateSettings} iAm="host" />
+                <PubToggle on={!!p.lobby.pub} onChange={(v) => p.onUpdateSettings({ pub: v })} />
                 <div className="text-sm font-mono text-center min-h-[1.5em]">
                   {p.lobby.partner ? (
                     <span className="text-emerald-400">✔ {pl.length > 2 ? `${pl.length - 1} joueurs ont rejoint la partie !` : `${p.lobby.partner} a rejoint la partie !`}</span>

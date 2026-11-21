@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ImpStats } from './ImpStats';
 import { Coins, Lock, Trophy, X } from 'lucide-react';
 import { ACHIEVEMENTS, ACH_BY_ID, AchState, TIER_STYLE } from '../achievements';
 
@@ -97,6 +98,11 @@ export const AchievementsMenu: React.FC<MenuProps> = ({ ach, loggedIn, onClose }
             ))}
           </div>
           <div className="mt-2 text-[10px] font-mono text-zinc-600">Les succès de sortie ne comptent pas en mode Exploration (difficulté 1).</div>
+          {loggedIn && (
+            <div className="mt-3">
+              <ImpStats stats={ach?.stats} mine />
+            </div>
+          )}
         </div>
 
         <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2">

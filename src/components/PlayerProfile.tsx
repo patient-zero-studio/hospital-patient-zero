@@ -7,6 +7,7 @@ import { levelColor } from '../levels';
 import { characterOf } from '../characters';
 import { fmtTime } from '../challenges';
 import { CATALOG } from '../economy';
+import { ImpStats } from './ImpStats';
 
 const BOARD_NAMES: Record<string, string> = { '0': 'Campagne', '1': 'Ch.1 Hôpital', '2': 'Ch.2 Égouts', '3': 'Ch.3 Dédale', '4': 'Ch.4 Forêt', '5': 'Ch.5 Site B', '6': 'Ch.6 Toit' };
 const DIFF = ['', 'Exploration', 'Normal', 'Difficile', 'Cauchemar', 'Enfer'];
@@ -76,6 +77,7 @@ export const PlayerProfile: React.FC<{ name: string; token: string; onAddFriend?
                 </div>
               ))}
             </div>
+            <ImpStats stats={p.stats} />
             {(p.trophies?.length ?? 0) > 0 && (
               <div className="mb-3 flex flex-wrap gap-1">
                 {p.trophies!.slice(-8).map((t) => (

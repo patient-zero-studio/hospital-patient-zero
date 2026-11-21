@@ -14,6 +14,22 @@ export interface RoomSettings {
   hide?: boolean;
   /** 🔪 Imposteur (co-op room, 4 to 8 players) */
   imp?: boolean;
+  /** 🌍 listed in the public games */
+  pub?: boolean;
+}
+
+/** 🌍 an open room in the public list */
+export interface PublicRoom extends RoomSettings {
+  code: string;
+  host: string;
+  players: number;
+  max: number;
+}
+export async function fetchPublicRooms(): Promise<PublicRoom[]> {
+  const r = await fetch('/api/rooms', { cache: 'no-store' });
+  if (!r.ok) throw new Error('Liste indisponible');
+  const j = (await r.json()) as { rooms?: PublicRoom[] };
+  return Array.isArray(j.rooms) ? j.rooms : [];
 }
 
 export type LobbyEvent =
