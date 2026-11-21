@@ -9,6 +9,10 @@ interface Props {
   imp?: boolean;
   /** a message from the server (e.g. why the replay can't start) */
   note?: string;
+  /** 🔪 who is in the room now (others can join between games) */
+  players?: string[];
+  /** host: the room code to give to a new friend */
+  code?: string;
   won: boolean;
   text: string;
   role: 'monster' | 'survivor' | 'racer';
@@ -18,7 +22,7 @@ interface Props {
 }
 
 /** Versus ("Chasse") round result. */
-export const VersusResultModal: React.FC<Props> = ({ won, text, role, hide, circus, imp, note, onPlayAgain, onMainMenu }) => {
+export const VersusResultModal: React.FC<Props> = ({ won, text, role, hide, circus, imp, note, players, code, onPlayAgain, onMainMenu }) => {
   const accent = won ? (role === 'monster' ? '#dc2626' : '#f59e0b') : '#71717a';
   return (
     <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4">
@@ -44,6 +48,19 @@ export const VersusResultModal: React.FC<Props> = ({ won, text, role, hide, circ
           {won ? 'VICTOIRE' : 'DÉFAITE'}
         </h1>
         <p className="text-sm text-zinc-300 font-serif italic mb-8">{text}</p>
+        {players && (
+          <div className="w-full mb-3 px-3 py-2 border border-zinc-800 bg-black/50 text-left">
+            <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-1">
+              Joueurs dans le salon ({players.length}/8){players.length < 4 ? ' — il en faut 4' : ''}
+            </div>
+            <div className="font-mono text-xs text-zinc-200">{players.join(' · ')}</div>
+            {code && players.length < 8 && (
+              <div className="font-mono text-[11px] text-zinc-400 mt-1">
+                Un ami peut rejoindre avant la prochaine partie avec le code <span className="text-red-400 font-bold tracking-widest">{code}</span>
+              </div>
+            )}
+          </div>
+        )}
         {note && <p className="w-full mb-3 px-3 py-2 border border-amber-700 bg-amber-950/60 text-amber-200 font-mono text-xs">⚠ {note}</p>}
         <div className="w-full flex flex-col gap-2">
           {onPlayAgain ? (

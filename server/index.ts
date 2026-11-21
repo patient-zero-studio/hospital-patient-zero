@@ -1538,6 +1538,12 @@ server.on('upgrade', (req, socket, head) => {
           for (const c of membersOf(room)) send(c, s);
           break;
         }
+        case 'ended': {
+          // The host's result screen is up: friends can join before the next game
+          const room = client.room;
+          if (room && room.host === client && room.started) room.started = false;
+          break;
+        }
         case 'start': {
           const room = client.room;
           if (!room || room.host !== client) return;

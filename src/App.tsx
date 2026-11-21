@@ -681,6 +681,11 @@ export default function App() {
     beginRun(true);
   };
 
+  // Online host: once the result screen is up, the room opens again for new players
+  useEffect(() => {
+    if (online?.role === 'host' && (versusResult || isGameOver || victory)) netRef.current?.ended();
+  }, [online?.role, !!versusResult, isGameOver, !!victory]);
+
   // The hospital ambience (drone, heartbeat) only plays during a run
   useEffect(() => {
     sound.setInGame(isPlaying);
@@ -1161,7 +1166,7 @@ export default function App() {
         setLobby({ status: 'joined', code: e.code, partner: e.host, players: e.players ?? [e.host], difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), hide: !!e.hide, imp: !!e.imp, error: null });
         break;
       case 'peer-joined':
-        setLobby((l) => ({ ...l, partner: l.partner ?? e.username, players: e.players ?? l.players }));
+        setLobby((l) => ({ ...l, partner: l.partner ?? e.username, players: e.players ?? l.players, error: null }));
         break;
       case 'settings':
         setLobby((l) => ({ ...l, difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), hide: !!e.hide, imp: !!e.imp }));
@@ -1839,6 +1844,8 @@ export default function App() {
           circus={!!online.circus}
           imp={!!online.imp}
           note={lobby.error || undefined}
+          players={online.imp ? lobby.players : undefined}
+          code={online.imp && online.role === 'host' ? lobby.code ?? undefined : undefined}
           onPlayAgain={online.role === 'host' ? handleRestart : undefined}
           onMainMenu={handleMainMenu}
         />

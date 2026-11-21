@@ -108,6 +108,10 @@ export class NetClient {
   public start() {
     this.raw({ t: 'start' });
   }
+  /** Host: the game is over, the room can take new players until the next start */
+  public ended() {
+    this.raw({ t: 'ended' });
+  }
   public leave() {
     this.raw({ t: 'leave' });
   }
