@@ -454,7 +454,62 @@ export class GameEngine {
 
   // Multiplayer
   private net: GameLink | null = null;
-  private remote: RemotePlayer | null = null;
+  /** 👥 the other players (co-op: up to 7), in the room's order */
+  private peers: { name: string; remote: RemotePlayer | null; caught: boolean; look: Appearance | null }[] = [];
+  /** the peer `remote` / `remoteCaught` / `partnerLook` refer to: a message's sender, else the one you follow */
+  private cur = 0;
+  /** Host: the guest a personal reply (toast, coins, caught…) is meant for */
+  private replyTo: string | null = null;
+  private extraLights: { l: THREE.SpotLight; t: THREE.Object3D }[] = [];
+  private get remote(): RemotePlayer | null {
+    return this.peers[this.cur]?.remote ?? null;
+  }
+  private get remoteCaught() {
+    return this.peers[this.cur]?.caught ?? false;
+  }
+  private set remoteCaught(v: boolean) {
+    const q = this.peers[this.cur];
+    if (q) q.caught = v;
+  }
+  private get partnerLook(): Appearance | null {
+    return this.peers[this.cur]?.look ?? null;
+  }
+  private set partnerLook(v: Appearance | null) {
+    const q = this.peers[this.cur];
+    if (q) q.look = v;
+  }
+  private get peerName() {
+    return this.peers[this.cur]?.name ?? this.net?.partnerName ?? 'votre partenaire';
+  }
+  /** Alive peers' states, with their index */
+  private livePeers() {
+    const out: { s: PlayerNetState; i: number; caught: boolean }[] = [];
+    if (!this.net || this.partnerGone) return out;
+    this.peers.forEach((q, i) => {
+      const st = q.remote?.state;
+      if (st) out.push({ s: st, i, caught: q.caught });
+    });
+    return out;
+  }
+  /** Flashlights of the 2nd and 3rd partners are real; beyond, a light that is never drawn */
+  private peerLight(i: number) {
+    while (this.extraLights.length < i) {
+      const k = this.extraLights.length + 1;
+      const l = new THREE.SpotLight(0xfff1dc, 0, 22, Math.PI / 6.2, 0.55, 2);
+      l.castShadow = false;
+      const t = new THREE.Object3D();
+      l.target = t;
+      if (k < 3) this.scene.add(l, t);
+      this.extraLights.push({ l, t });
+    }
+    return this.extraLights[i - 1];
+  }
+  private disposePeers() {
+    this.peers.forEach((q) => q.remote?.dispose());
+    this.peers = [];
+    this.cur = 0;
+  }
+  private static PERSONAL = new Set(['toast', 'used', 'fx', 'coins', 'ach', 'caught']);
   /** Partner's flashlight: always in the scene (constant light count = no shader recompiles). */
   private remoteLight: THREE.SpotLight;
   private remoteLightTarget = new THREE.Object3D();
@@ -463,8 +518,6 @@ export class GameEngine {
   private lastNotesSent = -1;
   /** Local player died in multiplayer and now watches the partner. */
   private spectating = false;
-  /** Host: the guest has been caught (until its own state confirms it). */
-  private remoteCaught = false;
   private partnerGone = false;
   /** Who is performing the interaction being processed on the host. */
   private actor: 'local' | 'remote' = 'local';
@@ -485,7 +538,6 @@ export class GameEngine {
 
   // Customisation
   private localLook: Appearance = DEFAULT_APPEARANCE;
-  private partnerLook: Appearance | null = null;
 
   /** The local player's colours (from the account). Applied from the next reset. */
   public setLocalLook(a: Appearance) {
@@ -524,7 +576,7 @@ export class GameEngine {
     this.scene.add(l);
     this.danceLight = l;
     this.danceYaw = p.yaw;
-    if (this.remote) this.remote.forceHidden = false;
+    this.peers.forEach((q) => q.remote && (q.remote.forceHidden = false));
     this.pushHud();
   }
   private updateDance(delta: number) {
@@ -533,8 +585,10 @@ export class GameEngine {
     if (!m) return;
     m.dance(delta);
     // The partner dances too (if they made it out next to you)
-    const r = this.remote;
-    if (r?.state && !r.state.dead && r.position.distanceTo(m.group.position) < 10) r.dance(delta);
+    for (const q of this.peers) {
+      const r = q.remote;
+      if (r?.state && !r.state.dead && r.position.distanceTo(m.group.position) < 10) r.dance(delta);
+    }
     // Camera slowly turning in front of you
     const a = this.danceYaw + Math.sin(this.danceT * 0.6) * 0.5;
     const c = m.group.position;
@@ -628,8 +682,8 @@ export class GameEngine {
       this.camera.getWorldDirection(dir);
       views.push({ eye: this.camera.position.clone(), dir });
     }
-    const rs = this.remote?.state;
-    if (rs && !rs.dead && !rs.hid && !this.remoteCaught) {
+    for (const { s: rs, caught } of this.livePeers()) {
+      if (rs.dead || rs.hid || caught) continue;
       const cp = Math.cos(rs.pitch);
       views.push({ eye: new THREE.Vector3(rs.x, 1.6, rs.z), dir: new THREE.Vector3(-Math.sin(rs.yaw) * cp, Math.sin(rs.pitch), -Math.cos(rs.yaw) * cp) });
     }
@@ -650,7 +704,7 @@ export class GameEngine {
       if (vs === 'monster') this.puppet.applyLook(this.localLook.monster);
       else if (this.partnerLook) this.puppet.applyLook(this.partnerLook.monster);
     }
-    if (this.remote && this.partnerLook) this.remote.applyLook(this.partnerLook.human);
+    for (const q of this.peers) if (q.remote && q.look) q.remote.applyLook(q.look.human);
   }
 
   /** Versus role of the local player (null in solo / coop). */
@@ -1604,12 +1658,16 @@ export class GameEngine {
     // Online, the guest wakes up a little further in room 104 (not inside the host)
     const sewers = this.chapter === 2;
     const base = sewers ? this.map.sewer.start : this.map.playerStart;
-    const start = this.net?.role === 'guest' ? base.clone().add(sewers ? new THREE.Vector3(1.4, 0, -1.2) : new THREE.Vector3(1.4, 0, 1.0)) : base;
+    // 👥 3+ players: each guest a little apart
+    const seat = this.net?.role === 'guest' ? Math.max(1, this.net.seat ?? 1) : 0;
+    const SEATS: [number, number][] = [[0, 0], [1.4, 1.0], [0.7, -0.6], [1.4, -0.2], [0.2, 1.0], [0.7, 0.4], [-0.4, 0.4], [1.0, -1.2]];
+    const [sx, sz] = SEATS[seat % SEATS.length];
+    const start = seat ? base.clone().add(sewers ? new THREE.Vector3(sx, 0, -sz - 0.2) : new THREE.Vector3(sx, 0, sz)) : base;
     if (this.maze) this.player.reset(this.maze.start.clone(), this.maze.startYaw);
     else if (this.forest || this.site) {
       const lv = (this.forest ?? this.site)!;
       // Co-op: the guest stands a little to the side
-      const off = this.net?.role === 'guest' ? new THREE.Vector3(1.4, 0, 0) : new THREE.Vector3();
+      const off = seat ? new THREE.Vector3(seat === 1 ? 1.4 : sx, 0, seat === 1 ? 0 : sz) : new THREE.Vector3();
       this.player.reset(lv.start.clone().add(off), lv.startYaw);
     } else this.player.reset(start, sewers ? this.map.sewer.startYaw : this.map.playerStartYaw);
     this.chapterToast = null;
@@ -1695,17 +1753,21 @@ export class GameEngine {
     this.circusDone = false;
     if (this.danceT >= 0) this.endDance();
     this.danceT = -1;
-    this.remoteCaught = false;
     this.partnerGone = false;
     this.menuOpen = false;
     this.lastNotesSent = -1;
-    this.remote?.dispose();
-    this.remote = null;
+    const looks = new Map(this.peers.map((q) => [q.name, q.look]));
+    this.disposePeers();
     if (this.net) {
-      this.remote = new RemotePlayer(this.net.partnerName, this.remoteLight, this.remoteLightTarget);
-      // Player vs player: no name above the opponent's head
-      this.remote.showName = this.net.mode === 'coop';
-      this.scene.add(this.remote.group);
+      const names = this.net.peers?.length ? this.net.peers : [this.net.partnerName];
+      names.forEach((name, i) => {
+        const lt = i === 0 ? { l: this.remoteLight, t: this.remoteLightTarget } : this.peerLight(i);
+        const r = new RemotePlayer(name, lt.l, lt.t);
+        // Player vs player: no name above the opponent's head
+        r.showName = this.net!.mode === 'coop';
+        this.scene.add(r.group);
+        this.peers.push({ name, remote: r, caught: false, look: looks.get(name) ?? null });
+      });
     }
     this.setupVersus();
     this.setupRace();
@@ -2034,14 +2096,15 @@ export class GameEngine {
   public setNet(link: GameLink | null) {
     this.net?.setHandler(null);
     this.net = link;
-    this.partnerLook = null; // the (new) partner will send theirs
-    link?.setHandler((msg) => this.onNetMsg(msg));
+    this.disposePeers(); // the (new) partners will send their looks
+    if (link) {
+      // Host: personal replies carry who they are for (several guests read the same stream)
+      const raw = link.send;
+      link.send = (m: GameMsg) => raw(this.replyTo && GameEngine.PERSONAL.has(m.k) && !("to" in m) ? ({ ...m, to: this.replyTo } as unknown as GameMsg) : m);
+    }
+    link?.setHandler((msg, from) => this.onNetMsg(msg, from));
     this.voice.attach(link);
     this.voice.enabled = this.settings.voiceChat !== false;
-    if (!link) {
-      this.remote?.dispose();
-      this.remote = null;
-    }
   }
 
   public get isOnline() {
@@ -2049,13 +2112,23 @@ export class GameEngine {
   }
 
   /** Partner left the room. */
-  public partnerLeft() {
+  public partnerLeft(name?: string) {
     if (!this.net) return;
+    // 👥 One of several partners left: the game goes on with the others
+    const i = name ? this.peers.findIndex((q) => q.name === name) : -1;
+    if (this.peers.length > 1 && i >= 0) {
+      this.peers[i].remote?.dispose();
+      this.peers.splice(i, 1);
+      this.cur = 0;
+      this.state.showToast(`${name} a quitté la partie.`);
+      if (this.spectating && !this.partnerAlive()) this.endGameOver();
+      return;
+    }
+    const who = name ?? this.net.partnerName;
     this.partnerGone = true;
-    this.remote?.dispose();
-    this.remote = null;
+    this.disposePeers();
     this.voice.update(0, 0, 0, 1000);
-    this.state.showToast(`${this.net.partnerName} a quitté la partie.`);
+    this.state.showToast(`${who} a quitté la partie.`);
     // Race: the rival gave up
     if (this.net.mode === 'race' && !this.vsOver && !this.pendingEnding) {
       this.vsOver = true;
@@ -2063,7 +2136,7 @@ export class GameEngine {
       this.running = false;
       this.player.inputEnabled = false;
       document.exitPointerLock?.();
-      this.cb.onVersusEnd(true, `Votre rival (${this.net.partnerName}) a abandonné la course.`);
+      this.cb.onVersusEnd(true, `Votre rival (${who}) a abandonné la course.`);
       return;
     }
     // Versus: the one who stays wins by forfeit
@@ -2076,7 +2149,7 @@ export class GameEngine {
   }
 
   private partnerAlive() {
-    return !!this.remote?.state && !this.remote.state.dead && !this.partnerGone;
+    return !this.partnerGone && this.peers.some((q) => !!q.remote?.state && !q.remote.state.dead);
   }
 
   private localNetState(): PlayerNetState {
@@ -2332,7 +2405,13 @@ export class GameEngine {
 
   private netTick(delta: number) {
     if (!this.net) return;
-    this.remote?.update(delta);
+    for (const q of this.peers) q.remote?.update(delta);
+    // The one you follow (spectator camera, HUD): stay on them while they live
+    const alive = (i: number) => !!this.peers[i]?.remote?.state && !this.peers[i].remote!.state!.dead && !this.peers[i].caught;
+    if (!alive(this.cur)) {
+      const j = this.peers.findIndex((_, i) => alive(i));
+      this.cur = j >= 0 ? j : Math.min(this.cur, Math.max(0, this.peers.length - 1));
+    }
     this.updateVoice(delta);
     this.netSendTimer -= delta;
     if (this.netSendTimer <= 0) {
@@ -2375,7 +2454,23 @@ export class GameEngine {
 
   /** 👀 Spectator: messages meant for the real guest are not for us */
   private static WATCH_IGNORE = new Set(['caught', 'coins', 'ach', 'used', 'stun', 'blind', 'pounce', 'raceEnd', 'vsEnd', 'toast', 'resync']);
-  private onNetMsg(msg: GameMsg) {
+  private onNetMsg(msg: GameMsg, from?: string) {
+    const to = (msg as { to?: string }).to;
+    // A personal message for another guest
+    if (to && to !== '*' && to !== this.net?.selfName) return;
+    const prev = this.cur;
+    const prevReply = this.replyTo;
+    const pi = from ? this.peers.findIndex((q) => q.name === from) : -1;
+    if (pi >= 0) this.cur = pi;
+    this.replyTo = this.net?.role === 'host' && pi >= 0 ? from! : null;
+    try {
+      this.handleNet(msg);
+    } finally {
+      this.cur = prev;
+      this.replyTo = prevReply;
+    }
+  }
+  private handleNet(msg: GameMsg) {
     const host = this.net?.role === 'host';
     if (this.watchOnly && GameEngine.WATCH_IGNORE.has(msg.k)) return;
     switch (msg.k) {
@@ -2432,7 +2527,7 @@ export class GameEngine {
       case 'emote':
         if (msg.e >= 0 && msg.e < EMOTES.length) {
           this.remote?.showEmote(EMOTES[msg.e]);
-          this.state.showToast(`${this.net?.partnerName ?? 'Partenaire'} : ${EMOTES[msg.e]}`);
+          this.state.showToast(`${this.peerName} : ${EMOTES[msg.e]}`);
         }
         break;
       case 'coins':
@@ -2681,7 +2776,7 @@ export class GameEngine {
 
   /** Online with the voice chat on: the microphone is needed even if the creature can't hear it. */
   private get wantsVoice() {
-    return !!this.net && !this.partnerGone && this.settings.voiceChat !== false;
+    return !!this.net && !this.partnerGone && this.peers.length <= 1 && this.settings.voiceChat !== false;
   }
   /** The creature hears your real voice (not the creature player itself). */
   private get micNoise() {
@@ -3152,16 +3247,23 @@ export class GameEngine {
         dead: this.dying || this.spectating || this.finished,
       },
     ];
-    const s = this.remote?.state;
-    if (this.net && s && !this.partnerGone) {
+    const slot: number[] = [-1];
+    for (const { s, i, caught } of this.livePeers()) {
       players.push({
         playerPos: new THREE.Vector3(s.x, 1.7, s.z),
         playerHidden: s.hid,
         playerVisibility: s.vis,
         listenerRight: right,
-        dead: s.dead || this.remoteCaught,
+        dead: s.dead || caught,
       });
+      slot.push(i);
     }
+    const catchPeer = (m: MonsterAI | VentCrawler, idx: number) => {
+      const prev = this.cur;
+      this.cur = slot[idx] ?? 0;
+      this.catchRemote(m);
+      this.cur = prev;
+    };
     // Chapter 3: the Stalker follows your trail (scripted, not the patrol AI)
     if (this.maze && !(this.dying && this.killer === this.maze.stalker)) {
       const dead = this.dying || this.finished || !!this.pendingEnding;
@@ -3172,12 +3274,18 @@ export class GameEngine {
     }
     // Chapters 4-5: the level drives its creature (both players in co-op)
     const meDead = this.dying || this.spectating || this.finished;
-    const rs = this.net && !this.partnerGone ? this.remote?.state : undefined;
+    const rps = this.livePeers();
+    const lslot = [-1, ...rps.map((r) => r.i)];
     const levelCatch = (m: MonsterAI | null, dead: boolean) => (i: number) => {
       if (!m) return;
       if (i === 0) {
         if (!dead) this.startDeath(m);
-      } else this.catchRemote(m);
+      } else {
+        const prev = this.cur;
+        this.cur = lslot[i] ?? 0;
+        this.catchRemote(m);
+        this.cur = prev;
+      }
     };
     // Chapter 4: the Beast hunts by sight (scripted)
     if (this.forest) {
@@ -3185,7 +3293,7 @@ export class GameEngine {
       const dead = this.dying || this.finished || !!this.pendingEnding;
       if (!(this.dying && this.killer === f.stalker)) {
         const pls: ForestPlayer[] = [{ pos: p.position, yaw: p.yaw, flashlight: p.flashlightOn, crouch: p.isCrouching, sprint: p.isSprinting, dead: meDead }];
-        if (rs) pls.push({ pos: new THREE.Vector3(rs.x, 1.7, rs.z), yaw: rs.yaw, flashlight: rs.fl, crouch: rs.cr, sprint: !!rs.sp, dead: rs.dead || this.remoteCaught });
+        for (const { s: rs, caught } of rps) pls.push({ pos: new THREE.Vector3(rs.x, 1.7, rs.z), yaw: rs.yaw, flashlight: rs.fl, crouch: rs.cr, sprint: !!rs.sp, dead: rs.dead || caught });
         f.update(delta, pls, listener, levelCatch(f.stalker, dead), () =>
           this.shout('Un hurlement déchire la pluie, quelque part derrière vous… Elle vous a suivi hors des égouts.', 0.5)
         );
@@ -3199,7 +3307,7 @@ export class GameEngine {
       const dead = this.dying || this.finished || !!this.pendingEnding;
       if (!(this.dying && this.killer === sb.stalker)) {
         const pls: SitePlayer[] = [{ pos: p.position, yaw: p.yaw, pitch: p.pitch, flashlight: p.flashlightOn, crouch: p.isCrouching, uv: sb.uv, dead: meDead }];
-        if (rs) pls.push({ pos: new THREE.Vector3(rs.x, 1.7, rs.z), yaw: rs.yaw, pitch: rs.pitch, flashlight: rs.fl, crouch: rs.cr, uv: !!rs.uv, dead: rs.dead || this.remoteCaught });
+        for (const { s: rs, caught } of rps) pls.push({ pos: new THREE.Vector3(rs.x, 1.7, rs.z), yaw: rs.yaw, pitch: rs.pitch, flashlight: rs.fl, crouch: rs.cr, uv: !!rs.uv, dead: rs.dead || caught });
         sb.update(delta, pls, listener, (i: number, mm?: MonsterAI) => levelCatch(mm ?? sb.stalker, dead)(i), () =>
           this.shout('Un hurlement résonne dans les conduits… Il est là. Il vous attendait.', 0.5)
         );
@@ -3226,7 +3334,7 @@ export class GameEngine {
       }
       m.updateMulti(delta, players, listener, this.map.collisionBoxes, (idx) => {
         if (idx === 0) this.startDeath(m);
-        else this.catchRemote(m);
+        else catchPeer(m, idx);
       });
       if (this.dying && !this.net) return;
     }
@@ -3246,7 +3354,7 @@ export class GameEngine {
    */
   private pendingShout: string | null = null;
   private shout(msg: string, shake = 0) {
-    if (this.net?.role === 'host' && this.net.mode === 'coop' && !this.partnerGone) this.net.send({ k: 'toast', msg });
+    if (this.net?.role === 'host' && this.net.mode === 'coop' && !this.partnerGone) this.net.send({ k: 'toast', msg, to: '*' } as unknown as GameMsg);
     if (this.actor === 'remote') this.pendingShout = msg;
     else this.state?.showToast(msg);
     if (shake) this.player.shake = Math.max(this.player.shake, shake);
@@ -3269,9 +3377,10 @@ export class GameEngine {
         dead: this.dying || this.spectating || this.finished,
       });
     }
-    const s = this.remote?.state;
-    if (this.net && s && !this.partnerGone && this.vsRole !== 'survivor') {
+    const hslot: number[] = humans.length ? [-1] : [];
+    for (const { s, i, caught } of this.vsRole !== 'survivor' ? this.livePeers() : []) {
       const inDuct = this.map.lowZones.some((l) => s.x > l.minX && s.x < l.maxX && s.z > l.minZ && s.z < l.maxZ);
+      hslot.push(i);
       humans.push({
         pos: new THREE.Vector3(s.x, 0, s.z),
         eye: new THREE.Vector3(s.x, s.y, s.z),
@@ -3279,22 +3388,30 @@ export class GameEngine {
         pitch: s.pitch,
         flashlightOn: s.fl,
         inDuct,
-        dead: s.dead || this.remoteCaught,
+        dead: s.dead || caught,
       });
     }
     const caught = c.update(delta, humans, listener);
     if (caught < 0) return;
     const who = humans[caught];
     if (who.pos === p.position) this.startDeath(c);
-    else this.catchRemote(c);
+    else {
+      const prev = this.cur;
+      this.cur = hslot[caught] ?? 0;
+      this.catchRemote(c);
+      this.cur = prev;
+    }
   }
 
   /** Host: a creature got the guest. */
   private catchRemote(m: MonsterAI | VentCrawler) {
     if (this.remoteCaught) return;
     this.remoteCaught = true;
+    const prevReply = this.replyTo;
+    this.replyTo = this.peers[this.cur]?.name ?? null;
     this.net?.send({ k: 'caught', m: m instanceof MonsterAI ? this.monsters.indexOf(m) : -1 });
-    this.state.showToast(`${this.net?.partnerName ?? 'Votre partenaire'} s'est fait attraper !`);
+    this.replyTo = prevReply;
+    this.state.showToast(`${this.peerName} s'est fait attraper !`);
     const pos = this.remote?.position;
     if (pos && pos.distanceTo(this.player.position) < 15) {
       sound.playMonsterChaseRoar();
@@ -3339,8 +3456,8 @@ export class GameEngine {
       items: [...this.state.inventory],
       maxSlots: this.state.maxInventorySlots,
       // Player vs player: pseudos stay hidden during the round
-      partnerName: this.net && !this.partnerGone && this.net.mode === 'coop' ? this.net.partnerName : null,
-      partnerDead: !!this.remote?.state?.dead || this.remoteCaught,
+      partnerName: this.net && !this.partnerGone && this.net.mode === 'coop' ? (this.peers.length > 1 ? this.peers.map((q) => q.name).join(', ') : this.net.partnerName) : null,
+      partnerDead: this.peers.length > 0 && this.peers.every((q) => !!q.remote?.state?.dead || q.caught),
       spectating: this.spectating,
       watching: this.watchOnly,
       dancing: this.danceT >= 0,
@@ -3431,7 +3548,9 @@ export class GameEngine {
         this.state.showToast(
           this.net.mode === 'race'
             ? "Attrapé ! Vous suivez votre rival… s'il sort, il gagne la course."
-            : `Fin de partie pour vous… Vous suivez ${this.net.partnerName}. Tout repose sur ses épaules maintenant.`
+            : this.peers.length > 1
+              ? `Fin de partie pour vous… Vous suivez ${this.peerName}. Tout repose sur vos coéquipiers maintenant.`
+              : `Fin de partie pour vous… Vous suivez ${this.net.partnerName}. Tout repose sur ses épaules maintenant.`
         );
         this.pushHud();
         return;
@@ -3558,7 +3677,7 @@ export class GameEngine {
       // Never close a door on somebody standing in the doorway
       const b = door.collision;
       const pad = 0.45;
-      const remotePos = this.remote?.state && !this.remote.state.dead ? [this.remote.position] : [];
+      const remotePos = this.peers.filter((q) => q.remote?.state && !q.remote.state.dead).map((q) => q.remote!.position);
       for (const who of [this.player.position, ...remotePos, ...this.monsters.map((m) => m.position)]) {
         if (who.x > b.min.x - pad && who.x < b.max.x + pad && who.z > b.min.z - pad && who.z < b.max.z + pad) return;
       }

@@ -1331,7 +1331,10 @@ type GameMode = 'coop' | 'versus' | 'race';
 interface Room {
   code: string;
   host: Client;
+  /** first guest (2-player modes); every guest is in `guests` */
   guest: Client | null;
+  /** 👥 co-op: up to 7 guests (8 players) */
+  guests: Client[];
   difficulty: number;
   /** coop = together against the AI; versus = one player is the monster; race = first one out wins */
   mode: GameMode;
@@ -1363,6 +1366,11 @@ const parseMode = (v: unknown): GameMode => (v === 'versus' || v === 'race' ? v 
 const parseSide = (v: unknown): 'host' | 'guest' => (v === 'guest' ? 'guest' : 'host');
 
 const rooms = new Map<string, Room>();
+/** 👥 Co-op takes up to 8 players; the other modes (and the Circus) are 1 vs 1 */
+const roomMax = (r: Room) => (r.mode === 'coop' && r.chapter !== 9 ? 8 : 2);
+const membersOf = (r: Room) => [r.host, ...r.guests];
+const namesOf = (r: Room) => membersOf(r).map((c) => c.username);
+const syncGuest = (r: Room) => (r.guest = r.guests[0] ?? null);
 /** 🔎 Players waiting for a random partner */
 const matchQueue: { client: Client; mode: GameMode; hide?: boolean; difficulty: number; chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9 }[] = [];
 const unqueue = (c: Client) => {
@@ -1392,9 +1400,8 @@ const startRoom = (room: Room) => {
   endWatchers(room, 'La partie a recommencé.');
   // One random seed for both players: same forest / lab layout
   room.seed = crypto.randomInt(1, 2 ** 31) / 2 ** 31;
-  const start = { t: 'start', ...roomSettings(room), seed: room.seed };
-  send(room.host, start);
-  send(room.guest, start);
+  const start = { t: 'start', ...roomSettings(room), seed: room.seed, players: namesOf(room) };
+  for (const c of membersOf(room)) send(c, start);
 };
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I confusion
 const newCode = () => {
@@ -1418,14 +1425,17 @@ const leaveRoom = (c: Client) => {
   if (room.host === c) {
     // Host left: the room closes
     rooms.delete(room.code);
-    if (room.guest) {
-      room.guest.room = null;
-      send(room.guest, { t: 'room-closed' });
+    for (const g of room.guests) {
+      g.room = null;
+      send(g, { t: 'room-closed' });
     }
+    room.guests = [];
+    syncGuest(room);
   } else {
-    room.guest = null;
-    room.started = false;
-    send(room.host, { t: 'peer-left' });
+    room.guests = room.guests.filter((g) => g !== c);
+    syncGuest(room);
+    if (!room.guests.length) room.started = false;
+    for (const o of membersOf(room)) send(o, { t: 'peer-left', username: c.username, players: namesOf(room) });
   }
 };
 
@@ -1454,7 +1464,7 @@ server.on('upgrade', (req, socket, head) => {
     ws.on('message', (raw, isBinary) => {
       if (isBinary) {
         // Proximity voice chat: small audio frames forwarded untouched to the partner (in game only)
-        const peer = peerOf(client);
+        const peer = client.room && client.room.guests.length === 1 ? peerOf(client) : null;
         const buf = raw as Buffer;
         if (!peer || !client.room?.started || buf.length > 4096 || peer.ws.readyState !== WebSocket.OPEN) return;
         if (peer.ws.bufferedAmount > 256 * 1024) return; // slow link: drop audio rather than lag
@@ -1475,6 +1485,7 @@ server.on('upgrade', (req, socket, head) => {
             code: newCode(),
             host: client,
             guest: null,
+            guests: [],
             difficulty,
             mode: parseMode(msg.mode),
             monster: parseSide(msg.monster),
@@ -1492,12 +1503,15 @@ server.on('upgrade', (req, socket, head) => {
           const room = rooms.get(code);
           if (!room) return send(client, { t: 'error', error: 'Aucune partie avec ce code.' });
           if (room.host === client) return send(client, { t: 'error', error: 'Vous êtes déjà l\'hôte de cette partie.' });
-          if (room.guest) return send(client, { t: 'error', error: 'Cette partie est déjà complète.' });
+          if (room.guests.includes(client)) return;
+          if (room.started) return send(client, { t: 'error', error: 'Cette partie a déjà commencé.' });
+          if (1 + room.guests.length >= roomMax(room)) return send(client, { t: 'error', error: roomMax(room) > 2 ? 'Cette partie est complète (8 joueurs).' : 'Cette partie est déjà complète.' });
           leaveRoom(client);
-          room.guest = client;
+          room.guests.push(client);
+          syncGuest(room);
           client.room = room;
-          send(client, { t: 'joined', code: room.code, host: room.host.username, ...roomSettings(room) });
-          send(room.host, { t: 'peer-joined', username: client.username });
+          send(client, { t: 'joined', code: room.code, host: room.host.username, ...roomSettings(room), players: namesOf(room) });
+          for (const o of membersOf(room)) if (o !== client) send(o, { t: 'peer-joined', username: client.username, players: namesOf(room) });
           break;
         }
         case 'settings': {
@@ -1511,14 +1525,14 @@ server.on('upgrade', (req, socket, head) => {
           if (msg.hide !== undefined) room.hide = msg.hide === true;
           if (msg.hide !== undefined || msg.mode !== undefined) room.hideRound = 0;
           const s = { t: 'settings', ...roomSettings(room) };
-          send(room.host, s);
-          send(room.guest, s);
+          for (const c of membersOf(room)) send(c, s);
           break;
         }
         case 'start': {
           const room = client.room;
           if (!room || room.host !== client) return;
           if (!room.guest) return send(client, { t: 'error', error: 'Attendez que votre ami rejoigne la partie.' });
+          if (1 + room.guests.length > roomMax(room)) return send(client, { t: 'error', error: 'Ce mode se joue à 2 seulement. Passez en coop pour jouer à plusieurs.' });
           startRoom(room);
           break;
         }
@@ -1543,6 +1557,7 @@ server.on('upgrade', (req, socket, head) => {
             code: newCode(),
             host: other.client,
             guest: client,
+            guests: [client],
             difficulty: other.difficulty,
             mode,
             monster: crypto.randomInt(2) ? 'host' : 'guest',
@@ -1580,8 +1595,8 @@ server.on('upgrade', (req, socket, head) => {
           const i = Math.floor(Number(msg.i));
           if (!(i >= 0 && i < 8) || now - (client.lastChat ?? 0) < 700) break;
           client.lastChat = now;
-          send(peerOf(client), { t: 'chat', from: client.username, i });
-          send(client, { t: 'chat', from: client.username, i });
+          if (client.room) for (const c of membersOf(client.room)) send(c, { t: 'chat', from: client.username, i });
+          else send(client, { t: 'chat', from: client.username, i });
           break;
         }
         case 'lemote': {
@@ -1590,18 +1605,21 @@ server.on('upgrade', (req, socket, head) => {
           const id = String(msg.id ?? '');
           if (!/^[a-z]{1,16}$/.test(id) || now - (client.lastChat ?? 0) < 700) break;
           client.lastChat = now;
-          send(peerOf(client), { t: 'lemote', from: client.username, id });
+          if (client.room) for (const c of membersOf(client.room)) if (c !== client) send(c, { t: 'lemote', from: client.username, id });
           break;
         }
         case 'relay': {
-          // Game traffic: forwarded untouched to the other player
-          send(peerOf(client), { t: 'relay', d: msg.d });
-          // 👀 …and to the spectators: the world comes from the host, the view from the player they follow
+          // Game traffic: the host's goes to every guest; a guest's goes to the host
+          // (and their position / look / emotes to the other guests too)
           const room = client.room;
-          if (room?.spectators?.length) {
-            const role = room.host === client ? 'host' : 'guest';
-            const k = (msg.d as { k?: string } | null)?.k;
-            const personal = k === 'p' || k === 'look' || k === 'emote';
+          if (!room) break;
+          const k = (msg.d as { k?: string } | null)?.k;
+          const personal = k === 'p' || k === 'look' || k === 'emote';
+          const out = { t: 'relay', d: msg.d, from: client.username };
+          for (const c of membersOf(room)) if (c !== client && (room.host === client || c === room.host || personal)) send(c, out);
+          // 👀 …and to the spectators: the world comes from the host, the view from the player they follow
+          if (room.spectators?.length) {
+            const role = room.host === client ? 'host' : room.guest === client ? 'guest' : 'other';
             for (const s of room.spectators) if (personal ? s.follow === role : role === 'host') send(s, { t: 'relay', d: msg.d });
           }
           break;
@@ -1624,9 +1642,9 @@ server.on('upgrade', (req, socket, head) => {
           const other = client.follow === 'host' ? room.guest : room.host;
           send(client, { t: 'watch-start', ...roomSettings(room), seed: room.seed, player: target.username, other: other?.username });
           // The players send everything again for the newcomer (and are told someone watches)
-          for (const c of [room.host, room.guest]) {
-            send(c, { t: 'relay', d: { k: 'resync' } });
-            send(c, { t: 'relay', d: { k: 'toast', msg: `👀 ${client.username} regarde la partie.` } });
+          for (const c of membersOf(room)) {
+            send(c, { t: 'relay', d: { k: 'resync' }, from: '' });
+            send(c, { t: 'relay', d: { k: 'toast', msg: `👀 ${client.username} regarde la partie.` }, from: '' });
           }
           serverAch(me, 'spectate');
           saveUsers();
@@ -1675,7 +1693,7 @@ const statusOf = (name: string): 'playing' | 'online' | 'offline' => {
   return 'offline';
 };
 /** The room this player hosts and that still waits for a partner */
-const openRoomOf = (name: string) => clientsOf(name).find((c) => c.room && c.room.host === c && !c.room.guest && !c.room.started)?.room ?? null;
+const openRoomOf = (name: string) => clientsOf(name).find((c) => c.room && c.room.host === c && 1 + c.room.guests.length < roomMax(c.room) && !c.room.started)?.room ?? null;
 
 const friendsView = (u: User) => {
   const me = u.username.toLowerCase();

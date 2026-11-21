@@ -125,6 +125,10 @@ export const EMOTES = ['👋 Salut !', '👉 Par ici !', '😱 Au secours !', '�
 export interface GameLink {
   role: 'host' | 'guest';
   partnerName: string;
+  /** 👥 co-op with 3+ players: every other player's pseudo */
+  peers?: string[];
+  /** 👥 my place in the room (0 = host) */
+  seat?: number;
   /** coop = together vs the AI; versus = one of the two players is the creature; race = first one out wins */
   mode: 'coop' | 'versus' | 'race';
   /** 🫣 versus variant: hide-and-seek (the seeker plays the creature) */
@@ -134,7 +138,7 @@ export interface GameLink {
   /** versus only: what the local player is */
   versusRole: 'monster' | 'survivor' | null;
   send: (msg: GameMsg) => void;
-  setHandler: (fn: ((msg: GameMsg) => void) | null) => void;
+  setHandler: (fn: ((msg: GameMsg, from?: string) => void) | null) => void;
   /** Proximity voice chat (binary audio frames). */
   sendVoice?: (b: ArrayBuffer) => void;
   setVoiceHandler?: (fn: ((b: ArrayBuffer) => void) | null) => void;

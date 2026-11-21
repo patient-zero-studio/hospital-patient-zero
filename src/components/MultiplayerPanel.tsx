@@ -28,6 +28,8 @@ export interface LobbyState extends MatchSettings {
   emotes?: Record<string, { id: string; at: number }>;
   code?: string;
   partner?: string | null;
+  /** 👥 everyone in the room (host first) */
+  players?: string[];
   error?: string | null;
 }
 
@@ -79,6 +81,27 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
   const [draft, setDraft] = useState<MatchSettings>({ difficulty: p.lobby.difficulty, mode: p.lobby.mode, monster: p.lobby.monster, chapter: p.lobby.chapter ?? 1 });
   const [copied, setCopied] = useState(false);
   const [emoteWait, setEmoteWait] = useState(false);
+
+  // 👥 Everyone in the room (co-op takes up to 8)
+  const pl = p.lobby.players ?? [];
+  const max = p.lobby.mode === 'coop' && p.lobby.chapter !== 9 ? 8 : 2;
+  const roster =
+    pl.length > 0 && (max > 2 || pl.length > 2) ? (
+      <div className="border border-zinc-800 bg-black/30 p-2 text-left">
+        <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-1">
+          Joueurs ({pl.length}/{max})
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {pl.map((n, i) => (
+            <span key={n} className={`px-2 py-0.5 text-xs font-mono border ${n === p.username ? 'border-emerald-700 text-emerald-300' : 'border-zinc-700 text-zinc-200'}`}>
+              {i === 0 ? '👑 ' : ''}
+              {n}
+            </span>
+          ))}
+        </div>
+        {pl.length > max && <div className="mt-1 text-[11px] text-amber-400">Ce mode se joue à 2 : passez en coop pour jouer à plusieurs.</div>}
+      </div>
+    ) : null;
 
   // 🎭 Both characters, and the emotes you can send
   const stage =
@@ -328,7 +351,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
         </button>
         <div className="flex items-center gap-2 mb-5">
           <Users className="w-5 h-5 text-red-500" />
-          <h2 className="font-mono uppercase tracking-[0.25em] text-sm text-zinc-100">Multijoueur à 2</h2>
+          <h2 className="font-mono uppercase tracking-[0.25em] text-sm text-zinc-100">Multijoueur</h2>
         </div>
 
         {/* ---------------- Not logged in: account ---------------- */}
@@ -475,7 +498,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
                     {copied ? <Check className="w-5 h-5 text-emerald-400" /> : <Copy className="w-5 h-5 text-zinc-400" />}
                   </button>
                 </div>
-                {!p.lobby.partner && p.onFriends && (
+                {pl.length < max && p.onFriends && (
                   <button onClick={p.onFriends} className="w-full py-2 border border-emerald-700 bg-emerald-950/30 text-emerald-300 hover:border-emerald-400 font-mono text-xs uppercase tracking-widest">
                     👥 Inviter un ami
                   </button>
@@ -483,13 +506,14 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
                 <SettingsEditor value={p.lobby} onChange={p.onUpdateSettings} iAm="host" />
                 <div className="text-sm font-mono text-center min-h-[1.5em]">
                   {p.lobby.partner ? (
-                    <span className="text-emerald-400">✔ {p.lobby.partner} a rejoint la partie !</span>
+                    <span className="text-emerald-400">✔ {pl.length > 2 ? `${pl.length - 1} joueurs ont rejoint la partie !` : `${p.lobby.partner} a rejoint la partie !`}</span>
                   ) : (
                     <span className="text-zinc-500 inline-flex items-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" /> En attente d'un joueur…
                     </span>
                   )}
                 </div>
+                {roster}
                 {stage}
                 {p.lobby.partner && p.onChat && (
                   <div className="space-y-1.5">
@@ -530,6 +554,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
                 <div className="text-xs font-mono text-zinc-500 inline-flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" /> En attente que l'hôte lance la partie…
                 </div>
+                {roster}
                 {stage}
                 {p.lobby.partner && p.onChat && (
                   <div className="space-y-1.5">

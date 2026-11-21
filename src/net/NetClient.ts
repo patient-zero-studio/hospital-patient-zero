@@ -17,12 +17,12 @@ export interface RoomSettings {
 export type LobbyEvent =
   | { t: 'hello'; username: string }
   | ({ t: 'created'; code: string } & RoomSettings)
-  | ({ t: 'joined'; code: string; host: string } & RoomSettings)
-  | { t: 'peer-joined'; username: string }
-  | { t: 'peer-left' }
+  | ({ t: 'joined'; code: string; host: string; players?: string[] } & RoomSettings)
+  | { t: 'peer-joined'; username: string; players?: string[] }
+  | { t: 'peer-left'; username?: string; players?: string[] }
   | { t: 'room-closed' }
   | ({ t: 'settings' } & RoomSettings)
-  | ({ t: 'start'; seed?: number } & RoomSettings)
+  | ({ t: 'start'; seed?: number; players?: string[] } & RoomSettings)
   | { t: 'error'; error: string }
   | { t: 'queued'; waiting: number }
   | { t: 'chat'; from: string; i: number }
@@ -39,7 +39,7 @@ export type LobbyEvent =
 export class NetClient {
   private ws: WebSocket | null = null;
   private lobbyListeners = new Set<(e: LobbyEvent) => void>();
-  private relayHandler: ((d: unknown) => void) | null = null;
+  private relayHandler: ((d: unknown, from?: string) => void) | null = null;
   public connected = false;
 
   constructor(private token: string) {}
@@ -68,13 +68,13 @@ export class NetClient {
           this.voiceHandler?.(ev.data);
           return;
         }
-        let msg: { t: string; d?: unknown };
+        let msg: { t: string; d?: unknown; from?: string };
         try {
           msg = JSON.parse(ev.data);
         } catch {
           return;
         }
-        if (msg.t === 'relay') this.relayHandler?.(msg.d);
+        if (msg.t === 'relay') this.relayHandler?.(msg.d, msg.from);
         else this.emit(msg as LobbyEvent);
       };
     });
@@ -136,7 +136,7 @@ export class NetClient {
   public relay(d: unknown) {
     this.raw({ t: 'relay', d });
   }
-  public onRelay(fn: ((d: unknown) => void) | null) {
+  public onRelay(fn: ((d: unknown, from?: string) => void) | null) {
     this.relayHandler = fn;
   }
 

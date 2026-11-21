@@ -1149,20 +1149,24 @@ export default function App() {
     const engine = engineRef.current;
     switch (e.t) {
       case 'created':
-        setLobby({ status: 'hosting', code: e.code, partner: null, difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), error: null });
+        setLobby({ status: 'hosting', code: e.code, partner: null, players: sessionRef.current ? [sessionRef.current.username] : [], difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), error: null });
         break;
       case 'joined':
-        setLobby({ status: 'joined', code: e.code, partner: e.host, difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), error: null });
+        setLobby({ status: 'joined', code: e.code, partner: e.host, players: e.players ?? [e.host], difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), error: null });
         break;
       case 'peer-joined':
-        setLobby((l) => ({ ...l, partner: e.username }));
+        setLobby((l) => ({ ...l, partner: l.partner ?? e.username, players: e.players ?? l.players }));
         break;
       case 'settings':
         setLobby((l) => ({ ...l, difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter) }));
         break;
       case 'peer-left':
-        setLobby((l) => ({ ...l, partner: null }));
-        if (onlineRef.current) engine?.partnerLeft();
+        setLobby((l) => {
+          const players = e.players ?? (l.players ?? []).filter((n) => n !== e.username);
+          const me = sessionRef.current?.username;
+          return { ...l, players, partner: players.find((n) => n !== me) ?? null };
+        });
+        if (onlineRef.current) engine?.partnerLeft(e.username);
         break;
       case 'room-closed':
       case 'disconnected':
@@ -1228,22 +1232,26 @@ export default function App() {
         if (!net || !engine) return;
         const versusRole = e.mode === 'versus' ? (e.monster === role ? 'monster' : 'survivor') : null;
         if (e.mode !== 'versus' || !e.hide) hideScoresRef.current = {};
+        const me = sessionRef.current?.username;
+        const peers = (e.players ?? []).filter((n) => n !== me);
         const link: GameLink = {
           role,
-          partnerName: l.partner ?? '???',
+          partnerName: (role === 'guest' ? e.players?.[0] : peers[0]) ?? l.partner ?? '???',
+          peers: peers.length ? peers : undefined,
+          seat: me && e.players ? Math.max(0, e.players.indexOf(me)) : undefined,
           mode: e.mode,
           versusRole,
           hide: !!e.hide,
           selfName: sessionRef.current?.username,
           send: (msg: GameMsg) => net.relay(msg),
-          setHandler: (fn) => net.onRelay(fn ? (d) => fn(d as GameMsg) : null),
+          setHandler: (fn) => net.onRelay(fn ? (d, from) => fn(d as GameMsg, from) : null),
           sendVoice: (b) => net.sendVoice(b),
           setVoiceHandler: (fn) => net.onVoice(fn),
         };
         engine.setNet(link);
         // Same forest / lab layout on both screens
         engine.levelSeed = typeof e.seed === 'number' ? e.seed : null;
-        setOnline({ role, partner: link.partnerName, mode: e.mode, versusRole, hide: !!e.hide, circus: e.chapter === 9 });
+        setOnline({ role, partner: peers.length > 1 ? peers.join(', ') : link.partnerName, mode: e.mode, versusRole, hide: !!e.hide, circus: e.chapter === 9 });
         setVersusResult(null);
         setMpOpen(false);
         beginRun(true, e.difficulty as Difficulty, toMpChapter(e.chapter));
