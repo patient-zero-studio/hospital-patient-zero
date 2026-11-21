@@ -72,7 +72,14 @@ export class MonsterAI {
   private neck = new THREE.Group();
   private head = new THREE.Group();
   private jaw = new THREE.Group();
-  private legs: { hip: THREE.Group; knee: THREE.Group }[] = [];
+  private legs: { hip: THREE.Group; knee: THREE.Group; ankle?: THREE.Group }[] = [];
+  /** 🦴 finger joints (claws open / close), drool strands, head twitch target */
+  private fingers: { base: THREE.Group; mid: THREE.Group; i: number }[] = [];
+  private drool: THREE.Object3D[] = [];
+  /** wounds, veins, scar, drool: hidden on the stylised skins (gold, shadow, frost…) */
+  private gore: THREE.Object3D[] = [];
+  private headAim = new THREE.Vector2();
+  private breathT = Math.random() * 10;
   private arms: { shoulder: THREE.Group; elbow: THREE.Group }[] = [];
   private eyeMat: THREE.MeshStandardMaterial;
 
@@ -222,22 +229,27 @@ export class MonsterAI {
       hip.add(knee);
       mesh(new THREE.SphereGeometry(0.058, 12, 10), skin, knee, 0, 0, 0.012).scale.set(1, 1.1, 1.05);
       mesh(limb(0.5, 0.055, 0.06, 0.032), skin, knee, 0, 0, 0);
+      // Ankle: the long foot rolls (digitigrade-ish, walks on the balls of the feet)
+      const ankle = new THREE.Group();
+      ankle.position.y = -0.5;
+      knee.add(ankle);
+      mesh(new THREE.SphereGeometry(0.034, 10, 8), skin, ankle, 0, 0, 0).scale.set(1.15, 1, 1);
       // Foot: a long tapered shape + toe bones
       const foot = mesh(
         sculpted(18, 10, [0.055, 0.035, 0.15], (n) => 1 - 0.25 * Math.max(0, -n.y) - 0.2 * Math.max(0, -n.z)),
         skin,
-        knee,
+        ankle,
         0,
-        -0.53,
+        -0.03,
         0.08
       );
       foot.rotation.x = 0.05;
       for (let toe = 0; toe < 4; toe++) {
-        const tb = mesh(new THREE.CapsuleGeometry(0.011, 0.05, 3, 6), skin, knee, -0.03 + toe * 0.02, -0.55, 0.22);
+        const tb = mesh(new THREE.CapsuleGeometry(0.011, 0.05, 3, 6), skin, ankle, -0.03 + toe * 0.02, -0.05, 0.22);
         tb.rotation.x = Math.PI / 2 - 0.2;
-        mesh(new THREE.ConeGeometry(0.007, 0.03, 5), claw, knee, -0.03 + toe * 0.02, -0.555, 0.265).rotation.x = Math.PI / 2;
+        mesh(new THREE.ConeGeometry(0.007, 0.03, 5), claw, ankle, -0.03 + toe * 0.02, -0.055, 0.265).rotation.x = Math.PI / 2;
       }
-      this.legs.push({ hip, knee });
+      this.legs.push({ hip, knee, ankle });
     }
 
     // ---- Torso: sunken belly, ribs and spine under the skin, shoulder blades ----
@@ -262,6 +274,20 @@ export class MonsterAI {
       return r;
     });
     mesh(torso, skin, this.spine, 0, 0.33, 0);
+    // 🩸 Open wounds: wet, dark red flesh (glossy), a few on the chest and flank
+    const flesh = t(new THREE.MeshPhysicalMaterial({ color: 0x4a0608, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.1, emissive: 0x120000 }));
+    for (const [x, y, z, sx, sy, rz] of [
+      [0.09, 0.42, 0.125, 1.6, 0.6, 0.5],
+      [-0.12, 0.25, 0.1, 1.1, 0.5, -0.3],
+      [0.16, 0.15, 0.03, 0.6, 1.4, 0.2],
+    ] as const) {
+      const w = mesh(new THREE.SphereGeometry(0.03, 14, 10), flesh, this.spine, x, y, z);
+      w.castShadow = false;
+      this.gore.push(w);
+      w.scale.set(sx, sy, 0.35);
+      w.lookAt(new THREE.Vector3(x * 4, y, z * 4 + 0.2));
+      w.rotation.z += rz;
+    }
 
     // ---- Torn gown scraps: only around the hips, open on the chest and back ----
     const gownMesh = mesh(new THREE.CylinderGeometry(0.2, 0.27, 0.5, 18, 4, true, 0.9, Math.PI * 1.2), gown, this.spine, 0, 0.0, -0.01);
@@ -288,6 +314,19 @@ export class MonsterAI {
       shoulder.add(elbow);
       mesh(new THREE.SphereGeometry(0.045, 10, 8), skin, elbow, 0, 0, -0.01).scale.set(1, 1, 1.2);
       mesh(limb(0.6, 0.045, 0.05, 0.03), skin, elbow, 0, 0, 0);
+      // Swollen dark veins crawling down the forearm
+      for (let v = 0; v < 2; v++) {
+        const pts: THREE.Vector3[] = [];
+        for (let k = 0; k <= 8; k++) {
+          const y = -0.05 - k * 0.055;
+          const r = THREE.MathUtils.lerp(0.05, 0.032, k / 8) + 0.003;
+          const a = v * 2.4 + 0.6 + Math.sin(k * 1.3 + v) * 0.35;
+          pts.push(new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r * 0.85));
+        }
+        const vein = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.0032, 5), this.veinMat(t), elbow);
+        vein.castShadow = false;
+        this.gore.push(vein);
+      }
       const hand = new THREE.Group();
       hand.position.set(0, -0.6, 0);
       elbow.add(hand);
@@ -306,6 +345,7 @@ export class MonsterAI {
         mid.position.y = -l1;
         mid.rotation.x = 0.35;
         finger.add(mid);
+        if (!thumb) this.fingers.push({ base: finger, mid, i: f + (side + 1) * 3 });
         mesh(limb(l1 * 0.85, 0.008, 0.0085, 0.006, 1), skin, mid);
         const tip = mesh(new THREE.ConeGeometry(0.0075, 0.075, 6), claw, mid, 0, -l1 * 0.85 - 0.035, 0.004);
         tip.rotation.x = Math.PI + 0.25;
@@ -321,6 +361,12 @@ export class MonsterAI {
     for (const side of [-1, 1]) {
       const tendon = mesh(new THREE.CapsuleGeometry(0.009, 0.16, 3, 6), skin, this.neck, side * 0.028, 0.08, 0.035);
       tendon.rotation.z = side * -0.25;
+    }
+    {
+      const pts = [0, 1, 2, 3, 4, 5].map((k) => new THREE.Vector3(0.045 + Math.sin(k) * 0.006, 0.02 + k * 0.03, -0.01 + Math.cos(k * 1.7) * 0.01));
+      const vein = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.004, 5), this.veinMat(t), this.neck);
+      vein.castShadow = false;
+      this.gore.push(vein);
     }
 
     // ---- Head: elongated skull, deep eye sockets, cheekbones, no nose, no lips ----
@@ -349,6 +395,26 @@ export class MonsterAI {
       return r;
     });
     mesh(skull, skin, this.head, 0, 0.1, 0);
+    // 🧵 Surgery scar across the skull: a seam with crude stitches
+    const thread = t(new THREE.MeshStandardMaterial({ color: 0x1a0c08, roughness: 0.8 }));
+    const scar = t(new THREE.MeshPhysicalMaterial({ color: 0x5a1a18, roughness: 0.4, clearcoat: 0.6 }));
+    const scarPts: THREE.Vector3[] = [];
+    for (let k = 0; k <= 10; k++) {
+      const a = 0.15 + k * 0.1;
+      const n = new THREE.Vector3(0.22 - k * 0.012, Math.cos(a), Math.sin(a)).normalize();
+      scarPts.push(new THREE.Vector3(n.x * 0.133, n.y * 0.196, n.z * 0.161).multiplyScalar(1.035).add(new THREE.Vector3(0, 0.1, 0)));
+    }
+    const seam = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(scarPts), 30, 0.0035, 5), scar, this.head);
+    seam.castShadow = false;
+    this.gore.push(seam);
+    for (let k = 1; k < 10; k += 1) {
+      const p = scarPts[k];
+      const st = mesh(new THREE.BoxGeometry(0.022, 0.0025, 0.0025), thread, this.head, p.x, p.y, p.z);
+      st.lookAt(p.clone().multiplyScalar(2).sub(new THREE.Vector3(0, 0.1, 0)));
+      st.rotateZ(0.3);
+      st.castShadow = false;
+      this.gore.push(st);
+    }
     // Dark inside of the sockets and the nose hole
     for (const side of [-1, 1]) mesh(new THREE.SphereGeometry(0.026, 12, 10), dark, this.head, side * 0.047, 0.135, 0.112);
     mesh(new THREE.SphereGeometry(0.016, 10, 8), dark, this.head, 0, 0.098, 0.142).scale.set(0.8, 1.3, 0.6);
@@ -384,6 +450,24 @@ export class MonsterAI {
       const tooth = mesh(new THREE.ConeGeometry(0.006, len, 5), teeth, this.jaw, Math.sin(a) * 0.05, -0.004 + len / 2, 0.05 + Math.cos(a) * 0.05);
       tooth.rotation.z = Math.sin(i * 2.3) * 0.2;
     }
+    // 💧 Drool strands hanging from the jaw (they sway as it moves)
+    const slime = t(new THREE.MeshPhysicalMaterial({ color: 0xcfd8c0, transparent: true, opacity: 0.55, roughness: 0.05, clearcoat: 1 }));
+    for (const [x, len] of [[-0.028, 0.11], [0.012, 0.16], [0.034, 0.08]] as const) {
+      const pivot = new THREE.Group();
+      pivot.position.set(x, -0.02, 0.09);
+      this.jaw.add(pivot);
+      const strand = mesh(new THREE.CylinderGeometry(0.0022, 0.0012, len, 5), slime, pivot, 0, -len / 2, 0);
+      strand.castShadow = false;
+      mesh(new THREE.SphereGeometry(0.004, 6, 5), slime, pivot, 0, -len, 0).castShadow = false;
+      this.drool.push(pivot);
+      this.gore.push(pivot);
+    }
+  }
+
+  private veinM: THREE.MeshStandardMaterial | null = null;
+  private veinMat(t: <T extends { dispose: () => void }>(o: T) => T) {
+    if (!this.veinM) this.veinM = t(new THREE.MeshStandardMaterial({ color: 0x2a1830, roughness: 0.45 }));
+    return this.veinM;
   }
 
   // ---------------------------------------------------------------------
@@ -527,6 +611,9 @@ export class MonsterAI {
     skin.transparent = fx === 'shadow';
     skin.opacity = fx === 'shadow' ? 0.82 : 1;
     skin.needsUpdate = true;
+    // Gore only on the "flesh" looks (not on gold, shadow, frost, abyss or bone)
+    const goreOn = !fx || fx === 'toxic' || fx === 'inferno';
+    for (const g of this.gore) g.visible = goreOn;
 
     this.cosmeticDisposables.forEach((d) => d.dispose());
     this.cosmeticDisposables = [];
@@ -1050,14 +1137,23 @@ export class MonsterAI {
     const p = this.stepPhase;
     const amp = moving ? Math.min(1, this.speedNow / 2) : 0;
 
-    // Legs: asymmetric limp
+    // Legs: asymmetric limp; the long feet roll and the bad leg drags its toes
     this.legs.forEach((leg, i) => {
       const ph = p + i * Math.PI;
       const swing = Math.sin(ph) * 0.55 * amp * (i === 0 ? 1 : 0.75);
       leg.hip.rotation.x = THREE.MathUtils.damp(leg.hip.rotation.x, swing, 12, delta);
-      const kneeTarget = Math.max(0, -Math.cos(ph)) * 0.9 * amp + 0.08;
+      const kneeTarget = Math.max(0, -Math.cos(ph)) * 0.9 * amp + 0.08 + (moving ? 0 : 0.06);
       leg.knee.rotation.x = THREE.MathUtils.damp(leg.knee.rotation.x, kneeTarget, 12, delta);
+      if (leg.ankle) {
+        const flat = -(leg.hip.rotation.x + leg.knee.rotation.x) * 0.85;
+        const roll = Math.max(0, Math.sin(ph - 0.4)) * (i === 0 ? 0.45 : 0.7) * amp;
+        leg.ankle.rotation.x = THREE.MathUtils.damp(leg.ankle.rotation.x, flat + roll, 12, delta);
+      }
     });
+    // Heavy, wet breathing: the ribcage heaves, faster and deeper during the chase
+    this.breathT += delta * (chasing ? 5.5 : 1.7);
+    const br = Math.sin(this.breathT);
+    this.spine.scale.set(1 + br * (chasing ? 0.035 : 0.02), 1 + br * 0.008, 1 + br * (chasing ? 0.05 : 0.03));
 
     // Arms: dangle when walking, reach forward when chasing
     this.arms.forEach((arm, i) => {
@@ -1066,20 +1162,38 @@ export class MonsterAI {
       const target = chasing ? -1.3 + Math.sin(ph * 2) * 0.25 : -0.35 + Math.sin(ph + Math.PI) * 0.3 * amp;
       arm.shoulder.rotation.x = THREE.MathUtils.damp(arm.shoulder.rotation.x, target, 8, delta);
       arm.elbow.rotation.x = THREE.MathUtils.damp(arm.elbow.rotation.x, chasing ? -0.5 : -0.45, 8, delta);
-      arm.shoulder.rotation.z = (i === 0 ? -1 : 1) * (0.18 + Math.sin(this.animTime * 1.3 + i) * 0.05);
+      arm.shoulder.rotation.z = (i === 0 ? -1 : 1) * (0.18 + Math.sin(this.animTime * 1.3 + i) * 0.05 + Math.max(0, br) * 0.03);
+    });
+    // Claws: twitching at rest, opening and snapping shut during the chase
+    for (const f of this.fingers) {
+      const twitch = Math.random() < 0.01 ? 0.5 : 0;
+      const curl = chasing ? 0.25 + 0.6 * (0.5 + 0.5 * Math.sin(this.animTime * 9 + f.i * 0.7)) : 0.25 + Math.sin(this.animTime * 1.4 + f.i) * 0.12 + twitch;
+      f.base.rotation.x = THREE.MathUtils.damp(f.base.rotation.x, -0.15 + curl * 0.6, 14, delta);
+      f.mid.rotation.x = THREE.MathUtils.damp(f.mid.rotation.x, 0.35 + curl, 14, delta);
+    }
+    // Drool sways with the head
+    this.drool.forEach((d, i) => {
+      d.rotation.x = Math.sin(this.animTime * 2.2 + i) * 0.25 - this.jaw.rotation.x * 0.8;
+      d.rotation.z = Math.sin(this.animTime * 1.7 + i * 2) * 0.2 - this.head.rotation.z * 0.6;
     });
 
-    // Body: bob + lean into the chase
-    this.hips.position.y = 1.08 - Math.abs(Math.sin(p)) * 0.06 * amp;
-    this.spine.rotation.x = THREE.MathUtils.damp(this.spine.rotation.x, chasing ? 0.6 : 0.38, 4, delta);
-    this.spine.rotation.z = Math.sin(p) * 0.06 * amp;
+    // Body: lurching bob, the hips roll with the limp, the shoulders counter-swing
+    this.hips.position.y = THREE.MathUtils.damp(this.hips.position.y, 1.08 - Math.abs(Math.sin(p)) * 0.06 * amp - (moving ? 0 : 0.03), 10, delta);
+    this.hips.rotation.z = Math.sin(p) * 0.07 * amp;
+    this.hips.rotation.y = Math.sin(p) * 0.1 * amp;
+    this.spine.rotation.x = THREE.MathUtils.damp(this.spine.rotation.x, (chasing ? 0.6 : 0.38) + br * 0.025, 4, delta);
+    this.spine.rotation.z = Math.sin(p) * 0.06 * amp - this.hips.rotation.z * 0.5;
+    this.spine.rotation.y = -Math.sin(p) * 0.14 * amp;
 
-    // Head twitches & jaw
-    if (Math.random() < (chasing ? 0.12 : 0.04)) {
-      this.head.rotation.z = (Math.random() - 0.5) * 0.7;
-      this.head.rotation.y = (Math.random() - 0.5) * 0.6;
-    }
-    const jawTarget = chasing ? 0.55 + Math.sin(this.animTime * 30) * 0.1 : 0.15 + Math.sin(this.animTime * 2) * 0.1;
+    // Head: jerky twitches toward random angles (sometimes an instant snap), jaw
+    if (Math.random() < (chasing ? 0.1 : 0.03)) this.headAim.set((Math.random() - 0.5) * 0.7, (Math.random() - 0.5) * 0.6);
+    const snap = Math.random() < 0.02 ? 60 : chasing ? 22 : 9;
+    this.head.rotation.z = THREE.MathUtils.damp(this.head.rotation.z, this.headAim.x, snap, delta);
+    this.head.rotation.y = THREE.MathUtils.damp(this.head.rotation.y, this.headAim.y - this.spine.rotation.y * 0.7, snap, delta);
+    this.head.rotation.x = THREE.MathUtils.damp(this.head.rotation.x, -0.45 + br * 0.03, 6, delta);
+    const jawTarget = chasing
+      ? 0.55 + Math.sin(this.animTime * 30) * 0.1 - (Math.sin(this.animTime * 3.1) > 0.92 ? 0.5 : 0) // snapping bites
+      : 0.15 + Math.sin(this.animTime * 2) * 0.1 + Math.max(0, br) * 0.08;
     this.jaw.rotation.x = THREE.MathUtils.damp(this.jaw.rotation.x, jawTarget, 10, delta);
     this.eyeMat.emissiveIntensity = chasing ? 9 : 4 + Math.sin(this.animTime * 3) * 1;
   }

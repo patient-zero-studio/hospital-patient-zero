@@ -5,7 +5,7 @@ import { ProceduralTextures } from '../textures/ProceduralTextures';
 import { HUMAN_OUTFITS, buildHumanAccessory, buildHumanBodyExtra } from './Cosmetics';
 import { CharacterDef, characterOf } from '../characters';
 
-type Limb = { root: THREE.Group; mid: THREE.Group };
+type Limb = { root: THREE.Group; mid: THREE.Group; end?: THREE.Group };
 
 /**
  * The human survivor (main character), as seen by the other player and in
@@ -152,12 +152,17 @@ export class RemotePlayer {
         knee
       );
       shin.scale.set(1, 1, 1.05);
-      // Hospital slipper: rounded foot shape
-      const foot = mesh(new THREE.CapsuleGeometry(0.045, 0.15, 6, 12), slipper, knee, 0, -0.44, 0.06);
+      // Ankle joint: the foot rolls from heel to toe while walking
+      const ankle = new THREE.Group();
+      ankle.position.y = -0.415;
+      knee.add(ankle);
+      // Ankle bones + hospital slipper: rounded foot shape
+      for (const s2 of [-1, 1]) mesh(new THREE.SphereGeometry(0.012, 8, 6), skin, ankle, s2 * 0.03, 0, 0.0);
+      const foot = mesh(new THREE.CapsuleGeometry(0.045, 0.15, 6, 12), slipper, ankle, 0, -0.025, 0.06);
       foot.rotation.x = Math.PI / 2;
       foot.scale.set(1.2, 1, 0.62);
-      mesh(new THREE.BoxGeometry(0.1, 0.012, 0.25), rubber, knee, 0, -0.468, 0.06); // sole
-      this.legs.push({ root, mid: knee });
+      mesh(new THREE.BoxGeometry(0.1, 0.012, 0.25), rubber, ankle, 0, -0.053, 0.06); // sole
+      this.legs.push({ root, mid: knee, end: ankle });
     }
 
     // ---- Torso (waist → ribcage → shoulders), flattened front to back ----
@@ -280,6 +285,7 @@ export class RemotePlayer {
       const hand = new THREE.Group();
       hand.position.y = -0.27;
       elbow.add(hand);
+      this.hands.push(hand);
       mesh(new THREE.BoxGeometry(0.06, 0.075, 0.026), skin, hand, 0, -0.035, 0).scale.set(1, 1, 1);
       const holding = side === 1;
       for (let f = 0; f < 4; f++) {
@@ -313,7 +319,7 @@ export class RemotePlayer {
         const lens = mesh(new THREE.CircleGeometry(0.026, 18), this.torchLens, torch, 0, 0, 0.136);
         lens.castShadow = false;
       }
-      this.arms.push({ root, mid: elbow });
+      this.arms.push({ root, mid: elbow, end: hand });
     }
 
     // ---- Neck & head (chin at ~1.54 m, top of head ~1.78 m) ----
@@ -400,6 +406,7 @@ export class RemotePlayer {
       pu.castShadow = false;
       const lid = mesh(new THREE.SphereGeometry(0.0138, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.36), skin, this.head, e.x, e.y + 0.0006, e.z);
       lid.rotation.x = 0.45;
+      this.lids.push(lid);
       const b = onFace(s * 0.34, 0.27);
       const brow = mesh(new THREE.CapsuleGeometry(0.0032, 0.026, 3, 8), hair, this.head, b.x, b.y, b.z + 0.002);
       brow.rotation.z = Math.PI / 2 - s * 0.18;
@@ -469,6 +476,38 @@ export class RemotePlayer {
   }
 
   private lipsMat!: THREE.MeshPhysicalMaterial;
+  private lids: THREE.Mesh[] = [];
+  private hands: THREE.Group[] = [];
+  /** 😉 blinking: time to the next blink, and the blink in progress */
+  private blinkIn = 2 + Math.random() * 3;
+  private blinkT = -1;
+  /** 👀 idle: where the eyes / head wander */
+  private glance = 0;
+  private glanceTarget = 0;
+  private glanceIn = 2;
+  /** 👋 in-game emote gesture (0 wave, 1 point, 2 scared, 3 shush) */
+  private gestureId = -1;
+  private gestureT = 0;
+  public gesture(i: number) {
+    this.gestureId = i;
+    this.gestureT = 2.4;
+  }
+
+  /** 😉 Eyelids: a quick blink every few seconds (also used by the dances) */
+  private blink(delta: number) {
+    this.blinkIn -= delta;
+    if (this.blinkIn <= 0 && this.blinkT < 0) {
+      this.blinkT = 0;
+      this.blinkIn = 2 + Math.random() * 4;
+    }
+    let close = 0;
+    if (this.blinkT >= 0) {
+      this.blinkT += delta;
+      close = Math.sin(Math.min(1, this.blinkT / 0.16) * Math.PI);
+      if (this.blinkT > 0.16) this.blinkT = -1;
+    }
+    for (const l of this.lids) l.rotation.x = 0.45 + close * 1.25;
+  }
 
   /** Shop accessories & outfit pieces currently worn (rebuilt on every look change). */
   private cosmetic = new THREE.Group();
@@ -589,6 +628,7 @@ export class RemotePlayer {
   /** 💃 One frame of the victory dance (poses the bones directly). */
   public dance(delta: number, id = this.danceId) {
     this.fx?.tick(delta);
+    this.blink(delta);
     this.danceT += delta;
     const t = this.danceT;
     const [L, R] = this.arms;
@@ -606,7 +646,10 @@ export class RemotePlayer {
     for (const l of this.legs) {
       l.root.rotation.set(0, 0, 0);
       l.mid.rotation.set(0, 0, 0);
+      l.end?.rotation.set(0, 0, 0);
     }
+    this.hips.position.x = 0;
+    this.body.rotation.x = 0;
     L.root.rotation.z = -0.13;
     R.root.rotation.z = 0.13;
     switch (id) {
@@ -687,6 +730,120 @@ export class RemotePlayer {
         L.mid.rotation.x = R.mid.rotation.x = -0.6;
         this.spine.rotation.x = 0.12;
         this.head.rotation.y = Math.sin(t) * 0.3;
+        break;
+      }
+      case 'bow': {
+        // A deep theatrical bow, then back up (every 2.5 s)
+        const c = (t % 2.5) / 2.5;
+        const s = Math.sin(Math.min(1, c / 0.7) * Math.PI);
+        this.spine.rotation.x = 0.95 * s;
+        this.head.rotation.x = 0.25 * s;
+        R.root.rotation.x = -0.7 * s;
+        R.root.rotation.z = -0.5 * s + 0.13;
+        R.mid.rotation.x = -1.7 * s;
+        L.root.rotation.z = -0.13 - 1.1 * s;
+        L.root.rotation.x = 0.3 * s;
+        RL.root.rotation.x = 0.25 * s;
+        RL.mid.rotation.x = 0.35 * s;
+        LL.root.rotation.x = -0.15 * s;
+        break;
+      }
+      case 'zombie': {
+        // Stiff zombie shuffle: arms out, head lolling, dragging one foot
+        const ph = t * 2.4;
+        L.root.rotation.x = -1.5 + Math.sin(ph * 1.3) * 0.08;
+        R.root.rotation.x = -1.45 + Math.sin(ph * 1.1 + 1) * 0.08;
+        L.mid.rotation.x = R.mid.rotation.x = -0.12;
+        this.head.rotation.z = 0.45 + Math.sin(ph * 0.7) * 0.12;
+        this.head.rotation.x = 0.2;
+        this.spine.rotation.x = 0.18;
+        this.spine.rotation.z = Math.sin(ph) * 0.08;
+        LL.root.rotation.x = Math.sin(ph) * 0.3;
+        LL.mid.rotation.x = Math.max(0, -Math.cos(ph)) * 0.5;
+        RL.root.rotation.x = -Math.sin(ph) * 0.18;
+        RL.end!.rotation.x = 0.5; // dragging the toes
+        this.hips.position.y = 0.92 - Math.abs(Math.sin(ph)) * 0.04;
+        this.body.position.z = Math.sin(ph * 0.5) * 0.15;
+        break;
+      }
+      case 'chicken': {
+        // Elbows flapping, head pecking, knees bouncing
+        const flap = Math.sin(t * 14);
+        for (const [a, sd] of [[L, -1], [R, 1]] as const) {
+          a.root.rotation.x = -0.25;
+          a.root.rotation.z = sd * (0.75 + flap * 0.35);
+          a.mid.rotation.x = -2.4;
+        }
+        this.head.rotation.x = Math.sin(t * 7) > 0 ? 0.35 : -0.15;
+        this.spine.rotation.x = 0.2;
+        const b = Math.abs(Math.sin(t * 7));
+        this.hips.position.y = 0.92 - b * 0.08;
+        for (const l of this.legs) {
+          l.root.rotation.x = -b * 0.35;
+          l.mid.rotation.x = b * 0.7;
+          l.end!.rotation.x = -b * 0.35;
+        }
+        break;
+      }
+      case 'floss': {
+        // Arms swing side to side, one in front and one behind, hips the other way
+        const sw = Math.sin(t * 9);
+        const front = Math.cos(t * 9) > 0 ? 1 : -1;
+        L.root.rotation.z = R.root.rotation.z = sw * 0.55;
+        L.root.rotation.x = 0.35 * front;
+        R.root.rotation.x = -0.35 * front;
+        L.mid.rotation.x = R.mid.rotation.x = -0.05;
+        this.hips.rotation.z = -sw * 0.12;
+        this.hips.position.x = -sw * 0.05;
+        this.spine.rotation.z = sw * 0.1;
+        this.head.rotation.z = -sw * 0.08;
+        break;
+      }
+      case 'disco': {
+        // Saturday night: right finger up to the sky, then down across the body
+        const up = Math.floor(t * 2) % 2 === 0;
+        R.root.rotation.x = up ? -2.7 : -0.5;
+        R.root.rotation.z = up ? 0.5 : -0.55;
+        R.mid.rotation.x = -0.05;
+        L.root.rotation.x = 0.15;
+        L.root.rotation.z = -0.55;
+        L.mid.rotation.x = -1.9;
+        this.hips.rotation.y = Math.sin(t * Math.PI * 2) * 0.18;
+        this.hips.rotation.z = Math.sin(t * Math.PI * 2) * 0.06;
+        this.head.rotation.x = up ? -0.3 : 0.2;
+        this.head.rotation.y = up ? 0.25 : -0.2;
+        RL.mid.rotation.x = up ? 0.15 : 0.45;
+        RL.end!.rotation.x = up ? 0 : 0.4;
+        break;
+      }
+      case 'breakdance': {
+        // Toprock, then spins low on one leg with the other kicked out
+        const spin = t % 4 > 1.6;
+        if (!spin) {
+          const ph = t * 6;
+          LL.root.rotation.x = Math.max(0, Math.sin(ph)) * -0.7;
+          LL.mid.rotation.x = Math.max(0, Math.sin(ph)) * 1.1;
+          RL.root.rotation.x = Math.max(0, -Math.sin(ph)) * -0.7;
+          RL.mid.rotation.x = Math.max(0, -Math.sin(ph)) * 1.1;
+          L.root.rotation.x = Math.sin(ph) * 0.8;
+          R.root.rotation.x = -Math.sin(ph) * 0.8;
+          L.mid.rotation.x = R.mid.rotation.x = -1.2;
+          this.hips.position.y = 0.88 + Math.abs(Math.sin(ph)) * 0.04;
+          this.spine.rotation.x = 0.2;
+          this.hips.rotation.y = Math.sin(ph * 0.5) * 0.4;
+        } else {
+          this.hips.rotation.y = t * 9;
+          this.hips.position.y = 0.6;
+          LL.root.rotation.x = -1.4;
+          LL.mid.rotation.x = 0.15;
+          RL.root.rotation.x = -0.9;
+          RL.mid.rotation.x = 2.0;
+          L.root.rotation.z = -1.45;
+          R.root.rotation.z = 1.45;
+          L.mid.rotation.x = R.mid.rotation.x = -0.1;
+          this.spine.rotation.x = 0.35;
+          this.head.rotation.x = -0.2;
+        }
         break;
       }
       default: {
@@ -826,39 +983,102 @@ export class RemotePlayer {
     const p = this.walkPhase;
     const amp = moving * (sprinting ? 1.25 : 0.85);
 
-    // Hips: drop when crouching, small bob while walking
-    this.hips.position.y = 0.92 - this.crouch * 0.36 - Math.abs(Math.sin(p)) * 0.03 * amp;
-    this.hips.rotation.y = Math.sin(p) * 0.08 * amp;
-    // Spine: lean forward when running / crouching, breathe
+    const still = 1 - moving;
+    this.blink(delta);
+    // Idle: slow weight shift from one leg to the other, and the eyes wander
+    const shift = Math.sin(this.breathe * 0.22) * still * (1 - this.crouch);
+    this.glanceIn -= delta;
+    if (this.glanceIn <= 0) {
+      this.glanceIn = 1.5 + Math.random() * 3.5;
+      this.glanceTarget = (Math.random() - 0.5) * (moving > 0.3 ? 0.3 : 0.9);
+    }
+    this.glance += (this.glanceTarget - this.glance) * (1 - Math.exp(-5 * delta));
+
+    // Hips: drop when crouching, bob twice per stride, roll and sway with each step
+    this.hips.position.y = 0.92 - this.crouch * 0.36 - Math.abs(Math.sin(p)) * 0.035 * amp - Math.abs(shift) * 0.008;
+    this.hips.position.x = Math.sin(p) * 0.018 * amp + shift * 0.022;
+    this.hips.rotation.y = Math.sin(p) * 0.09 * amp;
+    this.hips.rotation.z = Math.sin(p) * 0.045 * amp + shift * 0.035;
+    // Spine: lean forward when running / crouching, shoulders counter-rotate, breathe
     const lean = this.crouch * 0.45 + (sprinting ? 0.25 : 0.04 * amp);
     this.spine.rotation.x += (lean - this.spine.rotation.x) * k;
-    this.spine.rotation.y = -Math.sin(p) * 0.1 * amp;
-    this.spine.scale.set(1 + Math.sin(this.breathe) * 0.012, 1, 1 + Math.sin(this.breathe) * 0.02);
+    this.spine.rotation.y = -Math.sin(p) * 0.16 * amp;
+    this.spine.rotation.z = -this.hips.rotation.z * 0.7;
+    const br = Math.sin(this.breathe);
+    this.spine.scale.set(1 + br * 0.012, 1 + br * 0.004, 1 + br * 0.022);
 
-    // Legs: swing + knee bend, deep bend when crouching
+    // Legs: swing + knee bend, deep bend when crouching; the foot rolls heel → toe
     this.legs.forEach((l, i) => {
       const ph = p + i * Math.PI;
-      const swing = Math.sin(ph) * 0.6 * amp - this.crouch * 0.9;
+      const sideShift = (i === 0 ? 1 : -1) * shift; // the relaxed leg bends a little
+      const swing = Math.sin(ph) * 0.6 * amp - this.crouch * 0.9 + Math.max(0, -sideShift) * 0.06;
       l.root.rotation.x += (swing - l.root.rotation.x) * k;
-      const bend = Math.max(0, -Math.cos(ph)) * 0.9 * amp + this.crouch * 1.6 + 0.05;
+      const bend = Math.max(0, -Math.cos(ph)) * 0.95 * amp + this.crouch * 1.6 + 0.05 + Math.max(0, -sideShift) * 0.14;
       l.mid.rotation.x += (bend - l.mid.rotation.x) * k;
+      if (l.end) {
+        // Keep the sole on the floor, lift the heel when the leg is behind (toe-off),
+        // land on the heel when it swings forward
+        const flat = -(l.root.rotation.x + l.mid.rotation.x) * 0.9;
+        const toeOff = Math.max(0, Math.sin(ph - 0.4)) * 0.35 * amp;
+        const heel = -Math.max(0, -Math.sin(ph + 0.5)) * 0.2 * amp;
+        const target = flat + toeOff + heel;
+        l.end.rotation.x += (target - l.end.rotation.x) * k;
+      }
     });
 
-    // Arms: left swings, right aims the flashlight
+    // Arms: left swings (elbow bends more in front), right aims the flashlight
     const [left, right] = this.arms;
-    const lSwing = -Math.sin(p) * 0.55 * amp;
+    const lSwing = -Math.sin(p) * 0.55 * amp + still * Math.sin(this.breathe * 0.5) * 0.03;
     left.root.rotation.x += (lSwing - left.root.rotation.x) * k;
-    left.mid.rotation.x += (-0.25 - amp * 0.35 - left.mid.rotation.x) * k;
-    left.root.rotation.z = -0.13;
-    const rTarget = aiming ? -1.25 - this.pitch * 0.8 : Math.sin(p) * 0.55 * amp;
+    left.mid.rotation.x += (-0.2 - amp * 0.3 - Math.max(0, -lSwing) * 0.5 - left.mid.rotation.x) * k;
+    left.root.rotation.z = -0.13 - (sprinting ? 0.12 : 0) - Math.max(0, shift) * 0.03;
+    const rSwing = Math.sin(p) * 0.55 * amp;
+    const rTarget = aiming ? -1.25 - this.pitch * 0.8 : rSwing;
     right.root.rotation.x += (rTarget - right.root.rotation.x) * k;
-    right.mid.rotation.x += ((aiming ? -0.15 : -0.25 - amp * 0.35) - right.mid.rotation.x) * k;
-    right.root.rotation.z = 0.13;
+    right.mid.rotation.x += ((aiming ? -0.15 : -0.2 - amp * 0.3 - Math.max(0, -rSwing) * 0.5) - right.mid.rotation.x) * k;
+    right.root.rotation.z = 0.13 + (sprinting ? 0.12 : 0);
 
-    // Head follows the look direction, a little nervous glance
+    // Head follows the look direction, stays steady over the swaying shoulders, glances around
     this.head.rotation.x += (-this.pitch * 0.6 - this.head.rotation.x) * k;
-    this.head.rotation.y = Math.sin(this.breathe * 0.7) * 0.05;
+    this.head.rotation.y = -this.spine.rotation.y * 0.8 - this.hips.rotation.y * 0.6 + this.glance * 0.6;
+    this.head.rotation.z = -this.spine.rotation.z * 0.5 - shift * 0.03;
     this.torchLens.emissiveIntensity = aiming ? 3 : 0;
+
+    // 👋 Emote gesture on top of the walk (blends in and out)
+    if (this.gestureT > 0) {
+      this.gestureT -= delta;
+      const w = Math.min(1, this.gestureT / 0.3, (2.4 - this.gestureT) / 0.25);
+      const T = 2.4 - this.gestureT;
+      const blend = (o: THREE.Object3D, x: number, z?: number) => {
+        o.rotation.x += (x - o.rotation.x) * w;
+        if (z !== undefined) o.rotation.z += (z - o.rotation.z) * w;
+      };
+      switch (this.gestureId) {
+        case 0: // wave
+          blend(right.root, -2.8, 0.3 + Math.sin(T * 9) * 0.35);
+          blend(right.mid, -0.35);
+          break;
+        case 1: // point the way
+          blend(right.root, -1.55, 0.05);
+          blend(right.mid, -0.05);
+          blend(this.head, -0.05);
+          break;
+        case 2: // scared: hands up to the face, shaking
+          blend(left.root, -2.0, -0.55 + Math.sin(T * 30) * 0.04);
+          blend(right.root, -2.0, 0.55 + Math.sin(T * 31) * 0.04);
+          blend(left.mid, -2.2);
+          blend(right.mid, -2.2);
+          this.spine.rotation.x += (-0.12 - this.spine.rotation.x) * w;
+          this.body.position.x = Math.sin(T * 40) * 0.006 * w;
+          break;
+        case 3: // shush: finger to the lips
+          blend(right.root, -1.95, 0.55);
+          blend(right.mid, -2.55);
+          blend(this.head, 0.15);
+          break;
+      }
+      if (this.gestureT <= 0) this.body.position.x = 0;
+    }
   }
 
   /** Customisation preview: idle breathing, flashlight in hand. */

@@ -2834,6 +2834,7 @@ export class GameEngine {
       case 'emote':
         if (msg.e >= 0 && msg.e < EMOTES.length) {
           this.remote?.showEmote(EMOTES[msg.e]);
+          this.remote?.gesture(msg.e);
           this.state.showToast(`${this.peerName} : ${EMOTES[msg.e]}`);
         }
         break;

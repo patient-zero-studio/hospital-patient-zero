@@ -165,6 +165,27 @@ export const CATALOG: Cosmetic[] = [
   c('d-flex', 'Muscles !', 'human', 'dance', 'flex', 'moyen'),
   c('d-robot', 'Danse du robot', 'human', 'dance', 'robot', 'style'),
   c('d-moon', 'Moonwalk', 'human', 'dance', 'moon', 'exclusif'),
+  c('d-bow', 'Révérence', 'human', 'dance', 'bow', 'petit'),
+  c('d-zombie', 'Marche du zombie', 'human', 'dance', 'zombie', 'petit'),
+  c('d-chicken', 'Danse du poulet', 'human', 'dance', 'chicken', 'moyen'),
+  c('d-floss', 'Floss', 'human', 'dance', 'floss', 'moyen'),
+  c('d-disco', 'Disco', 'human', 'dance', 'disco', 'style'),
+  c('d-break', 'Breakdance', 'human', 'dance', 'breakdance', 'exclusif'),
+  // 🤠 Chapeaux, masques et tenues
+  c('h-acc-eyepatch', 'Cache-œil', 'human', 'acc', 'eyepatch', 'petit'),
+  c('h-acc-fedora', 'Chapeau de détective', 'human', 'acc', 'fedora', 'moyen'),
+  c('h-acc-cowboy', 'Chapeau de cowboy', 'human', 'acc', 'cowboyhat', 'moyen'),
+  c('h-acc-pirate', 'Tricorne de pirate', 'human', 'acc', 'piratehat', 'moyen'),
+  c('m-acc-pirate', 'Tricorne de pirate', 'monster', 'acc', 'piratehat', 'moyen'),
+  c('h-acc-plague', 'Masque de peste', 'human', 'acc', 'plaguemask', 'style'),
+  c('m-acc-plague', 'Masque de peste', 'monster', 'acc', 'plaguemask', 'style'),
+  c('h-out-cowboy', 'Cowboy', 'human', 'outfit', 'cowboy', 'style'),
+  c('h-out-pirate', 'Pirate', 'human', 'outfit', 'pirate', 'style'),
+  c('h-out-detective', 'Détective', 'human', 'outfit', 'detective', 'style'),
+  c('h-out-plague', 'Médecin de peste', 'human', 'outfit', 'plaguedoc', 'exclusif'),
+  c('m-out-plague', 'Bête de la peste', 'monster', 'outfit', 'plaguebeast', 'style'),
+  c('m-out-wendigo', 'Wendigo', 'monster', 'outfit', 'wendigo', 'exclusif'),
+  c('m-out-ghostpirate', 'Pirate fantôme', 'monster', 'outfit', 'ghostpirate', 'exclusif'),
   // ✨ Animated skins
   c('hfx-aura', 'Aura spectrale', 'human', 'fx', 'aura', 'exclusif'),
   c('hfx-smoke', 'Traînée de fumée', 'human', 'fx', 'smoke', 'style'),
@@ -437,7 +458,17 @@ export const buyCosmetic = (w: Wallet, id: string, key = todayKey(), season: Sea
   const item = cosmetic(id);
   if (!item) return 'Article inconnu.';
   if (item.unlock)
-    return item.unlock === 'pass' ? 'Ce skin se gagne dans le pass de saison.' : item.unlock === 'xmas' ? 'Ce skin se gagne dans la Nuit de Noël (les 12 cadeaux).' : 'Ce skin se gagne en montant de niveau.';
+    return item.unlock === 'pass'
+      ? 'Ce skin se gagne dans le pass de saison.'
+      : item.unlock === 'xmas'
+        ? 'Ce skin se gagne dans la Nuit de Noël (les 12 cadeaux).'
+        : item.unlock === 'story'
+          ? 'Ce skin se gagne avec un succès (voir le menu Succès).'
+          : item.unlock === 'ranked'
+            ? 'Ce skin se gagne en mode classé.'
+            : item.unlock === 'clan'
+              ? 'Ce skin se gagne dans le coffre de clan.'
+              : 'Ce skin se gagne en montant de niveau.';
   const inEvent = seasonShop(season).some((x) => x.id === id);
   if (item.season && !inEvent) return item.calendarOnly ? 'Cet article est seulement dans le calendrier de l\'Avent.' : 'L\'événement est terminé.';
   if (!inEvent && !dailyShop(key).some((x) => x.id === id)) return 'Cet article n\'est plus en boutique aujourd\'hui.';

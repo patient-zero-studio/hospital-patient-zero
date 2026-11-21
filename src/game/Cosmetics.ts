@@ -55,6 +55,11 @@ export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
   hazmat: { gown: '#f5c400', hair: '#1d1d22', accs: ['gasmask'], extras: ['belt'] },
   moreauh: { gown: '#ecebe6', hair: '#b8b8b8', accs: ['glasses'], gownFx: 'white', extras: ['stethoscope'] },
   lucas: { gown: '#8fb0de', hair: '#4a2e1a', accs: [], extras: ['stripes'] },
+  // 🤠 Nouvelles tenues
+  cowboy: { gown: '#8a5a2b', hair: '#4a2e1a', accs: ['cowboyhat'], extras: ['belt'] },
+  pirate: { gown: '#7a1a1a', hair: '#1d1d22', accs: ['piratehat', 'eyepatch'], extras: ['belt'] },
+  detective: { gown: '#9a8a6a', hair: '#3a2a1a', accs: ['fedora'], extras: ['belt'] },
+  plaguedoc: { gown: '#141414', hair: '#141414', accs: ['plaguemask', 'fedora'], extras: ['cape'] },
   // 🔪 Imposteur: 10 wins
   impostor: { gown: '#1a0a0e', hair: '#0a0a0a', accs: ['impmask'], extras: ['cape'] },
   clanknight: { gown: '#2a2f45', hair: '#1d1d22', accs: ['beret'], extras: ['cape', 'belt'] },
@@ -320,6 +325,134 @@ const buildFestive = (id: string, h: HeadSpec, track: Track, g: THREE.Group): bo
       grin.castShadow = false;
       return true;
     }
+    case 'fedora':
+    case 'cowboyhat': {
+      // Felt hat: a brim (curled up on the sides for the cowboy) and a pinched crown
+      const cow = id === 'cowboyhat';
+      const felt = std(track, cow ? 0x8a5a2b : 0x4a3a2a, { roughness: 0.95 });
+      const R = h.rx * (cow ? 2.05 : 1.6);
+      const brimGeo = new THREE.CylinderGeometry(R, R, 0.012 * s, 40, 1);
+      const bp = brimGeo.attributes.position;
+      for (let i = 0; i < bp.count; i++) {
+        const x = bp.getX(i);
+        const z = bp.getZ(i);
+        const k = Math.abs(x) / R;
+        // cowboy: sides roll up; fedora: front dips a little
+        bp.setY(i, bp.getY(i) + (cow ? k * k * k * 0.07 * s : -Math.max(0, z / R) * 0.018 * s));
+      }
+      brimGeo.computeVertexNormals();
+      const brim = add(track, g, track(brimGeo), felt, 0, h.top - 0.045 * s, 0);
+      brim.scale.z = h.rz / h.rx;
+      const crownGeo = new THREE.CylinderGeometry(h.rx * 0.82, h.rx * 0.98, 0.1 * s, 28, 3);
+      const cp = crownGeo.attributes.position;
+      for (let i = 0; i < cp.count; i++) {
+        const y = cp.getY(i);
+        if (y > 0.04 * s) {
+          // dent along the top, pinched at the front
+          const x = cp.getX(i);
+          const z = cp.getZ(i);
+          cp.setY(i, y - 0.025 * s * Math.exp(-(x * x) / (0.0016 * s * s)) - Math.max(0, z) * 0.15);
+        }
+      }
+      crownGeo.computeVertexNormals();
+      const crown = add(track, g, track(crownGeo), felt, 0, h.top + 0.01 * s, -0.004 * s);
+      crown.scale.z = h.rz / h.rx;
+      const band = add(track, g, new THREE.CylinderGeometry(h.rx * 0.985, h.rx * 0.99, 0.02 * s, 28, 1, true), std(track, cow ? 0x2a1a10 : 0x111111, { roughness: 0.6, side: THREE.DoubleSide }), 0, h.top - 0.025 * s, -0.004 * s);
+      band.scale.z = h.rz / h.rx;
+      g.rotation.x = -0.08;
+      return true;
+    }
+    case 'piratehat': {
+      // Tricorne: a rounded-triangle brim whose three edges turn up, gold piping,
+      // a felt crown and a skull and crossbones on the front point
+      const felt = std(track, 0x1c1410, { roughness: 0.85, side: THREE.DoubleSide });
+      const gold = std(track, 0xd4a840, { metalness: 0.9, roughness: 0.3 });
+      const R = h.rx * 1.85;
+      const corner = (k: number, r: number) => {
+        const a = -Math.PI / 2 + (k * Math.PI * 2) / 3; // one point to the front (+z once laid flat)
+        return new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r);
+      };
+      const sh = new THREE.Shape();
+      const pts: THREE.Vector2[] = [];
+      for (let k = 0; k < 3; k++) {
+        const c = corner(k, R);
+        const n = corner(k + 1, R);
+        // each side bows inwards between two corners
+        for (let u = 0; u < 12; u++) {
+          const t = u / 12;
+          const mid = c.clone().lerp(n, t);
+          mid.multiplyScalar(1 - 0.22 * Math.sin(t * Math.PI));
+          pts.push(mid);
+        }
+      }
+      sh.setFromPoints(pts);
+      const brimGeo = new THREE.ExtrudeGeometry(sh, { depth: 0.01 * s, bevelEnabled: false, curveSegments: 1 });
+      brimGeo.rotateX(-Math.PI / 2);
+      const bp = brimGeo.attributes.position;
+      for (let i = 0; i < bp.count; i++) {
+        const x = bp.getX(i);
+        const z = bp.getZ(i);
+        const d = Math.hypot(x, z) / R;
+        bp.setY(i, bp.getY(i) + Math.max(0, d - 0.45) ** 1.5 * 0.13 * s); // edges cocked up
+      }
+      brimGeo.computeVertexNormals();
+      const brim = add(track, g, track(brimGeo), felt, 0, h.top - 0.05 * s, 0);
+      brim.scale.z = h.rz / h.rx;
+      // gold piping along the edge
+      const edge = pts.map((p) => {
+        const d = p.length() / R;
+        return new THREE.Vector3(p.x, h.top - 0.05 * s + 0.011 * s + Math.max(0, d - 0.45) ** 1.5 * 0.13 * s, -p.y * (h.rz / h.rx));
+      });
+      add(track, g, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(edge, true), 72, 0.0035 * s, 5, true), gold);
+      // crown
+      add(track, g, new THREE.SphereGeometry(h.rx * 1.0, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), felt, 0, h.top - 0.045 * s, 0).scale.set(1, 0.8, h.rz / h.rx);
+      // skull & crossbones on the front point
+      const bone = std(track, 0xf2efe6, { roughness: 0.5 });
+      const fz = R * (h.rz / h.rx) * 0.62;
+      const fy = h.top - 0.04 * s + 0.045 * s;
+      add(track, g, new THREE.SphereGeometry(0.014 * s, 10, 8), bone, 0, fy + 0.008 * s, fz);
+      for (const r of [0.7, -0.7]) {
+        const b = add(track, g, new THREE.CapsuleGeometry(0.003 * s, 0.032 * s, 3, 5), bone, 0, fy - 0.01 * s, fz + 0.002 * s);
+        b.rotation.z = r + Math.PI / 2;
+      }
+      return true;
+    }
+    case 'eyepatch': {
+      const black = std(track, 0x0a0a0a, { roughness: 0.7, side: THREE.DoubleSide });
+      const patch = add(track, g, new THREE.SphereGeometry(0.024 * s, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), black, -0.031 * s, h.cy + 0.012 * s, h.rz * 0.93);
+      patch.rotation.x = Math.PI / 2;
+      patch.scale.set(1.05, 1, 0.45);
+      const strap = add(track, g, new THREE.TorusGeometry(h.rx * 1.03, 0.0025 * s, 4, 32), black, 0, h.cy + 0.03 * s, 0);
+      strap.rotation.set(Math.PI / 2 - 0.25, 0, 0.2);
+      strap.scale.set(1, h.rz / h.rx, 1);
+      return true;
+    }
+    case 'plaguemask': {
+      // Plague doctor: a long curved leather beak, round red glass eyes, rivets
+      const leather = std(track, 0x2a1d14, { roughness: 0.7 });
+      const cap = add(track, g, new THREE.SphereGeometry(h.rx * 1.06, 22, 14, -Math.PI * 0.45, Math.PI * 0.9, Math.PI * 0.15, Math.PI * 0.6), leather, 0, h.cy + 0.01 * s, 0.004 * s);
+      cap.scale.set(1, 1.15, h.rz / h.rx);
+      (cap.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+      const beakGeo = new THREE.ConeGeometry(0.034 * s, 0.17 * s, 16, 6);
+      const bp = beakGeo.attributes.position;
+      for (let i = 0; i < bp.count; i++) {
+        const y = bp.getY(i); // -0.085 (base) → +0.085 (tip)
+        const u = (y / s + 0.085) / 0.17;
+        bp.setZ(i, bp.getZ(i) - u * u * 0.04 * s); // curves down at the tip
+      }
+      beakGeo.computeVertexNormals();
+      const beak = add(track, g, track(beakGeo), leather, 0, h.cy - 0.03 * s, h.rz + 0.075 * s);
+      beak.rotation.x = Math.PI / 2 + 0.25;
+      const glass = track(new THREE.MeshPhysicalMaterial({ color: 0x8a0a0a, roughness: 0.05, clearcoat: 1, emissive: 0x3a0000, emissiveIntensity: 0.6 }));
+      const brass = std(track, 0xb08a3a, { metalness: 0.9, roughness: 0.35 });
+      for (const side of [-1, 1]) {
+        add(track, g, new THREE.CircleGeometry(0.019 * s, 18), glass, side * 0.034 * s, h.cy + 0.022 * s, h.rz * 1.02 + 0.006 * s);
+        const rim = add(track, g, new THREE.TorusGeometry(0.02 * s, 0.004 * s, 6, 18), brass, side * 0.034 * s, h.cy + 0.022 * s, h.rz * 1.02 + 0.006 * s);
+        rim.scale.z = 0.6;
+      }
+      for (let i = 0; i < 5; i++) add(track, g, new THREE.SphereGeometry(0.004 * s, 6, 4), brass, -0.02 * s + i * 0.01 * s, h.cy - 0.012 * s, h.rz * 1.06 + 0.02 * s);
+      return true;
+    }
     case 'clownnose':
       add(track, g, new THREE.SphereGeometry(0.024 * s, 16, 12), std(track, 0xff1a1a, { roughness: 0.25, emissive: 0x500000, emissiveIntensity: 0.5 }), 0, h.cy - 0.01 * s, h.rz + 0.016 * s);
       return true;
@@ -548,6 +681,10 @@ export const MONSTER_OUTFITS: Record<string, MonsterOutfit> = {
   clanbeast: { skin: '#3a3f5a', eyes: '#7dd3fc', gown: '#14182a', accs: ['horns', 'chains'], skinFx: 'abyss' },
   // 🏅 Pass classé
   gladiator: { skin: '#6a4a32', eyes: '#ff3a10', gown: '#3a1a0a', accs: ['hockey', 'chains'], skinFx: 'gold' },
+  // 🦌 Nouvelles créatures
+  wendigo: { skin: '#d8d0c0', eyes: '#9ef0ff', gown: '#2a2420', accs: ['antlers'], skinFx: 'bone' },
+  plaguebeast: { skin: '#3a3a30', eyes: '#ff3a10', gown: '#141414', accs: ['plaguemask'] },
+  ghostpirate: { skin: '#7ad0c8', eyes: '#e0fff8', gown: '#203a3a', accs: ['piratehat', 'chains'], skinFx: 'frost' },
   // 🎄 Nuit de Noël
   evilsanta: { skin: '#d8cfc4', eyes: '#ff1a0a', gown: '#9a0c18', accs: ['santahat', 'beard'] },
 };
