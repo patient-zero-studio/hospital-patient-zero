@@ -7,6 +7,8 @@ interface Props {
   /** 🎪 La Nuit du Cirque */
   circus?: boolean;
   imp?: boolean;
+  /** a message from the server (e.g. why the replay can't start) */
+  note?: string;
   won: boolean;
   text: string;
   role: 'monster' | 'survivor' | 'racer';
@@ -16,7 +18,7 @@ interface Props {
 }
 
 /** Versus ("Chasse") round result. */
-export const VersusResultModal: React.FC<Props> = ({ won, text, role, hide, circus, imp, onPlayAgain, onMainMenu }) => {
+export const VersusResultModal: React.FC<Props> = ({ won, text, role, hide, circus, imp, note, onPlayAgain, onMainMenu }) => {
   const accent = won ? (role === 'monster' ? '#dc2626' : '#f59e0b') : '#71717a';
   return (
     <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4">
@@ -42,6 +44,7 @@ export const VersusResultModal: React.FC<Props> = ({ won, text, role, hide, circ
           {won ? 'VICTOIRE' : 'DÉFAITE'}
         </h1>
         <p className="text-sm text-zinc-300 font-serif italic mb-8">{text}</p>
+        {note && <p className="w-full mb-3 px-3 py-2 border border-amber-700 bg-amber-950/60 text-amber-200 font-mono text-xs">⚠ {note}</p>}
         <div className="w-full flex flex-col gap-2">
           {onPlayAgain ? (
             <button

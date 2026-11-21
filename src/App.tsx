@@ -666,7 +666,10 @@ export default function App() {
     const on = onlineRef.current;
     if (on) {
       // Online: only the host restarts, for both players
-      if (on.role === 'host') netRef.current?.start();
+      if (on.role === 'host') {
+        setLobby((l) => ({ ...l, error: null }));
+        netRef.current?.start();
+      }
       return;
     }
     // Campaign: back to the start of the chapter, with what you had then
@@ -1229,6 +1232,7 @@ export default function App() {
         refreshFriendsRef.current();
         break;
       case 'start': {
+        setLobby((x) => (x.error ? { ...x, error: null } : x));
         const l = lobbyRef.current;
         const role = l.status === 'hosting' ? 'host' : 'guest';
         const net = netRef.current;
@@ -1834,6 +1838,7 @@ export default function App() {
           hide={!!online.hide}
           circus={!!online.circus}
           imp={!!online.imp}
+          note={lobby.error || undefined}
           onPlayAgain={online.role === 'host' ? handleRestart : undefined}
           onMainMenu={handleMainMenu}
         />

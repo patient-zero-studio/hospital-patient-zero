@@ -868,17 +868,22 @@ export class GameEngine {
     const won = me ? !crew : crew;
     const who = g.impostor;
     const caught = g.dead.has(who);
+    const left = g.crewAlive();
+    const names = left.join(', ');
+    const many = left.length > 1;
     let text: string;
     if (me) {
       text = won
         ? '🔪 Vous étiez l\'imposteur… et plus personne n\'est debout. Victoire du monstre !'
         : caught
           ? '🗳 Démasqué ! Les autres vous ont banni avant la fin des nuits.'
-          : `🌅 Les ${g.nights} nuits sont passées : ${g.crewAlive().join(', ')} vous a échappé.`;
+          : `🌅 Les ${g.nights} nuits sont passées : ${names} ${many ? 'vous ont' : 'vous a'} échappé.`;
+    } else if (crew && g.impLeft) {
+      text = `🚪 ${who} a quitté la partie… c'était l'imposteur ! Victoire des survivants.`;
     } else if (crew) {
       text = caught
         ? `🗳 ${who} était l'imposteur… et vous l'avez démasqué !`
-        : `🌅 Les ${g.nights} nuits sont passées ! ${who} était l'imposteur, mais ${g.crewAlive().join(', ')} a survécu.`;
+        : `🌅 Les ${g.nights} nuits sont passées ! ${who} était l'imposteur, mais ${names} ${many ? 'ont' : 'a'} survécu.`;
     } else text = `🔪 ${who} était l'imposteur. Le monstre a eu tout le monde.`;
     if (g.doctor) text += ` 🩺 Médecin : ${g.doctor}.`;
     if (g.detective) text += ` 🔍 Détective : ${g.detective}.`;
@@ -2700,6 +2705,8 @@ export class GameEngine {
 
   private endGameOver() {
     if (this.finished && !this.spectating) return;
+    // 🔪 Imposteur: the game ends only with its own result screen
+    if (this.imp && !this.impDone) return;
     this.spectating = false;
     this.finished = true;
     this.running = false;

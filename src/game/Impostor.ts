@@ -34,6 +34,8 @@ export interface ImpNet {
   imp?: string;
   /** last morning's news */
   log?: string;
+  /** the impostor quit the room */
+  il?: boolean;
 }
 
 export type ImpEvent =
@@ -68,6 +70,8 @@ export class ImpostorGame {
   /** killed during the current night (told at dawn) */
   private tonight: string[] = [];
   private savedTonight = false;
+  /** the impostor left the room (crew wins by forfeit) */
+  public impLeft = false;
 
   constructor(public players: string[], seed: number) {
     this.impostor = pickImpostor(players, seed);
@@ -163,7 +167,11 @@ export class ImpostorGame {
   public leave(name: string): ImpEvent[] {
     const ev: ImpEvent[] = [];
     if (this.res || !this.players.includes(name)) return ev;
-    if (name === this.impostor) return this.finish('crew', ev);
+    if (name === this.impostor) {
+      this.impLeft = true;
+      return this.finish('crew', ev);
+    }
+    if (name === this.protect) this.protect = null;
     this.dead.add(name);
     if (this.crewAlive().length === 0) this.finish('imp', ev);
     return ev;
@@ -188,6 +196,8 @@ export class ImpostorGame {
     }
     const wasImp = best === this.impostor;
     this.dead.add(best);
+    // a banished Medic protects nobody tonight
+    if (best === this.doctor) this.protect = null;
     ev.push({ e: 'banish', victim: best, wasImp });
     this.log = wasImp ? `🗳 ${best} est banni… c'était l'imposteur !` : `🗳 ${best} est banni… mais c'était un innocent.`;
     if (wasImp) this.finish('crew', ev);
@@ -212,6 +222,7 @@ export class ImpostorGame {
       res: this.res ?? undefined,
       imp: this.res ? this.impostor : undefined,
       log: this.log || undefined,
+      il: this.impLeft || undefined,
     };
   }
 
@@ -225,5 +236,6 @@ export class ImpostorGame {
     this.cooldown = s.cd;
     this.res = s.res ?? null;
     this.log = s.log ?? '';
+    this.impLeft = !!s.il;
   }
 }
