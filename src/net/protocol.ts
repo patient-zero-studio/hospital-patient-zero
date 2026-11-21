@@ -1,5 +1,6 @@
 import type { GameEnding, GameItem, Objective, MonsterState } from '../types';
 import type { Appearance } from '../appearance';
+import type { ImpNet } from '../game/Impostor';
 
 /** What each player tells the other about themselves (~15 Hz). */
 export interface PlayerNetState {
@@ -116,7 +117,13 @@ export type GameMsg =
   /** 👀 a spectator arrived: send everything again (full snapshot, looks) */
   | { k: 'resync' }
   /** 🎪 guest → host: answer to the Ringmaster's deal */
-  | { k: 'pact'; yes: boolean };
+  | { k: 'pact'; yes: boolean }
+  /** 🔪 Imposteur: host → all (state), impostor → host (kill), anyone → host (vote), host → victim */
+  | { k: 'imps'; s: ImpNet }
+  | { k: 'ikill'; t: string }
+  | { k: 'ivote'; t: string }
+  | { k: 'imkill'; x: number; z: number }
+  | { k: 'imout' };
 
 /** Emotes, keys 6 → 9 */
 export const EMOTES = ['👋 Salut !', '👉 Par ici !', '😱 Au secours !', '🤫 Chut !'];
@@ -129,6 +136,9 @@ export interface GameLink {
   peers?: string[];
   /** 👥 my place in the room (0 = host) */
   seat?: number;
+  /** 🔪 Imposteur mode, with everyone in the room (host first) */
+  imp?: boolean;
+  players?: string[];
   /** coop = together vs the AI; versus = one of the two players is the creature; race = first one out wins */
   mode: 'coop' | 'versus' | 'race';
   /** 🫣 versus variant: hide-and-seek (the seeker plays the creature) */

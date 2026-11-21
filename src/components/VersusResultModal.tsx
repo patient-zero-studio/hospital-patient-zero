@@ -6,6 +6,7 @@ interface Props {
   hide?: boolean;
   /** 🎪 La Nuit du Cirque */
   circus?: boolean;
+  imp?: boolean;
   won: boolean;
   text: string;
   role: 'monster' | 'survivor' | 'racer';
@@ -15,7 +16,7 @@ interface Props {
 }
 
 /** Versus ("Chasse") round result. */
-export const VersusResultModal: React.FC<Props> = ({ won, text, role, hide, circus, onPlayAgain, onMainMenu }) => {
+export const VersusResultModal: React.FC<Props> = ({ won, text, role, hide, circus, imp, onPlayAgain, onMainMenu }) => {
   const accent = won ? (role === 'monster' ? '#dc2626' : '#f59e0b') : '#71717a';
   return (
     <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4">
@@ -27,7 +28,9 @@ export const VersusResultModal: React.FC<Props> = ({ won, text, role, hide, circ
           {won ? <Trophy className="w-9 h-9" style={{ color: accent }} /> : <Skull className="w-9 h-9 text-zinc-400" />}
         </div>
         <div className="text-[10px] font-mono uppercase tracking-[0.35em] text-zinc-500 mb-1">
-          {circus
+          {imp
+            ? '🔪 Imposteur'
+            : circus
             ? '🎪 La Nuit du Cirque'
             : role === 'racer'
             ? 'Mode Course — le premier sorti gagne'
@@ -45,7 +48,7 @@ export const VersusResultModal: React.FC<Props> = ({ won, text, role, hide, circ
               onClick={onPlayAgain}
               className="w-full py-3 bg-red-700 hover:bg-red-600 text-white font-mono text-xs uppercase tracking-widest flex items-center justify-center gap-2 font-bold"
             >
-              <RotateCcw className="w-4 h-4" /> {hide ? 'Manche suivante (rôles échangés)' : circus ? 'Un nouveau spectacle' : 'Revanche'}
+              <RotateCcw className="w-4 h-4" /> {hide ? 'Manche suivante (rôles échangés)' : circus ? 'Un nouveau spectacle' : imp ? 'Nouvelle partie (nouvel imposteur)' : 'Revanche'}
             </button>
           ) : (
             <div className="w-full py-3 border border-zinc-800 text-zinc-500 font-mono text-xs uppercase tracking-widest">

@@ -1347,6 +1347,8 @@ interface Room {
   seed?: number;
   /** 🫣 versus variant: hide-and-seek (roles swap every round) */
   hide?: boolean;
+  /** 🔪 co-op variant: Imposteur (4 to 8 players, hospital) */
+  imp?: boolean;
   hideRound?: number;
   /** 👀 friends watching */
   spectators?: Client[];
@@ -1356,7 +1358,13 @@ interface Room {
 const roomSettings = (r: Room) => {
   if (r.chapter >= 4 && r.mode !== 'coop') r.chapter = 1;
   if (r.mode !== 'versus') r.hide = false;
-  return { difficulty: r.difficulty, mode: r.mode, monster: r.monster, chapter: r.chapter, hide: !!r.hide };
+  if (r.mode !== 'coop') r.imp = false;
+  // Imposteur: the hospital, and no other monster than the impostor
+  if (r.imp) {
+    r.chapter = 1;
+    r.difficulty = 1;
+  }
+  return { difficulty: r.difficulty, mode: r.mode, monster: r.monster, chapter: r.chapter, hide: !!r.hide, imp: !!r.imp };
 };
 const parseChapter = (v: unknown): 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9 => {
   const n = Number(v);
@@ -1492,6 +1500,7 @@ server.on('upgrade', (req, socket, head) => {
             chapter: parseChapter(msg.chapter),
             started: false,
             hide: msg.hide === true,
+            imp: msg.imp === true,
           };
           rooms.set(room.code, room);
           client.room = room;
@@ -1523,6 +1532,7 @@ server.on('upgrade', (req, socket, head) => {
           if (msg.monster !== undefined) room.monster = parseSide(msg.monster);
           if (msg.chapter !== undefined) room.chapter = parseChapter(msg.chapter);
           if (msg.hide !== undefined) room.hide = msg.hide === true;
+          if (msg.imp !== undefined) room.imp = msg.imp === true;
           if (msg.hide !== undefined || msg.mode !== undefined) room.hideRound = 0;
           const s = { t: 'settings', ...roomSettings(room) };
           for (const c of membersOf(room)) send(c, s);
@@ -1533,6 +1543,7 @@ server.on('upgrade', (req, socket, head) => {
           if (!room || room.host !== client) return;
           if (!room.guest) return send(client, { t: 'error', error: 'Attendez que votre ami rejoigne la partie.' });
           if (1 + room.guests.length > roomMax(room)) return send(client, { t: 'error', error: 'Ce mode se joue à 2 seulement. Passez en coop pour jouer à plusieurs.' });
+          if (room.imp && 1 + room.guests.length < 4) return send(client, { t: 'error', error: 'Imposteur : il faut au moins 4 joueurs.' });
           startRoom(room);
           break;
         }

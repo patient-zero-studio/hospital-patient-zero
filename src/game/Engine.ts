@@ -48,6 +48,7 @@ const VERSUS_TIME = 12 * 60;
 const HIDE_COUNT = 30;
 const HIDE_TIME = 3 * 60;
 import type { MonsterSenses } from './MonsterAI';
+import { ImpostorGame, ImpEvent, IMP_RANGE } from './Impostor';
 import { EMOTES, GameLink, GameMsg, InteractRequest, MONSTER_STATES, PlayerNetState, WorldSnapshot } from '../net/protocol';
 
 /** Voice level above which the creature can hear you. */
@@ -153,6 +154,21 @@ function segHitsRect(ax: number, az: number, bx: number, bz: number, x0: number,
 export interface HudSnapshot {
   /** 🎪 the Ringmaster's deal is for me: seconds left to answer */
   pact: number | null;
+  /** 🔪 Imposteur mode */
+  imp: {
+    me: 'imp' | 'crew';
+    ph: 'night' | 'morning' | 'over';
+    n: number;
+    nights: number;
+    t: number;
+    cd: number;
+    dead: boolean;
+    alive: string[];
+    voted: string | null;
+    nvoted: number;
+    near: boolean;
+    log: string;
+  } | null;
   /** 🫣 hide-and-seek: the seeker is still counting */
   hideCount: number | null;
   /** 💃 victory dance on screen: no HUD */
@@ -509,6 +525,16 @@ export class GameEngine {
     this.peers = [];
     this.cur = 0;
   }
+  // 🔪 Imposteur
+  private imp: ImpostorGame | null = null;
+  private impSendT = 0;
+  private impPrev = '';
+  private impGhoul: MonsterAI | null = null;
+  private impDone = false;
+  private impMyVote: string | null = null;
+  private get amImp() {
+    return !!this.imp && this.imp.impostor === this.net?.selfName;
+  }
   private static PERSONAL = new Set(['toast', 'used', 'fx', 'coins', 'ach', 'caught']);
   /** Partner's flashlight: always in the scene (constant light count = no shader recompiles). */
   private remoteLight: THREE.SpotLight;
@@ -631,6 +657,182 @@ export class GameEngine {
     } else s.answer(this.mySide, yes);
     this.state.showToast(yes ? '🔪 Marché conclu. Les clowns vont s\'occuper de votre « ami ».' : '🤝 Vous avez refusé. Votre partenaire n\'en saura rien.');
   }
+  // -----------------------------------------------------------------------
+  // 🔪 Imposteur
+  // -----------------------------------------------------------------------
+  private setupImp() {
+    if (this.impGhoul) {
+      this.scene.remove(this.impGhoul.mesh);
+      this.impGhoul.dispose();
+      this.impGhoul = null;
+    }
+    this.impDone = false;
+    this.impPrev = 'night|1';
+    this.impMyVote = null;
+    this.impSendT = 0;
+    const pl = this.net?.imp ? this.net.players : undefined;
+    this.imp = pl && pl.length >= 2 ? new ImpostorGame(pl, this.levelSeed ?? 0.5) : null;
+    if (!this.imp) return;
+    this.queueChapterToast(
+      this.amImp
+        ? `🔪 VOUS ÊTES L'IMPOSTEUR. Personne ne le sait. La nuit, approchez-vous d'un joueur et appuyez sur [K] pour le tuer. Le matin, votez comme les autres… sans vous faire démasquer.`
+        : `🧍 L'un de vous ${pl!.length} est un monstre déguisé. Survivez ${this.imp.nights} nuits. Chaque matin, votez pour bannir le suspect.`
+    );
+  }
+
+  /** Where a player stands (us or a partner) */
+  private impPosOf(name: string): THREE.Vector3 | null {
+    if (name === this.net?.selfName) return this.player.position.clone();
+    const s = this.peers.find((q) => q.name === name)?.remote?.state;
+    return s ? new THREE.Vector3(s.x, 0, s.z) : null;
+  }
+
+  /** Impostor: the closest living player in reach */
+  private impTarget(): string | null {
+    const g = this.imp;
+    if (!g) return null;
+    let best: string | null = null;
+    let bd = IMP_RANGE;
+    for (const q of this.peers) {
+      const s = q.remote?.state;
+      if (!s || s.dead || g.dead.has(q.name)) continue;
+      const d = Math.hypot(s.x - this.player.position.x, s.z - this.player.position.z);
+      if (d < bd) {
+        bd = d;
+        best = q.name;
+      }
+    }
+    return best;
+  }
+
+  private impTryKill() {
+    const g = this.imp;
+    if (!g || !this.net || !this.amImp || !this.running || this.spectating || this.dying || this.finished) return;
+    if (g.ph !== 'night') return this.state.showToast('🌅 Il fait jour : attendez la nuit pour frapper.');
+    if (g.cooldown > 0) return this.state.showToast(`🔪 Pas encore… encore ${Math.ceil(g.cooldown)} s.`);
+    const t = this.impTarget();
+    if (!t) return this.state.showToast('🔪 Personne à portée : approchez-vous (moins de 2,5 m).');
+    if (this.net.role === 'host') this.applyImpEvents(g.kill(t));
+    else this.net.send({ k: 'ikill', t });
+    sound.playMonsterChaseRoar();
+  }
+
+  private impVote(target: string) {
+    const g = this.imp;
+    const me = this.net?.selfName;
+    if (!g || !this.net || !me || g.ph !== 'morning' || this.spectating || g.dead.has(me)) return;
+    this.impMyVote = target;
+    if (this.net.role === 'host') {
+      g.vote(me, target);
+      this.impSendT = 0;
+    } else this.net.send({ k: 'ivote', t: target });
+    this.state.showToast(`🗳 Vous votez contre : ${target === 'skip' ? 'personne' : target}.`);
+    this.pushHud();
+  }
+
+  /** Host: carry out what the game decided. */
+  private applyImpEvents(evs: ImpEvent[]) {
+    const g = this.imp;
+    if (!g || !this.net || !evs.length) return;
+    for (const ev of evs) {
+      if (ev.e === 'kill') {
+        const at = this.impPosOf(g.impostor) ?? this.player.position.clone();
+        if (ev.victim === this.net.selfName) this.impDie(at.x, at.z);
+        else this.net.send({ k: 'imkill', x: at.x, z: at.z, to: ev.victim } as unknown as GameMsg);
+      } else if (ev.e === 'banish') {
+        if (ev.victim === this.net.selfName) this.impOut();
+        else this.net.send({ k: 'imout', to: ev.victim } as unknown as GameMsg);
+      }
+    }
+    this.net.send({ k: 'imps', s: g.netState() });
+    this.impSendT = 0.5;
+  }
+
+  private updateImp(delta: number) {
+    const g = this.imp;
+    if (!g || !this.net) return;
+    if (this.net.role === 'host' && !this.impDone) {
+      this.applyImpEvents(g.update(delta));
+      this.impSendT -= delta;
+      if (this.impSendT <= 0) {
+        this.impSendT = 0.5;
+        this.net.send({ k: 'imps', s: g.netState() });
+      }
+    } else if (g.ph !== 'over') g.t = Math.max(0, g.t - delta);
+    // Mornings are bright: everyone sees everyone
+    this.hemi.intensity = THREE.MathUtils.damp(this.hemi.intensity, this.baseHemi.intensity * (g.ph === 'morning' ? 5 : 1), 2, delta);
+    if (this.impGhoul && !this.dying) this.impGhoul.mesh.visible = false;
+    const key = `${g.ph}|${g.n}`;
+    if (key === this.impPrev) return;
+    this.impPrev = key;
+    this.impMyVote = null;
+    if (g.ph === 'morning') {
+      this.state.showToast(`${g.log} 🌅 Le jour se lève : votez ! Qui est l'imposteur ?`);
+      document.exitPointerLock?.();
+      sound.playDistantSlam(0.4);
+    } else if (g.ph === 'night') {
+      this.state.showToast(`🌙 Nuit ${g.n}/${g.nights}. ${g.log}`);
+      sound.playDistantSlam(0.7);
+    } else this.impEnd();
+    this.pushHud();
+  }
+
+  /** Killed by the impostor: its true face, then the ghost view. */
+  private impDie(x: number, z: number) {
+    if (this.dying || this.spectating || this.finished) return;
+    if (!this.impGhoul) {
+      const m = new MonsterAI(new THREE.Vector3(x, 0, z), this.map.navNodes, this.map.patrolRoute, this.map.doors, () => {}, 0);
+      this.scene.add(m.mesh);
+      this.impGhoul = m;
+    }
+    const look = this.peers.find((q) => q.name === this.imp?.impostor)?.look;
+    if (look) this.impGhoul.applyLook(look.monster);
+    this.impGhoul.position.set(x, 0, z);
+    this.impGhoul.mesh.position.set(x, 0, z);
+    this.impGhoul.mesh.visible = true;
+    this.startDeath(this.impGhoul);
+  }
+
+  /** Banished by the vote: you watch the rest as a ghost. */
+  private impOut() {
+    if (this.spectating || this.finished) return;
+    this.spectating = true;
+    this.player.inputEnabled = false;
+    this.player.flashlightOn = false;
+    this.state.showToast(this.amImp ? '🗳 Démasqué ! Les autres vous ont banni.' : '🗳 Vous avez été banni… alors que vous étiez innocent. Vous regardez la suite en fantôme.');
+    this.pushHud();
+  }
+
+  private impEnd() {
+    const g = this.imp;
+    if (!g || this.impDone) return;
+    this.impDone = true;
+    const crew = g.res === 'crew';
+    const me = this.amImp;
+    const won = me ? !crew : crew;
+    const who = g.impostor;
+    const caught = g.dead.has(who);
+    let text: string;
+    if (me) {
+      text = won
+        ? '🔪 Vous étiez l\'imposteur… et plus personne n\'est debout. Victoire du monstre !'
+        : caught
+          ? '🗳 Démasqué ! Les autres vous ont banni avant la fin des nuits.'
+          : `🌅 Les ${g.nights} nuits sont passées : ${g.crewAlive().join(', ')} vous a échappé.`;
+    } else if (crew) {
+      text = caught
+        ? `🗳 ${who} était l'imposteur… et vous l'avez démasqué !`
+        : `🌅 Les ${g.nights} nuits sont passées ! ${who} était l'imposteur, mais ${g.crewAlive().join(', ')} a survécu.`;
+    } else text = `🔪 ${who} était l'imposteur. Le monstre a eu tout le monde.`;
+    if (won) this.ach(me ? 'imp_win' : 'imp_crew');
+    this.finished = true;
+    this.running = false;
+    this.player.inputEnabled = false;
+    sound.setHeartbeat(60, false);
+    document.exitPointerLock?.();
+    this.cb.onVersusEnd(won, text);
+  }
+
   private circusCheck(s: CircusTent) {
     if (!s.result || this.circusDone) return;
     this.circusDone = true;
@@ -857,7 +1059,9 @@ export class GameEngine {
       if ((e.code === 'Space' || e.code === 'Enter') && this.intro) this.skipIntro();
       if (e.code === 'KeyO' && !e.repeat) this.answerPact(true);
       if (e.code === 'KeyN' && !e.repeat) this.answerPact(false);
+      if (e.code === 'KeyK' && !e.repeat) this.impTryKill();
     }) as EventListener);
+    this.listen(window, 'pz-vote', ((e: CustomEvent<string>) => this.impVote(String(e.detail))) as EventListener);
     this.mic.onPcm = (s, r) => this.voice.onMic(s, r);
     // Phones keep audio asleep until a touch
     this.listen(window, 'pointerdown', (() => {
@@ -1771,6 +1975,7 @@ export class GameEngine {
     }
     this.setupVersus();
     this.setupRace();
+    this.setupImp();
     this.applyLooks();
     if (this.net) {
       // Tell the partner what we look like (twice, in case their game wasn't ready yet)
@@ -2116,6 +2321,7 @@ export class GameEngine {
     if (!this.net) return;
     // 👥 One of several partners left: the game goes on with the others
     const i = name ? this.peers.findIndex((q) => q.name === name) : -1;
+    if (this.imp && name && this.net.role === 'host') this.applyImpEvents(this.imp.leave(name));
     if (this.peers.length > 1 && i >= 0) {
       this.peers[i].remote?.dispose();
       this.peers.splice(i, 1);
@@ -2405,6 +2611,7 @@ export class GameEngine {
 
   private netTick(delta: number) {
     if (!this.net) return;
+    this.updateImp(delta);
     for (const q of this.peers) q.remote?.update(delta);
     // The one you follow (spectator camera, HUD): stay on them while they live
     const alive = (i: number) => !!this.peers[i]?.remote?.state && !this.peers[i].remote!.state!.dead && !this.peers[i].caught;
@@ -2476,6 +2683,28 @@ export class GameEngine {
     switch (msg.k) {
       case 'pact':
         if (host && this.site instanceof CircusTent) this.site.answer('guest', msg.yes);
+        break;
+      case 'imps':
+        if (!host && this.imp) this.imp.netApply(msg.s);
+        break;
+      case 'ikill':
+        if (host && this.imp && this.peerName === this.imp.impostor) {
+          const a = this.remote?.state;
+          const b = this.impPosOf(msg.t);
+          if (a && b && Math.hypot(a.x - b.x, a.z - b.z) < IMP_RANGE + 1.2) this.applyImpEvents(this.imp.kill(msg.t));
+        }
+        break;
+      case 'ivote':
+        if (host && this.imp) {
+          this.imp.vote(this.peerName, msg.t);
+          this.impSendT = 0;
+        }
+        break;
+      case 'imkill':
+        this.impDie(msg.x, msg.z);
+        break;
+      case 'imout':
+        this.impOut();
         break;
       case 'resync':
         // A spectator arrived: full snapshot + our look again
@@ -3429,7 +3658,11 @@ export class GameEngine {
       sprinting: p.isSprinting,
       hidden: p.isHidden,
       hint: this.dying ? null : this.hint,
-      objective: this.maze
+      objective: this.imp
+        ? this.amImp
+          ? `🔪 Éliminez tout le monde avant la fin de la nuit ${this.imp.nights}, sans vous faire démasquer.`
+          : `🧍 Survivez ${this.imp.nights} nuits… et trouvez qui est le monstre.`
+        : this.maze
         ? this.maze.objective(p.position, p.yaw)
         : this.forest
           ? this.forest.objective(p.position, p.yaw)
@@ -3464,6 +3697,22 @@ export class GameEngine {
       versusRole: this.vsRole,
       timeLeft: this.vsRole ? this.timeLeft : null,
       hideCount: this.hideSeek && this.hideCount > 0 ? Math.ceil(this.hideCount) : null,
+      imp: this.imp
+        ? {
+            me: this.amImp ? 'imp' : 'crew',
+            ph: this.imp.ph,
+            n: this.imp.n,
+            nights: this.imp.nights,
+            t: Math.ceil(this.imp.t),
+            cd: Math.ceil(this.imp.cooldown),
+            dead: this.spectating || this.dying || this.imp.dead.has(this.net?.selfName ?? ''),
+            alive: this.imp.players.filter((n) => !this.imp!.dead.has(n) && n !== this.net?.selfName),
+            voted: this.impMyVote,
+            nvoted: this.imp.votes.size,
+            near: this.amImp && !!this.impTarget(),
+            log: this.imp.log,
+          }
+        : null,
       pact: this.site instanceof CircusTent && this.site.phase === 'morning' && this.site.offerTo === this.mySide ? Math.ceil(this.site.offerT) : null,
       race: this.net?.mode === 'race',
       canBlind: this.canBlind(),
@@ -4463,6 +4712,10 @@ export class GameEngine {
     if (this.pendingEnding) return;
     if (this.hideSeek) {
       this.state.showToast('🫣 Cache-cache : pas de sortie ! Restez caché jusqu\'à la fin du temps.');
+      return;
+    }
+    if (this.imp) {
+      this.state.showToast('🔪 Imposteur : pas de sortie ! Survivez aux nuits… et démasquez le monstre.');
       return;
     }
     if (this.net?.mode === 'race') {

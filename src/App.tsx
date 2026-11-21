@@ -134,6 +134,7 @@ const EMPTY_HUD: HudSnapshot = {
   speedrun: null,
   hideCount: null,
   pact: null,
+  imp: null,
   treatEmoji: null,
   selectedSlot: 0,
   voice: null,
@@ -194,6 +195,8 @@ export default function App() {
     hide?: boolean;
     /** 🎪 La Nuit du Cirque */
     circus?: boolean;
+    /** 🔪 Imposteur */
+    imp?: boolean;
     /** 👀 only watching a friend's game */
     watching?: boolean;
   } | null>(null);
@@ -1149,16 +1152,16 @@ export default function App() {
     const engine = engineRef.current;
     switch (e.t) {
       case 'created':
-        setLobby({ status: 'hosting', code: e.code, partner: null, players: sessionRef.current ? [sessionRef.current.username] : [], difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), error: null });
+        setLobby({ status: 'hosting', code: e.code, partner: null, players: sessionRef.current ? [sessionRef.current.username] : [], difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), hide: !!e.hide, imp: !!e.imp, error: null });
         break;
       case 'joined':
-        setLobby({ status: 'joined', code: e.code, partner: e.host, players: e.players ?? [e.host], difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), error: null });
+        setLobby({ status: 'joined', code: e.code, partner: e.host, players: e.players ?? [e.host], difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), hide: !!e.hide, imp: !!e.imp, error: null });
         break;
       case 'peer-joined':
         setLobby((l) => ({ ...l, partner: l.partner ?? e.username, players: e.players ?? l.players }));
         break;
       case 'settings':
-        setLobby((l) => ({ ...l, difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter) }));
+        setLobby((l) => ({ ...l, difficulty: e.difficulty as Difficulty, mode: e.mode, monster: e.monster, chapter: toMpChapter(e.chapter), hide: !!e.hide, imp: !!e.imp }));
         break;
       case 'peer-left':
         setLobby((l) => {
@@ -1238,6 +1241,8 @@ export default function App() {
           role,
           partnerName: (role === 'guest' ? e.players?.[0] : peers[0]) ?? l.partner ?? '???',
           peers: peers.length ? peers : undefined,
+          imp: !!e.imp,
+          players: e.players,
           seat: me && e.players ? Math.max(0, e.players.indexOf(me)) : undefined,
           mode: e.mode,
           versusRole,
@@ -1251,7 +1256,7 @@ export default function App() {
         engine.setNet(link);
         // Same forest / lab layout on both screens
         engine.levelSeed = typeof e.seed === 'number' ? e.seed : null;
-        setOnline({ role, partner: peers.length > 1 ? peers.join(', ') : link.partnerName, mode: e.mode, versusRole, hide: !!e.hide, circus: e.chapter === 9 });
+        setOnline({ role, partner: peers.length > 1 ? peers.join(', ') : link.partnerName, mode: e.mode, versusRole, hide: !!e.hide, circus: e.chapter === 9, imp: !!e.imp });
         setVersusResult(null);
         setMpOpen(false);
         beginRun(true, e.difficulty as Difficulty, toMpChapter(e.chapter));
@@ -1750,6 +1755,7 @@ export default function App() {
           speedrun={hud.speedrun}
           hideCount={hud.hideCount}
           pact={hud.pact}
+          imp={hud.imp}
           treatEmoji={hud.treatEmoji}
           selectedSlot={hud.selectedSlot}
           voice={hud.voice}
@@ -1820,13 +1826,14 @@ export default function App() {
         />
       )}
 
-      {versusResult && online && (online.versusRole || online.mode === 'race' || online.circus) && (
+      {versusResult && online && (online.versusRole || online.mode === 'race' || online.circus || online.imp) && (
         <VersusResultModal
           won={versusResult.won}
           text={versusResult.reason}
           role={online.versusRole ?? 'racer'}
           hide={!!online.hide}
           circus={!!online.circus}
+          imp={!!online.imp}
           onPlayAgain={online.role === 'host' ? handleRestart : undefined}
           onMainMenu={handleMainMenu}
         />

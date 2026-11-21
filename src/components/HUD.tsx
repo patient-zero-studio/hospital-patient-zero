@@ -2,6 +2,7 @@ import React from 'react';
 import { Battery, BatteryLow, Eye, Footprints, HeartPulse, Mic, MicOff } from 'lucide-react';
 import type { MicStatus } from '../audio/MicListener';
 import type { GameItem } from '../types';
+import type { HudSnapshot } from '../game/Engine';
 import { ItemIcon } from './ItemIcon';
 import { getScreamerFace } from './screamerFace';
 
@@ -36,6 +37,8 @@ interface HUDProps {
   survival?: { wave: number; time: number } | null;
   /** 🎪 the Ringmaster's deal (seconds left) */
   pact?: number | null;
+  /** 🔪 Imposteur */
+  imp?: HudSnapshot['imp'];
   /** 🫣 hide-and-seek countdown */
   hideCount?: number | null;
   /** ⏱️ Speedrun chrono */
@@ -111,6 +114,7 @@ export const HUD: React.FC<HUDProps> = ({
   speedrun = null,
   hideCount = null,
   pact = null,
+  imp = null,
   treatEmoji = null,
   selectedSlot = 0,
   touch = false,
@@ -301,6 +305,58 @@ export const HUD: React.FC<HUDProps> = ({
       {runCoins > 0 && (
         <div className="absolute bottom-[100px] left-1/2 -translate-x-1/2 px-2 py-0.5 bg-black/60 border border-amber-700/60 text-amber-300 font-mono text-[11px]">
           🪙 {runCoins} pièce{runCoins > 1 ? 's' : ''} trouvée{runCoins > 1 ? 's' : ''}
+        </div>
+      )}
+
+      {/* 🔪 Imposteur: night clock, your role, the morning vote */}
+      {imp && imp.ph !== 'over' && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 text-center pointer-events-none">
+          <div className={`px-3 py-1 font-mono text-xs border ${imp.ph === 'morning' ? 'bg-amber-950/80 border-amber-600 text-amber-200' : 'bg-black/70 border-indigo-800 text-indigo-200'}`}>
+            {imp.ph === 'morning' ? '🌅 Matin — vote' : `🌙 Nuit ${imp.n}/${imp.nights}`} · {Math.floor(imp.t / 60)}:{String(imp.t % 60).padStart(2, '0')}
+          </div>
+          {!imp.dead && (
+            <div className={`mt-1 px-2 py-0.5 font-mono text-[11px] ${imp.me === 'imp' ? 'bg-red-950/80 text-red-300' : 'bg-black/60 text-zinc-300'}`}>
+              {imp.me === 'imp'
+                ? imp.ph !== 'night'
+                  ? "🔪 Vous êtes l'imposteur — attendez la nuit"
+                  : imp.cd > 0
+                    ? `🔪 Imposteur — prêt dans ${imp.cd} s`
+                    : imp.near
+                      ? '🔪 [K] TUER'
+                      : "🔪 Imposteur — approchez-vous d'une proie"
+                : '🧍 Survivant — méfiez-vous de tout le monde'}
+            </div>
+          )}
+        </div>
+      )}
+      {imp && imp.ph === 'morning' && !imp.dead && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="pointer-events-auto max-w-md mx-4 p-5 bg-black/90 border-2 border-amber-600 text-center">
+            <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-amber-400 mb-1">Le jour se lève — {imp.t} s pour voter</div>
+            {imp.log && <p className="text-sm text-zinc-200 mb-3">{imp.log}</p>}
+            <p className="font-serif italic text-zinc-100 mb-3">Qui est l'imposteur ?</p>
+            <div className="flex flex-wrap gap-1.5 justify-center">
+              {imp.alive.map((n) => (
+                <button
+                  key={n}
+                  onClick={() => window.dispatchEvent(new CustomEvent('pz-vote', { detail: n }))}
+                  className={`px-3 py-1.5 font-mono text-xs border ${imp.voted === n ? 'bg-red-700 border-red-400 text-white' : 'border-zinc-600 text-zinc-200 hover:border-red-500'}`}
+                >
+                  {n}
+                </button>
+              ))}
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('pz-vote', { detail: 'skip' }))}
+                className={`px-3 py-1.5 font-mono text-xs border ${imp.voted === 'skip' ? 'bg-zinc-600 border-zinc-300 text-white' : 'border-zinc-700 text-zinc-400 hover:border-zinc-400'}`}
+              >
+                Passer
+              </button>
+            </div>
+            <div className="text-xs font-mono text-zinc-500 mt-3">
+              {imp.voted ? `Votre vote : ${imp.voted === 'skip' ? 'personne' : imp.voted}. ` : ''}
+              {imp.nvoted} vote{imp.nvoted > 1 ? 's' : ''} · il faut au moins 2 voix et une majorité.
+            </div>
+          </div>
         </div>
       )}
 

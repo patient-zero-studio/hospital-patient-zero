@@ -60,7 +60,7 @@ export const EN: Record<string, string> = {
   'Jouer en Solo (Activer le Son)': 'Play Solo (Turn sound on)',
   'Campagne — les 5 chapitres d\'affilée': 'Campaign — all 5 chapters in a row',
   '(finissez la forêt)': '(finish the forest)',
-  "Multijoueur — Coop jusqu'à 8 / Chasse / Course": 'Multiplayer — Co-op up to 8 / Hunt / Race',
+  "Multijoueur — Coop et Imposteur jusqu'à 8 / Chasse / Course": 'Multiplayer — Co-op & Impostor up to 8 / Hunt / Race',
   'Multijoueur': 'Multiplayer',
   'Boutique — skins & boîtes mystère': 'Shop — skins & mystery boxes',
   '🔒 Boutique — finis une partie en Exploration': '🔒 Shop — finish a game in Exploration',

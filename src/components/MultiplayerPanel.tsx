@@ -16,6 +16,8 @@ export interface MatchSettings {
   chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9;
   /** 🫣 versus variant: hide-and-seek */
   hide?: boolean;
+  /** 🔪 Imposteur (co-op, 4 to 8 players) */
+  imp?: boolean;
 }
 
 export interface LobbyState extends MatchSettings {
@@ -85,6 +87,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
   // 👥 Everyone in the room (co-op takes up to 8)
   const pl = p.lobby.players ?? [];
   const max = p.lobby.mode === 'coop' && p.lobby.chapter !== 9 ? 8 : 2;
+  const impShort = !!p.lobby.imp && p.lobby.mode === 'coop' && pl.length < 4;
   const roster =
     pl.length > 0 && (max > 2 || pl.length > 2) ? (
       <div className="border border-zinc-800 bg-black/30 p-2 text-left">
@@ -99,6 +102,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
             </span>
           ))}
         </div>
+        {impShort && <div className="mt-1 text-[11px] text-amber-400">🔪 Imposteur : il faut au moins 4 joueurs ({pl.length}/4).</div>}
         {pl.length > max && <div className="mt-1 text-[11px] text-amber-400">Ce mode se joue à 2 : passez en coop pour jouer à plusieurs.</div>}
       </div>
     ) : null;
@@ -246,7 +250,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
             disabled={readOnly}
             title="Mode spécial à 2 : survivre 3 nuits… et résister à la trahison"
             className={tab(value.chapter === 9)}
-            onClick={() => onChange({ chapter: 9, mode: 'coop', hide: false })}
+            onClick={() => onChange({ chapter: 9, mode: 'coop', hide: false, imp: false })}
           >
             🎪 La Nuit du Cirque
             <div className="text-[9px] normal-case tracking-normal text-zinc-500">survie & trahison</div>
@@ -261,8 +265,8 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
             <div className="text-[9px] normal-case tracking-normal text-zinc-500">{p.ch8Unlocked || value.chapter === 8 ? 'le rêve (coop)' : 'secret'}</div>
           </button>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
-          <button disabled={readOnly} className={tab(value.mode === 'coop')} onClick={() => onChange({ mode: 'coop', hide: false })}>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1">
+          <button disabled={readOnly} className={tab(value.mode === 'coop' && !value.imp)} onClick={() => onChange({ mode: 'coop', hide: false, imp: false })}>
             🤝 Coop
             <div className="text-[9px] normal-case tracking-normal text-zinc-500">ensemble contre les monstres</div>
           </button>
@@ -270,7 +274,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
             disabled={readOnly || value.chapter >= 4}
             title={value.chapter >= 4 ? 'Chapitres 4 et 5 : coop uniquement' : ''}
             className={tab(value.mode === 'versus' && !value.hide)}
-            onClick={() => onChange({ mode: 'versus', hide: false })}
+            onClick={() => onChange({ mode: 'versus', hide: false, imp: false })}
           >
             🧟 Chasse
             <div className="text-[9px] normal-case tracking-normal text-zinc-500">l'un est le monstre</div>
@@ -279,7 +283,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
             disabled={readOnly || value.chapter >= 4}
             title={value.chapter >= 4 ? 'Chapitres 1 et 2 uniquement' : ''}
             className={tab(value.mode === 'versus' && !!value.hide)}
-            onClick={() => onChange({ mode: 'versus', hide: true })}
+            onClick={() => onChange({ mode: 'versus', hide: true, imp: false })}
           >
             🫣 Cache-cache
             <div className="text-[9px] normal-case tracking-normal text-zinc-500">trouve-le en 3 min</div>
@@ -288,10 +292,19 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
             disabled={readOnly || value.chapter >= 4}
             title={value.chapter >= 4 ? 'Chapitres 4 et 5 : coop uniquement' : ''}
             className={tab(value.mode === 'race')}
-            onClick={() => onChange({ mode: 'race', hide: false })}
+            onClick={() => onChange({ mode: 'race', hide: false, imp: false })}
           >
             🏁 Course
             <div className="text-[9px] normal-case tracking-normal text-zinc-500">le premier sorti gagne</div>
+          </button>
+          <button
+            disabled={readOnly}
+            title="De 4 à 8 joueurs"
+            className={tab(value.mode === 'coop' && !!value.imp)}
+            onClick={() => onChange({ mode: 'coop', hide: false, imp: true, chapter: 1 })}
+          >
+            🔪 Imposteur
+            <div className="text-[9px] normal-case tracking-normal text-zinc-500">4 à 8 joueurs</div>
           </button>
         </div>
         {value.mode === 'race' && (
@@ -299,7 +312,13 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
             Chacun pour soi : inventaire et objectifs séparés, mêmes monstres. Le premier qui sort de l'hôpital gagne.
           </p>
         )}
-        {value.mode === 'versus' ? (
+        {value.mode === 'coop' && value.imp ? (
+          <p className="text-[10px] font-mono text-zinc-500 leading-relaxed">
+            🔪 De 4 à 8 joueurs, dans l'hôpital. L'un de vous est tiré au sort en secret : c'est un monstre déguisé. La nuit, il peut tuer
+            quelqu'un en s'approchant ([K]). Chaque matin, tout le monde vote pour bannir un suspect. Les survivants gagnent s'ils le
+            démasquent, ou si l'un d'eux tient autant de nuits qu'il y a de joueurs.
+          </p>
+        ) : value.mode === 'versus' ? (
           <>
             <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">{readOnly ? 'Votre rôle' : 'Vous jouez'}</div>
             <div className="grid grid-cols-2 gap-1">
@@ -537,7 +556,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
                   <button onClick={p.onLeave} className={`${btn} border border-zinc-700 text-zinc-400 hover:text-zinc-100`}>
                     Annuler
                   </button>
-                  <button disabled={!p.lobby.partner} onClick={p.onStart} className={`${btn} flex-1 bg-red-700 hover:bg-red-600 text-white`}>
+                  <button disabled={!p.lobby.partner || impShort} onClick={p.onStart} className={`${btn} flex-1 bg-red-700 hover:bg-red-600 text-white`}>
                     Lancer la partie
                   </button>
                 </div>

@@ -12,6 +12,8 @@ export interface RoomSettings {
   chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9;
   /** 🫣 versus variant: hide-and-seek */
   hide?: boolean;
+  /** 🔪 Imposteur (co-op room, 4 to 8 players) */
+  imp?: boolean;
 }
 
 export type LobbyEvent =

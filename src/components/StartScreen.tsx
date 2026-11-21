@@ -483,7 +483,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               className="px-8 py-3 bg-black/60 hover:bg-zinc-900 text-zinc-100 font-mono text-xs uppercase tracking-widest flex items-center gap-3 transition-all cursor-pointer border border-zinc-600 hover:border-red-600"
             >
               <Users className="w-4 h-4" />
-              <span>Multijoueur — Coop jusqu'à 8 / Chasse / Course</span>
+              <span>Multijoueur — Coop et Imposteur jusqu'à 8 / Chasse / Course</span>
               {username && <span className="text-emerald-400 normal-case tracking-normal">({username})</span>}
             </button>
             {onFindOpponent && (

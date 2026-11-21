@@ -97,6 +97,9 @@ export const ACHIEVEMENTS: AchDef[] = [
   { id: 'circus_trust', name: 'À la vie, à la mort', desc: 'Survivre aux 3 nuits du cirque sans que personne ne trahisse.', icon: '🤝', tier: 'or', reward: 200 },
   { id: 'circus_traitor', name: 'Marché conclu', desc: 'Livrer votre partenaire au Directeur… et gagner.', icon: '🔪', tier: 'argent', reward: 100, secret: true },
   { id: 'circus_escape', name: 'Sortie de piste', desc: 'Être trahi, et pourtant s\'enfuir du chapiteau.', icon: '🎪', tier: 'or', reward: 150 },
+  // --- Imposteur ---
+  { id: 'imp_win', name: 'Le loup dans la bergerie', desc: "Gagner une partie d'Imposteur en étant le monstre.", icon: '🔪', tier: 'or', reward: 200 },
+  { id: 'imp_crew', name: 'Démasqué !', desc: "Gagner une partie d'Imposteur avec les survivants.", icon: '🧍', tier: 'argent', reward: 120 },
   // --- Secret chapter ---
   { id: 'ch8_end', name: 'Le garçon qui voulait être docteur', desc: 'Terminer le chapitre secret : le Rêve de Lucas. Récompense : skins de l\'Ombre et de Lucas.', icon: '🌳', tier: 'platine', reward: 500, secret: true },
   // --- Chapter 7 ---
