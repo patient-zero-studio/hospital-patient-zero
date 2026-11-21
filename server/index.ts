@@ -1342,6 +1342,9 @@ interface Room {
   started: boolean;
   /** same level layout for everyone (spectators too) */
   seed?: number;
+  /** 🫣 versus variant: hide-and-seek (roles swap every round) */
+  hide?: boolean;
+  hideRound?: number;
   /** 👀 friends watching */
   spectators?: Client[];
 }
@@ -1349,7 +1352,8 @@ interface Room {
 /** Chapters 4 and 5 are co-op only: any other mode falls back to chapter 1. */
 const roomSettings = (r: Room) => {
   if (r.chapter >= 4 && r.mode !== 'coop') r.chapter = 1;
-  return { difficulty: r.difficulty, mode: r.mode, monster: r.monster, chapter: r.chapter };
+  if (r.mode !== 'versus') r.hide = false;
+  return { difficulty: r.difficulty, mode: r.mode, monster: r.monster, chapter: r.chapter, hide: !!r.hide };
 };
 const parseChapter = (v: unknown): 1 | 2 | 4 | 5 | 6 | 7 | 8 => {
   const n = Number(v);
@@ -1360,7 +1364,7 @@ const parseSide = (v: unknown): 'host' | 'guest' => (v === 'guest' ? 'guest' : '
 
 const rooms = new Map<string, Room>();
 /** 🔎 Players waiting for a random partner */
-const matchQueue: { client: Client; mode: GameMode; difficulty: number; chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8 }[] = [];
+const matchQueue: { client: Client; mode: GameMode; hide?: boolean; difficulty: number; chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8 }[] = [];
 const unqueue = (c: Client) => {
   for (let i = matchQueue.length - 1; i >= 0; i--) if (matchQueue[i].client === c) matchQueue.splice(i, 1);
 };
@@ -1380,6 +1384,11 @@ const unwatch = (c: Client) => {
 };
 const startRoom = (room: Room) => {
   room.started = true;
+  // 🫣 Hide-and-seek: the seeker and the hider swap at every new round
+  if (room.mode === 'versus' && room.hide) {
+    if ((room.hideRound ?? 0) > 0) room.monster = room.monster === 'host' ? 'guest' : 'host';
+    room.hideRound = (room.hideRound ?? 0) + 1;
+  }
   endWatchers(room, 'La partie a recommencé.');
   // One random seed for both players: same forest / lab layout
   room.seed = crypto.randomInt(1, 2 ** 31) / 2 ** 31;
@@ -1471,6 +1480,7 @@ server.on('upgrade', (req, socket, head) => {
             monster: parseSide(msg.monster),
             chapter: parseChapter(msg.chapter),
             started: false,
+            hide: msg.hide === true,
           };
           rooms.set(room.code, room);
           client.room = room;
@@ -1498,6 +1508,8 @@ server.on('upgrade', (req, socket, head) => {
           if (msg.mode !== undefined) room.mode = parseMode(msg.mode);
           if (msg.monster !== undefined) room.monster = parseSide(msg.monster);
           if (msg.chapter !== undefined) room.chapter = parseChapter(msg.chapter);
+          if (msg.hide !== undefined) room.hide = msg.hide === true;
+          if (msg.hide !== undefined || msg.mode !== undefined) room.hideRound = 0;
           const s = { t: 'settings', ...roomSettings(room) };
           send(room.host, s);
           send(room.guest, s);
@@ -1515,8 +1527,11 @@ server.on('upgrade', (req, socket, head) => {
           leaveRoom(client);
           unqueue(client);
           const mode = parseMode(msg.mode);
-          const wait = { client, mode, difficulty: Math.min(5, Math.max(1, Number(msg.difficulty) || 2)), chapter: parseChapter(msg.chapter) };
-          const other = matchQueue.find((q) => q.mode === mode && q.client.username.toLowerCase() !== client.username.toLowerCase() && q.client.ws.readyState === WebSocket.OPEN);
+          const hide = mode === 'versus' && msg.hide === true;
+          const wait = { client, mode, hide, difficulty: Math.min(5, Math.max(1, Number(msg.difficulty) || 2)), chapter: parseChapter(msg.chapter) };
+          const other = matchQueue.find(
+            (q) => q.mode === mode && !!q.hide === hide && q.client.username.toLowerCase() !== client.username.toLowerCase() && q.client.ws.readyState === WebSocket.OPEN
+          );
           if (!other) {
             matchQueue.push(wait);
             send(client, { t: 'queued', waiting: matchQueue.filter((q) => q.mode === mode).length });
@@ -1533,6 +1548,7 @@ server.on('upgrade', (req, socket, head) => {
             monster: crypto.randomInt(2) ? 'host' : 'guest',
             chapter: other.chapter,
             started: false,
+            hide,
           };
           rooms.set(room.code, room);
           other.client.room = room;

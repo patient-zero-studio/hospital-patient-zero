@@ -2,6 +2,8 @@ import React from 'react';
 import { Home, RotateCcw, Skull, Trophy } from 'lucide-react';
 
 interface Props {
+  /** 🫣 hide-and-seek round */
+  hide?: boolean;
   won: boolean;
   text: string;
   role: 'monster' | 'survivor' | 'racer';
@@ -11,7 +13,7 @@ interface Props {
 }
 
 /** Versus ("Chasse") round result. */
-export const VersusResultModal: React.FC<Props> = ({ won, text, role, onPlayAgain, onMainMenu }) => {
+export const VersusResultModal: React.FC<Props> = ({ won, text, role, hide, onPlayAgain, onMainMenu }) => {
   const accent = won ? (role === 'monster' ? '#dc2626' : '#f59e0b') : '#71717a';
   return (
     <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4">
@@ -23,7 +25,11 @@ export const VersusResultModal: React.FC<Props> = ({ won, text, role, onPlayAgai
           {won ? <Trophy className="w-9 h-9" style={{ color: accent }} /> : <Skull className="w-9 h-9 text-zinc-400" />}
         </div>
         <div className="text-[10px] font-mono uppercase tracking-[0.35em] text-zinc-500 mb-1">
-          {role === 'racer' ? 'Mode Course — le premier sorti gagne' : `Mode Chasse — vous étiez ${role === 'monster' ? 'le Monstre' : 'le Survivant'}`}
+          {role === 'racer'
+            ? 'Mode Course — le premier sorti gagne'
+            : hide
+              ? `Cache-cache — vous ${role === 'monster' ? 'cherchiez' : 'vous cachiez'}`
+              : `Mode Chasse — vous étiez ${role === 'monster' ? 'le Monstre' : 'le Survivant'}`}
         </div>
         <h1 className="text-3xl font-black font-mono tracking-widest mb-3" style={{ color: accent }}>
           {won ? 'VICTOIRE' : 'DÉFAITE'}
@@ -35,7 +41,7 @@ export const VersusResultModal: React.FC<Props> = ({ won, text, role, onPlayAgai
               onClick={onPlayAgain}
               className="w-full py-3 bg-red-700 hover:bg-red-600 text-white font-mono text-xs uppercase tracking-widest flex items-center justify-center gap-2 font-bold"
             >
-              <RotateCcw className="w-4 h-4" /> Revanche
+              <RotateCcw className="w-4 h-4" /> {hide ? 'Manche suivante (rôles échangés)' : 'Revanche'}
             </button>
           ) : (
             <div className="w-full py-3 border border-zinc-800 text-zinc-500 font-mono text-xs uppercase tracking-widest">

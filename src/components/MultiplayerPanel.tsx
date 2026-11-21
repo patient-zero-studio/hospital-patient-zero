@@ -14,6 +14,8 @@ export interface MatchSettings {
   monster: 'host' | 'guest';
   /** 1 = the hospital, 2 = the sewers, 4 = the forest, 5 = Site B (co-op only) */
   chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8;
+  /** 🫣 versus variant: hide-and-seek */
+  hide?: boolean;
 }
 
 export interface LobbyState extends MatchSettings {
@@ -227,25 +229,34 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
             <div className="text-[9px] normal-case tracking-normal text-zinc-500">{p.ch8Unlocked || value.chapter === 8 ? 'le rêve (coop)' : 'secret'}</div>
           </button>
         </div>
-        <div className="grid grid-cols-3 gap-1">
-          <button disabled={readOnly} className={tab(value.mode === 'coop')} onClick={() => onChange({ mode: 'coop' })}>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
+          <button disabled={readOnly} className={tab(value.mode === 'coop')} onClick={() => onChange({ mode: 'coop', hide: false })}>
             🤝 Coop
             <div className="text-[9px] normal-case tracking-normal text-zinc-500">ensemble contre les monstres</div>
           </button>
           <button
             disabled={readOnly || value.chapter >= 4}
             title={value.chapter >= 4 ? 'Chapitres 4 et 5 : coop uniquement' : ''}
-            className={tab(value.mode === 'versus')}
-            onClick={() => onChange({ mode: 'versus' })}
+            className={tab(value.mode === 'versus' && !value.hide)}
+            onClick={() => onChange({ mode: 'versus', hide: false })}
           >
             🧟 Chasse
             <div className="text-[9px] normal-case tracking-normal text-zinc-500">l'un est le monstre</div>
           </button>
           <button
             disabled={readOnly || value.chapter >= 4}
+            title={value.chapter >= 4 ? 'Chapitres 1 et 2 uniquement' : ''}
+            className={tab(value.mode === 'versus' && !!value.hide)}
+            onClick={() => onChange({ mode: 'versus', hide: true })}
+          >
+            🫣 Cache-cache
+            <div className="text-[9px] normal-case tracking-normal text-zinc-500">trouve-le en 3 min</div>
+          </button>
+          <button
+            disabled={readOnly || value.chapter >= 4}
             title={value.chapter >= 4 ? 'Chapitres 4 et 5 : coop uniquement' : ''}
             className={tab(value.mode === 'race')}
-            onClick={() => onChange({ mode: 'race' })}
+            onClick={() => onChange({ mode: 'race', hide: false })}
           >
             🏁 Course
             <div className="text-[9px] normal-case tracking-normal text-zinc-500">le premier sorti gagne</div>
@@ -275,10 +286,17 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
                 🔦 Le Survivant
               </button>
             </div>
+            {value.hide ? (
+              <p className="text-[10px] font-mono text-zinc-500 leading-relaxed">
+                🫣 Le chercheur (le monstre) compte jusqu'à 30 dans le noir pendant que l'autre se cache : casier, lit, recoin… Puis il a 3 minutes pour le
+                trouver (fouillez les cachettes avec [E], ou touchez-le). À chaque manche, les rôles s'échangent : celui qui reste caché le plus longtemps gagne.
+              </p>
+            ) : (
             <p className="text-[10px] font-mono text-zinc-500 leading-relaxed">
               Le survivant doit s'échapper en moins de 12 minutes. Le monstre voit mal, mais chaque bruit apparaît en rouge, même à travers les
               murs. S'il campe, le survivant peut l'aveugler 5 s avec [G]. Pseudos masqués.
             </p>
+            )}
           </>
         ) : (
           <>
@@ -395,7 +413,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
                     onClick={() => p.onFindMatch!(draft)}
                     className={`${btn} w-full bg-emerald-700 hover:bg-emerald-600 text-white flex items-center justify-center gap-2`}
                   >
-                    🔎 Trouver un partenaire au hasard ({draft.mode === 'versus' ? 'Chasse' : draft.mode === 'race' ? 'Course' : 'Coop'})
+                    🔎 Trouver un partenaire au hasard ({draft.mode === 'versus' ? (draft.hide ? 'Cache-cache' : 'Chasse') : draft.mode === 'race' ? 'Course' : 'Coop'})
                   </button>
                 )}
                 {p.onFindMatch && (

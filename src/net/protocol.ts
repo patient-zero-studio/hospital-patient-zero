@@ -106,7 +106,7 @@ export type GameMsg =
   | { k: 'look'; a: Appearance }
   /** Survivor → creature player: sedative, immobilised `s` seconds */
   | { k: 'stun'; s: number }
-  | { k: 'vsEnd'; winner: 'monster' | 'survivor'; reason: string; ending?: GameEnding }
+  | { k: 'vsEnd'; winner: 'monster' | 'survivor'; reason: string; ending?: GameEnding; left?: number }
   /** Versus anti-camping: survivor → creature player, blinded and moved by an AI for s seconds */
   | { k: 'blind'; s: number }
   /** Race: host → guest, someone reached the exit first */
@@ -125,6 +125,10 @@ export interface GameLink {
   partnerName: string;
   /** coop = together vs the AI; versus = one of the two players is the creature; race = first one out wins */
   mode: 'coop' | 'versus' | 'race';
+  /** 🫣 versus variant: hide-and-seek (the seeker plays the creature) */
+  hide?: boolean;
+  /** the local player's pseudo (hide-and-seek scores) */
+  selfName?: string;
   /** versus only: what the local player is */
   versusRole: 'monster' | 'survivor' | null;
   send: (msg: GameMsg) => void;

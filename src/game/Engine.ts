@@ -43,6 +43,9 @@ import { Appearance, DEFAULT_APPEARANCE } from '../appearance';
 
 /** Versus: the survivor has this long to escape. */
 const VERSUS_TIME = 12 * 60;
+/** 🫣 Hide-and-seek: the seeker counts, then has 3 minutes */
+const HIDE_COUNT = 30;
+const HIDE_TIME = 3 * 60;
 import type { MonsterSenses } from './MonsterAI';
 import { EMOTES, GameLink, GameMsg, InteractRequest, MONSTER_STATES, PlayerNetState, WorldSnapshot } from '../net/protocol';
 
@@ -147,6 +150,8 @@ function segHitsRect(ax: number, az: number, bx: number, bz: number, x0: number,
 }
 
 export interface HudSnapshot {
+  /** 🫣 hide-and-seek: the seeker is still counting */
+  hideCount: number | null;
   /** 💃 victory dance on screen: no HUD */
   dancing: boolean;
   /** 👀 watching a friend's game */
@@ -225,7 +230,7 @@ export interface EngineCallbacks {
   onVictory: (ending: GameEnding) => void;
   onPointerUnlock: () => void;
   /** Versus: the round is over (not used for the survivor's escape, which shows the ending). */
-  onVersusEnd: (won: boolean, text: string) => void;
+  onVersusEnd: (won: boolean, text: string, hide?: { hider: string; seconds: number }) => void;
   /** Talking to the hobo in the warehouse (opens his shop). */
   onHobo: () => void;
   /** Achievement unlocked during play (the account may already have it). */
@@ -597,6 +602,11 @@ export class GameEngine {
   }
 
   /** Versus role of the local player (null in solo / coop). */
+  /** 🫣 Hide-and-seek round: seconds the seeker still counts */
+  private hideCount = 0;
+  private get hideSeek() {
+    return this.net?.mode === 'versus' && !!this.net.hide;
+  }
   private get vsRole(): 'monster' | 'survivor' | null {
     return this.net?.mode === 'versus' ? this.net.versusRole : null;
   }
@@ -1661,7 +1671,14 @@ export class GameEngine {
     this.markers?.dispose();
     this.markers = null;
     this.vsOver = false;
-    this.timeLeft = VERSUS_TIME;
+    this.timeLeft = this.hideSeek ? HIDE_TIME : VERSUS_TIME;
+    this.hideCount = this.hideSeek ? HIDE_COUNT : 0;
+    if (this.hideSeek)
+      this.queueChapterToast(
+        this.vsRole === 'monster'
+          ? '🫣 CACHE-CACHE — Vous cherchez. Comptez jusqu\'à 30 les yeux fermés… puis trouvez-le en 3 minutes : fouillez les casiers et les lits [E], ou touchez-le.'
+          : '🫣 CACHE-CACHE — Vous vous cachez ! Vous avez 30 secondes : casier, lit, recoin sombre… Il aura ensuite 3 minutes pour vous trouver.'
+      );
     this.pounceCooldown = 0;
     this.pounceAnim = 0;
     this.monsterStunTimer = 0;
@@ -1782,10 +1799,28 @@ export class GameEngine {
       this.updateCampWatch(delta, puppet, !!s?.st);
     }
 
+    // 🫣 Hide-and-seek: the seeker counts to 30 with the eyes closed
+    if (this.hideSeek && this.hideCount > 0) {
+      this.hideCount = Math.max(0, this.hideCount - delta);
+      if (this.vsRole === 'monster') {
+        this.player.inputEnabled = false;
+        this.blackout = 1;
+      }
+      if (this.hideCount <= 0) {
+        if (this.vsRole === 'monster') {
+          this.player.inputEnabled = true;
+          this.blackout = 0;
+          sound.playMonsterChaseRoar();
+          this.state.showToast('« Prêt ou pas… j\'arrive ! » Trouvez-le en 3 minutes.');
+        } else this.state.showToast('⏱️ Il a fini de compter… Ne faites plus un bruit.');
+      }
+      return;
+    }
     // The host keeps the clock
     if (this.net?.role === 'host' && !this.vsOver && !this.pendingEnding) {
       this.timeLeft = Math.max(0, this.timeLeft - delta);
-      if (this.timeLeft <= 0) this.versusEnd('monster', 'timeout', undefined, true);
+      // Hide-and-seek: still hidden when the time is up → the hider wins
+      if (this.timeLeft <= 0) this.versusEnd(this.hideSeek ? 'survivor' : 'monster', 'timeout', undefined, true);
     }
   }
 
@@ -1881,7 +1916,7 @@ export class GameEngine {
   private versusEnd(winner: 'monster' | 'survivor', cause: string, ending: GameEnding | undefined, broadcast: boolean) {
     if (this.vsOver) return;
     this.vsOver = true;
-    if (broadcast) this.net?.send({ k: 'vsEnd', winner, reason: cause, ending });
+    if (broadcast) this.net?.send({ k: 'vsEnd', winner, reason: cause, ending, left: this.timeLeft });
     const me = this.vsRole;
     const iWon = winner === me;
     const partner = this.net?.partnerName ?? 'votre adversaire';
@@ -1894,6 +1929,21 @@ export class GameEngine {
       return;
     }
     let text: string;
+    if (this.hideSeek) {
+      const secs = Math.round(HIDE_TIME - this.timeLeft);
+      const t = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+      if (cause === 'caught') text = me === 'monster' ? `Trouvé ! ${partner} est resté caché ${t}.` : `${partner} vous a trouvé après ${t}.`;
+      else if (cause === 'timeout') text = me === 'monster' ? `${partner} est resté introuvable pendant 3 minutes !` : 'Introuvable ! Vous avez tenu les 3 minutes.';
+      else text = `${partner} a quitté la partie.`;
+      this.finished = true;
+      this.running = false;
+      this.player.inputEnabled = false;
+      sound.setHeartbeat(60, false);
+      document.exitPointerLock?.();
+      const hider = me === 'monster' ? partner : (this.net?.selfName ?? 'vous');
+      this.cb.onVersusEnd(iWon, text, cause === 'forfeit' ? undefined : { hider, seconds: cause === 'timeout' ? HIDE_TIME : secs });
+      return;
+    }
     if (cause === 'caught') text = me === 'monster' ? `Vous avez dévoré ${partner} !` : `Le Patient Zéro (${partner}) a mis fin à votre fuite.`;
     else if (cause === 'escape') text = me === 'monster' ? `Le survivant (${partner}) a quitté l'hôpital.` : 'Vous avez réussi à fuir !';
     else if (cause === 'timeout')
@@ -2283,6 +2333,8 @@ export class GameEngine {
         break;
       }
       case 'vsEnd':
+        // the clock of whoever ended the round (hide-and-seek times)
+        if (typeof msg.left === 'number') this.timeLeft = msg.left;
         this.versusEnd(msg.winner, msg.reason, msg.ending, false);
         break;
       case 'blind':
@@ -3218,6 +3270,7 @@ export class GameEngine {
       dancing: this.danceT >= 0,
       versusRole: this.vsRole,
       timeLeft: this.vsRole ? this.timeLeft : null,
+      hideCount: this.hideSeek && this.hideCount > 0 ? Math.ceil(this.hideCount) : null,
       race: this.net?.mode === 'race',
       canBlind: this.canBlind(),
       blindLeft: this.blindTimer,
@@ -3731,6 +3784,8 @@ export class GameEngine {
 
   /** Survivor side: watch the creature for camping. */
   private updateCampWatch(delta: number, puppet: MonsterAI, stunned: boolean) {
+    // Hide-and-seek: waiting near a hiding spot is the whole point
+    if (this.hideSeek) return;
     this.blindCooldown = Math.max(0, this.blindCooldown - delta);
     const pos = puppet.position;
     if (stunned || pos.distanceTo(this.campAnchor) > GameEngine.CAMP_RADIUS) {
@@ -4210,6 +4265,10 @@ export class GameEngine {
 
   private triggerEnding(ending: GameEnding) {
     if (this.pendingEnding) return;
+    if (this.hideSeek) {
+      this.state.showToast('🫣 Cache-cache : pas de sortie ! Restez caché jusqu\'à la fin du temps.');
+      return;
+    }
     if (this.net?.mode === 'race') {
       // Race: whoever opened the way out first wins (decided by the host)
       if (this.net.role !== 'host' || this.vsOver) return;

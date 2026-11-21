@@ -10,6 +10,8 @@ export interface RoomSettings {
   monster: 'host' | 'guest';
   /** 1 = the hospital, 2 = the sewers, 4 = the forest, 5 = Site B (co-op only) */
   chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8;
+  /** 🫣 versus variant: hide-and-seek */
+  hide?: boolean;
 }
 
 export type LobbyEvent =

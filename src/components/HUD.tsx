@@ -34,6 +34,8 @@ interface HUDProps {
   runTreats?: number;
   presents?: number | null;
   survival?: { wave: number; time: number } | null;
+  /** 🫣 hide-and-seek countdown */
+  hideCount?: number | null;
   /** ⏱️ Speedrun chrono */
   speedrun?: { time: number; best: number | null } | null;
   treatEmoji?: string | null;
@@ -105,6 +107,7 @@ export const HUD: React.FC<HUDProps> = ({
   presents = null,
   survival = null,
   speedrun = null,
+  hideCount = null,
   treatEmoji = null,
   selectedSlot = 0,
   touch = false,
@@ -128,7 +131,13 @@ export const HUD: React.FC<HUDProps> = ({
     const reach = interactionHint === '[E] ATTRAPER';
     return (
       <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
-        {timeLeft != null && <VersusTimer timeLeft={timeLeft} role="monster" />}
+        {timeLeft != null && hideCount == null && <VersusTimer timeLeft={timeLeft} role="monster" />}
+        {hideCount != null && (
+          <div className="absolute inset-0 z-40 bg-black flex flex-col items-center justify-center text-center">
+            <div className="text-8xl font-black font-mono text-red-500">{hideCount}</div>
+            <div className="text-sm font-serif italic text-zinc-300 mt-2">Yeux fermés… il se cache.</div>
+          </div>
+        )}
         {blindLeft > 0 && (
           <div className="absolute inset-0 z-40 bg-black flex flex-col items-center justify-center text-center">
             <div className="text-red-600 font-black font-mono tracking-[0.4em] text-2xl">AVEUGLÉ</div>
@@ -289,6 +298,14 @@ export const HUD: React.FC<HUDProps> = ({
       {runCoins > 0 && (
         <div className="absolute bottom-[100px] left-1/2 -translate-x-1/2 px-2 py-0.5 bg-black/60 border border-amber-700/60 text-amber-300 font-mono text-[11px]">
           🪙 {runCoins} pièce{runCoins > 1 ? 's' : ''} trouvée{runCoins > 1 ? 's' : ''}
+        </div>
+      )}
+
+      {/* 🫣 Hide-and-seek: the seeker counts */}
+      {hideCount != null && (
+        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center pointer-events-none">
+          <div className="text-8xl font-black font-mono text-red-500 drop-shadow-[0_0_20px_rgba(220,38,38,0.8)]">{hideCount}</div>
+          <div className="text-sm font-serif italic text-zinc-300 mt-2">Cachez-vous ! Il compte…</div>
         </div>
       )}
 

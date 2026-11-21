@@ -949,6 +949,11 @@ export const EN: Record<string, string> = {
   'Blouse du Dr Moreau': "Dr Moreau's coat",
   "L'Ombre": 'The Shadow',
   'Pyjama de Lucas': "Lucas's pyjamas",
+  '🫣 Cache-cache': '🫣 Hide & seek',
+  'trouve-le en 3 min': 'find them in 3 min',
+  'Yeux fermés… il se cache.': 'Eyes closed… they are hiding.',
+  'Cachez-vous ! Il compte…': 'Hide! They are counting…',
+  'Manche suivante (rôles échangés)': 'Next round (roles swapped)',
   // ---- Ranked seasons ----
   '🏅 Saison classée': '🏅 Ranked season',
   Classé: 'Ranked',

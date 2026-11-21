@@ -333,7 +333,7 @@ export const InviteToast: React.FC<{
   onJoin: () => void;
   onDecline: () => void;
 }> = ({ invite, onJoin, onDecline }) => {
-  const mode = invite.mode === 'versus' ? 'Chasse' : invite.mode === 'race' ? 'Course' : 'Coop';
+  const mode = invite.mode === 'versus' ? ((invite as { hide?: boolean }).hide ? 'Cache-cache' : 'Chasse') : invite.mode === 'race' ? 'Course' : 'Coop';
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[90] w-[min(92vw,420px)] p-3 border border-emerald-500 bg-zinc-950/95 shadow-[0_0_30px_rgba(34,197,94,0.35)] flex items-center gap-3">
       <div className="text-3xl animate-bounce">🎮</div>

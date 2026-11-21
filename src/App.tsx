@@ -132,6 +132,7 @@ const EMPTY_HUD: HudSnapshot = {
   presents: null,
   survival: null,
   speedrun: null,
+  hideCount: null,
   treatEmoji: null,
   selectedSlot: 0,
   voice: null,
@@ -188,6 +189,8 @@ export default function App() {
     partner: string;
     mode: 'coop' | 'versus' | 'race';
     versusRole: 'monster' | 'survivor' | null;
+    /** 🫣 hide-and-seek */
+    hide?: boolean;
     /** 👀 only watching a friend's game */
     watching?: boolean;
   } | null>(null);
@@ -306,8 +309,19 @@ export default function App() {
           setIsGameOver(true);
         },
         onVictory: (ending) => victoryRef.current(ending),
-        onVersusEnd: (won, text) => {
+        onVersusEnd: (won, text, hide) => {
           document.exitPointerLock?.();
+          // 🫣 Hide-and-seek: keep each player's best hiding time and compare
+          if (hide) {
+            const scores = { ...hideScoresRef.current, [hide.hider]: Math.max(hideScoresRef.current[hide.hider] ?? 0, hide.seconds) };
+            hideScoresRef.current = scores;
+            const names = Object.keys(scores);
+            if (names.length >= 2) {
+              const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+              const [a, b] = names.sort((x, y) => scores[y] - scores[x]);
+              text += `  ·  Meilleurs temps : ${a} ${fmt(scores[a])}, ${b} ${fmt(scores[b])}${scores[a] > scores[b] ? ` → ${a} mène la partie !` : ' → égalité !'}`;
+            } else text += '  ·  Manche suivante : on échange les rôles !';
+          }
           if (won) grantRewardRef.current(2);
           bankTreatsRef.current();
           setVersusResult({ won, reason: text });
@@ -947,6 +961,8 @@ export default function App() {
   const refreshFriendsRef = useRef(refreshFriends);
   refreshFriendsRef.current = refreshFriends;
   const [redeemOpen, setRedeemOpen] = useState(false);
+  /** 🫣 hide-and-seek: best hiding time of each player in this room */
+  const hideScoresRef = useRef<Record<string, number>>({});
   // 🎭 The partner's look, for the lobby stage
   const [partnerLook, setPartnerLook] = useState<Appearance | null>(null);
   useEffect(() => {
@@ -1208,11 +1224,14 @@ export default function App() {
         const net = netRef.current;
         if (!net || !engine) return;
         const versusRole = e.mode === 'versus' ? (e.monster === role ? 'monster' : 'survivor') : null;
+        if (e.mode !== 'versus' || !e.hide) hideScoresRef.current = {};
         const link: GameLink = {
           role,
           partnerName: l.partner ?? '???',
           mode: e.mode,
           versusRole,
+          hide: !!e.hide,
+          selfName: sessionRef.current?.username,
           send: (msg: GameMsg) => net.relay(msg),
           setHandler: (fn) => net.onRelay(fn ? (d) => fn(d as GameMsg) : null),
           sendVoice: (b) => net.sendVoice(b),
@@ -1221,7 +1240,7 @@ export default function App() {
         engine.setNet(link);
         // Same forest / lab layout on both screens
         engine.levelSeed = typeof e.seed === 'number' ? e.seed : null;
-        setOnline({ role, partner: link.partnerName, mode: e.mode, versusRole });
+        setOnline({ role, partner: link.partnerName, mode: e.mode, versusRole, hide: !!e.hide });
         setVersusResult(null);
         setMpOpen(false);
         beginRun(true, e.difficulty as Difficulty, toMpChapter(e.chapter));
@@ -1718,6 +1737,7 @@ export default function App() {
           presents={hud.presents}
           survival={hud.survival}
           speedrun={hud.speedrun}
+          hideCount={hud.hideCount}
           treatEmoji={hud.treatEmoji}
           selectedSlot={hud.selectedSlot}
           voice={hud.voice}
@@ -1793,6 +1813,7 @@ export default function App() {
           won={versusResult.won}
           text={versusResult.reason}
           role={online.versusRole ?? 'racer'}
+          hide={!!online.hide}
           onPlayAgain={online.role === 'host' ? handleRestart : undefined}
           onMainMenu={handleMainMenu}
         />
