@@ -22,10 +22,10 @@ export interface AchDef {
 
 /** 🔪 impGames: Imposteur games played · impAsImp: as the impostor · impWins: won as the impostor
  *  · crewWins: won with the survivors · impCaught: unmasked by the vote */
-export type StatKey = 'escapes' | 'deaths' | 'hides' | 'coinsFound' | 'boxes' | 'flips' | 'impGames' | 'impAsImp' | 'impWins' | 'crewWins' | 'impCaught';
-export const STAT_KEYS: StatKey[] = ['escapes', 'deaths', 'hides', 'coinsFound', 'boxes', 'flips', 'impGames', 'impAsImp', 'impWins', 'crewWins', 'impCaught'];
+export type StatKey = 'escapes' | 'deaths' | 'hides' | 'coinsFound' | 'boxes' | 'flips' | 'impGames' | 'impAsImp' | 'impWins' | 'crewWins' | 'impCaught' | 'impWon';
+export const STAT_KEYS: StatKey[] = ['escapes', 'deaths', 'hides', 'coinsFound', 'boxes', 'flips', 'impGames', 'impAsImp', 'impWins', 'crewWins', 'impCaught', 'impWon'];
 /** Max a single report may add to a counter (anti-abuse). */
-const STAT_STEP_MAX: Record<StatKey, number> = { escapes: 1, deaths: 3, hides: 30, coinsFound: 200, boxes: 0, flips: 30, impGames: 1, impAsImp: 1, impWins: 1, crewWins: 1, impCaught: 1 };
+const STAT_STEP_MAX: Record<StatKey, number> = { escapes: 1, deaths: 3, hides: 30, coinsFound: 200, boxes: 0, flips: 30, impGames: 1, impAsImp: 1, impWins: 1, crewWins: 1, impCaught: 1, impWon: 1 };
 
 export const ACHIEVEMENTS: AchDef[] = [
   // --- Escapes & endings ---
@@ -102,6 +102,7 @@ export const ACHIEVEMENTS: AchDef[] = [
   // --- Imposteur ---
   { id: 'imp_win', name: 'Le loup dans la bergerie', desc: "Gagner une partie d'Imposteur en étant le monstre.", icon: '🔪', tier: 'or', reward: 200 },
   { id: 'imp_crew', name: 'Démasqué !', desc: "Gagner une partie d'Imposteur avec les survivants.", icon: '🧍', tier: 'argent', reward: 120 },
+  { id: 'imp_10', name: 'Maître du masque', desc: "Gagner 10 parties d'Imposteur (en imposteur ou en survivant). Récompense : skin « Masque de l'imposteur ».", icon: '🎭', tier: 'or', reward: 200, stat: 'impWon', goal: 10 },
   // --- Secret chapter ---
   { id: 'ch8_end', name: 'Le garçon qui voulait être docteur', desc: 'Terminer le chapitre secret : le Rêve de Lucas. Récompense : skins de l\'Ombre et de Lucas.', icon: '🌳', tier: 'platine', reward: 500, secret: true },
   // --- Chapter 7 ---
@@ -145,7 +146,7 @@ export interface AchState {
   stats: Record<StatKey, number>;
 }
 
-export const NEW_ACH = (): AchState => ({ done: {}, stats: { escapes: 0, deaths: 0, hides: 0, coinsFound: 0, boxes: 0, flips: 0, impGames: 0, impAsImp: 0, impWins: 0, crewWins: 0, impCaught: 0 } });
+export const NEW_ACH = (): AchState => ({ done: {}, stats: { escapes: 0, deaths: 0, hides: 0, coinsFound: 0, boxes: 0, flips: 0, impGames: 0, impAsImp: 0, impWins: 0, crewWins: 0, impCaught: 0, impWon: 0 } });
 
 export const sanitizeAch = (x: unknown): AchState => {
   const src = (x ?? {}) as Partial<AchState>;

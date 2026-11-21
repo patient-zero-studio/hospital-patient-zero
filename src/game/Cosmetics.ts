@@ -55,6 +55,8 @@ export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
   hazmat: { gown: '#f5c400', hair: '#1d1d22', accs: ['gasmask'], extras: ['belt'] },
   moreauh: { gown: '#ecebe6', hair: '#b8b8b8', accs: ['glasses'], gownFx: 'white', extras: ['stethoscope'] },
   lucas: { gown: '#8fb0de', hair: '#4a2e1a', accs: [], extras: ['stripes'] },
+  // 🔪 Imposteur: 10 wins
+  impostor: { gown: '#1a0a0e', hair: '#0a0a0a', accs: ['impmask'], extras: ['cape'] },
   clanknight: { gown: '#2a2f45', hair: '#1d1d22', accs: ['beret'], extras: ['cape', 'belt'] },
   champion: { gown: '#7a0a14', hair: '#f5d36a', accs: ['crown'], gownFx: 'gold', extras: ['cape', 'medal', 'belt'] },
   veteran: { gown: '#4b5320', hair: '#2a2a20', accs: ['beret', 'shades'], extras: ['medal', 'belt'] },
@@ -298,6 +300,24 @@ const buildFestive = (id: string, h: HeadSpec, track: Track, g: THREE.Group): bo
       b.scale.set(1.05, 0.45, (h.rz / h.rx) * 1.02);
       b.rotation.z = 0.18;
       add(track, g, new THREE.CircleGeometry(0.012 * s, 10), std(track, 0xe8c040, { metalness: 0.9, roughness: 0.3 }), -h.rx * 0.5, h.top - 0.01 * s, h.rz * 0.85).rotation.y = -0.4;
+      return true;
+    }
+    case 'impmask': {
+      // 🔪 a smooth white theatre mask: black eye slits, thin red grin
+      const porcelain = std(track, 0xf2efe8, { roughness: 0.25, metalness: 0.05, side: THREE.DoubleSide });
+      const m = add(track, g, new THREE.SphereGeometry(h.rx * 1.06, 22, 16, -Math.PI * 0.42, Math.PI * 0.84, Math.PI * 0.12, Math.PI * 0.66), porcelain, 0, h.cy + 0.005 * s, 0.006 * s);
+      m.scale.set(1, 1.18, h.rz / h.rx);
+      const black = track(new THREE.MeshBasicMaterial({ color: 0x050505, side: THREE.DoubleSide }));
+      for (const side of [-1, 1]) {
+        const eye = add(track, g, new THREE.CircleGeometry(0.016 * s, 3), black, side * 0.032 * s, h.cy + 0.02 * s, h.rz * 1.02 + 0.008 * s);
+        eye.scale.set(1.5, 0.55, 1);
+        eye.rotation.z = side * 0.35;
+        eye.castShadow = false;
+      }
+      const red = track(new THREE.MeshBasicMaterial({ color: 0xb0001a, side: THREE.DoubleSide }));
+      const grin = add(track, g, new THREE.TorusGeometry(0.03 * s, 0.0035 * s, 4, 16, Math.PI * 0.8), red, 0, h.cy - 0.018 * s, h.rz * 1.02 + 0.006 * s);
+      grin.rotation.z = Math.PI + Math.PI * 0.1;
+      grin.castShadow = false;
       return true;
     }
     case 'clownnose':

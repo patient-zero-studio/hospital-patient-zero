@@ -152,6 +152,8 @@ export const CATALOG: Cosmetic[] = [
   { ...c('h-story-moreau', 'Blouse du Dr Moreau', 'human', 'outfit', 'moreauh', 'exclusif'), unlock: 'story' },
   { ...c('m-story-ombre', 'L\'Ombre', 'monster', 'outfit', 'ombre', 'exclusif'), unlock: 'story' },
   { ...c('h-story-lucas', 'Pyjama de Lucas', 'human', 'outfit', 'lucas', 'exclusif'), unlock: 'story' },
+  // 🔪 Imposteur: 10 wins
+  { ...c('h-imp-mask', "Masque de l'imposteur", 'human', 'outfit', 'impostor', 'exclusif'), unlock: 'story' },
   // 🛡️ Clan chest (earned together, never sold)
   { ...c('h-clan-knight', 'Chevalier du clan', 'human', 'outfit', 'clanknight', 'style'), unlock: 'clan' },
   { ...c('m-clan-beast', 'Bête du clan', 'monster', 'outfit', 'clanbeast', 'exclusif'), unlock: 'clan' },
@@ -614,4 +616,5 @@ export const takeStash = (w: Wallet, kind: SupplyKind): string | null => {
 export const STORY_SKINS: { ach: string; skins: string[] }[] = [
   { ach: 'ch7_end', skins: ['m-story-moreau', 'h-story-moreau'] },
   { ach: 'ch8_end', skins: ['m-story-ombre', 'h-story-lucas'] },
+  { ach: 'imp_10', skins: ['h-imp-mask'] },
 ];

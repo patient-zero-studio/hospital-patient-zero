@@ -897,6 +897,7 @@ export default function App() {
       const r = await api.reportAch(s.token, unlock, stats);
       setWallet(r);
       showNewAch(r.newAch);
+      if (r.impCoins) setRewardMsg(`🔪 Victoire à l'Imposteur : +${r.impCoins} pièces !`);
     } catch {
       /* offline: lost, it will be earned again */
     }

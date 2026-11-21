@@ -189,7 +189,7 @@ export const CosmeticBadge: React.FC<{ c: Cosmetic; size?: number }> = ({ c, siz
     fishhat: '🐟', clownnose: '🔴', clown: '🤡', clownm: '🤡',
     evilsanta: '🎅',
     crown: '👑', toxic: '☣️', hazmat: '☢️', nightvision: '🥽', abyss: '🌊', veteran: '🎖️', legend: '🩸',
-    moreau: '🧪', moreauh: '🥼', ombre: '👤', lucas: '🧸',
+    moreau: '🧪', moreauh: '🥼', ombre: '👤', lucas: '🧸', impostor: '🎭',
     clanknight: '🛡️', clanbeast: '🐲', embers: '🎇',
     jump: '🤸', salute: '🫡', guitar: '🎸', flex: '💪', robot: '🤖', moon: '🌙',
     gladiator: '⚔️', stars: '🌟', champion: '🏆',

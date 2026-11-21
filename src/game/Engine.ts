@@ -891,7 +891,10 @@ export class GameEngine {
     // 📊 profile counters
     this.stat('impGames');
     if (me) this.stat('impAsImp');
-    if (won) this.stat(me ? 'impWins' : 'crewWins');
+    if (won) {
+      this.stat(me ? 'impWins' : 'crewWins');
+      this.stat('impWon');
+    }
     if (me && caught) this.stat('impCaught');
     this.finished = true;
     this.running = false;

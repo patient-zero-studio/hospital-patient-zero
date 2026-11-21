@@ -32,6 +32,8 @@ export interface WalletView {
   ach?: AchState;
   /** achievements unlocked by this very request */
   newAch?: string[];
+  /** 🔪 coins won for an Imposteur win (in this very request) */
+  impCoins?: number;
   /** today's challenge and whether this account already won it */
   challenge?: { id: string; done: boolean };
   /** player level (XP) */

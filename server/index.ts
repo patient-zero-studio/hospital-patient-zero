@@ -84,6 +84,8 @@ interface User {
   lastChallenge?: string;
   /** last run submitted (anti-spam) */
   lastRun?: number;
+  /** 🔪 Imposteur wins paid: last one, and today's count */
+  impPay?: { at: number; day: string; n: number };
   /** Advent calendar boxes opened, for the Christmas of `year` */
   advent?: { year: number; days: number[] };
   /** The shop opens after the first escape (Exploration is enough) */
@@ -370,7 +372,7 @@ function grantStorySkins(u: User) {
     if (!missing.length) continue;
     w.owned.push(...missing);
     const names = missing.map((id) => `« ${cosmeticById(id)?.name ?? id} »`).join(' et ');
-    u.inbox = [...(u.inbox ?? []), { from: 'Patient Zero', text: `🏆 Bravo ! Tu as gagné ${missing.length > 1 ? 'les skins' : 'le skin'} ${names}. Équipe-les dans Personnaliser.`, at: Date.now() }].slice(-20);
+    u.inbox = [...(u.inbox ?? []), { from: 'Patient Zero', text: `🏆 Bravo ! Tu as gagné ${missing.length > 1 ? 'les skins' : 'le skin'} ${names}. ${missing.length > 1 ? 'Équipe-les' : 'Équipe-le'} dans Personnaliser.`, at: Date.now() }].slice(-20);
   }
 }
 /** Unlocks achievements only the server can check, and pays them. */
@@ -649,13 +651,35 @@ app.post('/api/run', (req, res) => {
   res.json({ record, rank: rank >= 0 ? rank + 1 : null, challengeWon, ...walletView(user) });
 });
 
+/** 🔪 Imposteur win rewards (the impostor's win is harder: it pays more) */
+const IMP_WIN_COINS = 60;
+const CREW_WIN_COINS = 40;
 // Achievements reported by the game: { unlock: string[], stats: { key: increment } }
 app.post('/api/achievements', (req, res) => {
   const user = authUser(req);
   if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const st0 = achOf(user).stats;
+  const before = { imp: st0.impWins ?? 0, crew: st0.crewWins ?? 0 };
+  // wins counted before the 🎭 mask counter existed
+  if ((st0.impWon ?? 0) < before.imp + before.crew) st0.impWon = before.imp + before.crew;
   const newAch = reportAch(user, req.body?.unlock, req.body?.stats);
+  // 🔪 Imposteur: coins for each win (a real game lasts more than a minute; 15 paid wins a day)
+  let impCoins = 0;
+  const st1 = achOf(user).stats;
+  const won = (st1.impWins ?? 0) > before.imp ? 'imp' : (st1.crewWins ?? 0) > before.crew ? 'crew' : null;
+  if (won) {
+    const now = Date.now();
+    const day = todayKey();
+    const pay = user.impPay && user.impPay.day === day ? user.impPay : { at: 0, day, n: 0 };
+    if (now - pay.at > 60_000 && pay.n < 15) {
+      impCoins = won === 'imp' ? IMP_WIN_COINS : CREW_WIN_COINS;
+      walletOf(user).coins += impCoins;
+      addXp(user, impCoins / 2);
+      user.impPay = { at: now, day, n: pay.n + 1 };
+    }
+  }
   saveUsers();
-  res.json({ newAch, ...walletView(user) });
+  res.json({ newAch, impCoins, ...walletView(user) });
 });
 
 // ---- Admin: list players, gift coins ----
