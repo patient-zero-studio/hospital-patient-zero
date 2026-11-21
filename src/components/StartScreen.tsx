@@ -114,7 +114,7 @@ interface StartScreenProps {
   menuMusic?: boolean;
   onToggleMusic?: () => void;
   onShop: () => void;
-  chapter?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  chapter?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   ch2Unlocked?: boolean;
   ch3Unlocked?: boolean;
   ch4Unlocked?: boolean;
@@ -129,7 +129,7 @@ interface StartScreenProps {
   challengeDone?: boolean;
   onToggleChallenge?: () => void;
   onLeaderboard?: () => void;
-  onChangeChapter?: (c: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) => void;
+  onChangeChapter?: (c: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9) => void;
   /** achievements unlocked (null = not logged in) */
   achCount?: number | null;
   onAchievements?: () => void;

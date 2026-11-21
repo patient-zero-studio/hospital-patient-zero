@@ -13,7 +13,7 @@ export interface MatchSettings {
   /** versus: which side plays the creature */
   monster: 'host' | 'guest';
   /** 1 = the hospital, 2 = the sewers, 4 = the forest, 5 = Site B (co-op only) */
-  chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8;
+  chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9;
   /** 🫣 versus variant: hide-and-seek */
   hide?: boolean;
 }
@@ -218,6 +218,15 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
           >
             {p.ch7Unlocked || value.chapter === 7 ? '💉' : '🔒'} Chapitre 7
             <div className="text-[9px] normal-case tracking-normal text-zinc-500">le boss (coop)</div>
+          </button>
+          <button
+            disabled={readOnly}
+            title="Mode spécial à 2 : survivre 3 nuits… et résister à la trahison"
+            className={tab(value.chapter === 9)}
+            onClick={() => onChange({ chapter: 9, mode: 'coop', hide: false })}
+          >
+            🎪 La Nuit du Cirque
+            <div className="text-[9px] normal-case tracking-normal text-zinc-500">survie & trahison</div>
           </button>
           <button
             disabled={readOnly || (!p.ch8Unlocked && value.chapter !== 8)}

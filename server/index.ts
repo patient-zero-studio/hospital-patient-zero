@@ -1338,7 +1338,7 @@ interface Room {
   /** versus: who plays the creature */
   monster: 'host' | 'guest';
   /** 1 = the hospital, 2 = the sewers, 4 = the forest, 5 = Site B (co-op only) */
-  chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8;
+  chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9;
   started: boolean;
   /** same level layout for everyone (spectators too) */
   seed?: number;
@@ -1355,16 +1355,16 @@ const roomSettings = (r: Room) => {
   if (r.mode !== 'versus') r.hide = false;
   return { difficulty: r.difficulty, mode: r.mode, monster: r.monster, chapter: r.chapter, hide: !!r.hide };
 };
-const parseChapter = (v: unknown): 1 | 2 | 4 | 5 | 6 | 7 | 8 => {
+const parseChapter = (v: unknown): 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9 => {
   const n = Number(v);
-  return n === 2 || n === 4 || n === 5 || n === 6 || n === 7 || n === 8 ? n : 1;
+  return n === 2 || n === 4 || n === 5 || n === 6 || n === 7 || n === 8 || n === 9 ? n : 1;
 };
 const parseMode = (v: unknown): GameMode => (v === 'versus' || v === 'race' ? v : 'coop');
 const parseSide = (v: unknown): 'host' | 'guest' => (v === 'guest' ? 'guest' : 'host');
 
 const rooms = new Map<string, Room>();
 /** 🔎 Players waiting for a random partner */
-const matchQueue: { client: Client; mode: GameMode; hide?: boolean; difficulty: number; chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8 }[] = [];
+const matchQueue: { client: Client; mode: GameMode; hide?: boolean; difficulty: number; chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9 }[] = [];
 const unqueue = (c: Client) => {
   for (let i = matchQueue.length - 1; i >= 0; i--) if (matchQueue[i].client === c) matchQueue.splice(i, 1);
 };

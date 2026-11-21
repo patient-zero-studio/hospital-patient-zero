@@ -114,7 +114,9 @@ export type GameMsg =
   /** 👋 emote (keys 6-9), shown above the player's head */
   | { k: 'emote'; e: number }
   /** 👀 a spectator arrived: send everything again (full snapshot, looks) */
-  | { k: 'resync' };
+  | { k: 'resync' }
+  /** 🎪 guest → host: answer to the Ringmaster's deal */
+  | { k: 'pact'; yes: boolean };
 
 /** Emotes, keys 6 → 9 */
 export const EMOTES = ['👋 Salut !', '👉 Par ici !', '😱 Au secours !', '🤫 Chut !'];

@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioSettings, Chapter, ControlSettings, GameEnding, GameItem } from './types';
 
 /** Chapters playable online (3 stays solo: the endless maze). */
-const toMpChapter = (c: unknown): 1 | 2 | 4 | 5 | 6 | 7 | 8 => (c === 2 || c === 4 || c === 5 || c === 6 || c === 7 || c === 8 ? c : 1);
+const toMpChapter = (c: unknown): 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9 => (c === 2 || c === 4 || c === 5 || c === 6 || c === 7 || c === 8 || c === 9 ? c : 1);
 import { sound } from './audio/SoundSystem';
 import { CampaignCarry, GameEngine, HudSnapshot } from './game/Engine';
 import { CampaignCard } from './components/CampaignCard';
@@ -133,6 +133,7 @@ const EMPTY_HUD: HudSnapshot = {
   survival: null,
   speedrun: null,
   hideCount: null,
+  pact: null,
   treatEmoji: null,
   selectedSlot: 0,
   voice: null,
@@ -191,6 +192,8 @@ export default function App() {
     versusRole: 'monster' | 'survivor' | null;
     /** 🫣 hide-and-seek */
     hide?: boolean;
+    /** 🎪 La Nuit du Cirque */
+    circus?: boolean;
     /** 👀 only watching a friend's game */
     watching?: boolean;
   } | null>(null);
@@ -1240,7 +1243,7 @@ export default function App() {
         engine.setNet(link);
         // Same forest / lab layout on both screens
         engine.levelSeed = typeof e.seed === 'number' ? e.seed : null;
-        setOnline({ role, partner: link.partnerName, mode: e.mode, versusRole, hide: !!e.hide });
+        setOnline({ role, partner: link.partnerName, mode: e.mode, versusRole, hide: !!e.hide, circus: e.chapter === 9 });
         setVersusResult(null);
         setMpOpen(false);
         beginRun(true, e.difficulty as Difficulty, toMpChapter(e.chapter));
@@ -1738,6 +1741,7 @@ export default function App() {
           survival={hud.survival}
           speedrun={hud.speedrun}
           hideCount={hud.hideCount}
+          pact={hud.pact}
           treatEmoji={hud.treatEmoji}
           selectedSlot={hud.selectedSlot}
           voice={hud.voice}
@@ -1808,12 +1812,13 @@ export default function App() {
         />
       )}
 
-      {versusResult && online && (online.versusRole || online.mode === 'race') && (
+      {versusResult && online && (online.versusRole || online.mode === 'race' || online.circus) && (
         <VersusResultModal
           won={versusResult.won}
           text={versusResult.reason}
           role={online.versusRole ?? 'racer'}
           hide={!!online.hide}
+          circus={!!online.circus}
           onPlayAgain={online.role === 'host' ? handleRestart : undefined}
           onMainMenu={handleMainMenu}
         />

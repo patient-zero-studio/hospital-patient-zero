@@ -954,6 +954,12 @@ export const EN: Record<string, string> = {
   'Yeux fermés… il se cache.': 'Eyes closed… they are hiding.',
   'Cachez-vous ! Il compte…': 'Hide! They are counting…',
   'Manche suivante (rôles échangés)': 'Next round (roles swapped)',
+  '🎪 La Nuit du Cirque': '🎪 Circus Night',
+  'survie & trahison': 'survival & betrayal',
+  'Message du Directeur — vous seul le voyez': 'Message from the Ringmaster — only you can see it',
+  '[O] Le livrer': '[O] Hand them over',
+  '[N] Refuser': '[N] Refuse',
+  'Un nouveau spectacle': 'A new show',
   // ---- Ranked seasons ----
   '🏅 Saison classée': '🏅 Ranked season',
   Classé: 'Ranked',

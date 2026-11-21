@@ -34,6 +34,8 @@ interface HUDProps {
   runTreats?: number;
   presents?: number | null;
   survival?: { wave: number; time: number } | null;
+  /** 🎪 the Ringmaster's deal (seconds left) */
+  pact?: number | null;
   /** 🫣 hide-and-seek countdown */
   hideCount?: number | null;
   /** ⏱️ Speedrun chrono */
@@ -108,6 +110,7 @@ export const HUD: React.FC<HUDProps> = ({
   survival = null,
   speedrun = null,
   hideCount = null,
+  pact = null,
   treatEmoji = null,
   selectedSlot = 0,
   touch = false,
@@ -298,6 +301,32 @@ export const HUD: React.FC<HUDProps> = ({
       {runCoins > 0 && (
         <div className="absolute bottom-[100px] left-1/2 -translate-x-1/2 px-2 py-0.5 bg-black/60 border border-amber-700/60 text-amber-300 font-mono text-[11px]">
           🪙 {runCoins} pièce{runCoins > 1 ? 's' : ''} trouvée{runCoins > 1 ? 's' : ''}
+        </div>
+      )}
+
+      {/* 🎪 The Ringmaster's deal: only you can see it */}
+      {pact != null && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="pointer-events-auto max-w-md mx-4 p-5 bg-black/90 border-2 border-amber-600 text-center shadow-[0_0_50px_rgba(217,119,6,0.4)]">
+            <div className="text-4xl mb-2">🎩</div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-amber-400 mb-2">Message du Directeur — vous seul le voyez</div>
+            <p className="font-serif italic text-zinc-100 mb-4">« Livre-moi ton ami… et tu sortiras d'ici libre. Il n'en saura rien… jusqu'à ce qu'il soit trop tard. »</p>
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyO' }))}
+                className="px-4 py-2 bg-red-700 hover:bg-red-600 text-white font-mono text-xs uppercase tracking-widest"
+              >
+                [O] Le livrer
+              </button>
+              <button
+                onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN' }))}
+                className="px-4 py-2 border border-zinc-500 text-zinc-200 hover:bg-zinc-800 font-mono text-xs uppercase tracking-widest"
+              >
+                [N] Refuser
+              </button>
+            </div>
+            <div className="text-xs font-mono text-zinc-500 mt-3">Sans réponse dans {pact} s, c'est non.</div>
+          </div>
         </div>
       )}
 

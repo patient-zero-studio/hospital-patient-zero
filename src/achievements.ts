@@ -93,6 +93,10 @@ export const ACHIEVEMENTS: AchDef[] = [
   { id: 'rpass_done', name: 'Pass classé terminé', desc: 'Prendre le palier 20 du pass classé.', icon: '🏆', tier: 'platine', reward: 300, server: true },
   { id: 'clan', name: 'Frères d\'armes', desc: 'Créer ou rejoindre un clan.', icon: '🛡️', tier: 'bronze', reward: 30, server: true },
   { id: 'chat', name: 'Bavard', desc: 'Envoyer un message à un ami.', icon: '💬', tier: 'bronze', reward: 20, server: true },
+  // --- La Nuit du Cirque ---
+  { id: 'circus_trust', name: 'À la vie, à la mort', desc: 'Survivre aux 3 nuits du cirque sans que personne ne trahisse.', icon: '🤝', tier: 'or', reward: 200 },
+  { id: 'circus_traitor', name: 'Marché conclu', desc: 'Livrer votre partenaire au Directeur… et gagner.', icon: '🔪', tier: 'argent', reward: 100, secret: true },
+  { id: 'circus_escape', name: 'Sortie de piste', desc: 'Être trahi, et pourtant s\'enfuir du chapiteau.', icon: '🎪', tier: 'or', reward: 150 },
   // --- Secret chapter ---
   { id: 'ch8_end', name: 'Le garçon qui voulait être docteur', desc: 'Terminer le chapitre secret : le Rêve de Lucas. Récompense : skins de l\'Ombre et de Lucas.', icon: '🌳', tier: 'platine', reward: 500, secret: true },
   // --- Chapter 7 ---

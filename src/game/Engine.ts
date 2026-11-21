@@ -18,6 +18,7 @@ import { SiteB, SiteNet, SitePlayer } from './SiteB';
 import { Rooftop } from './Rooftop';
 import { BossArena } from './BossArena';
 import { DreamHouse, MEMORY_IDS } from './DreamHouse';
+import { CircusTent } from './CircusTent';
 import { GameState } from './GameState';
 import { ProceduralTextures } from '../textures/ProceduralTextures';
 import { MicListener, MicStatus } from '../audio/MicListener';
@@ -150,6 +151,8 @@ function segHitsRect(ax: number, az: number, bx: number, bz: number, x0: number,
 }
 
 export interface HudSnapshot {
+  /** 🎪 the Ringmaster's deal is for me: seconds left to answer */
+  pact: number | null;
   /** 🫣 hide-and-seek: the seeker is still counting */
   hideCount: number | null;
   /** 💃 victory dance on screen: no HUD */
@@ -395,7 +398,7 @@ export class GameEngine {
   private forest: Forest | null = null;
   /** Chapter 5: Site B, the UV ramps and the final fight. */
   /** Chapter 5 (Site B) or chapter 6 (the roof): same kind of scripted level */
-  private site: SiteB | Rooftop | BossArena | DreamHouse | null = null;
+  private site: SiteB | Rooftop | BossArena | DreamHouse | CircusTent | null = null;
   /** Battery drain before the UV lamp multiplies it. */
   private baseDrain = 1;
   /** Co-op: the forest / lab layout seed shared by both players (null = random, solo). */
@@ -555,6 +558,55 @@ export class GameEngine {
     this.blackout = 1;
     this.danceT = -1;
     this.pushHud();
+  }
+
+  // -----------------------------------------------------------------------
+  // 🎪 La Nuit du Cirque: the Ringmaster's deal and the end of the show
+  // -----------------------------------------------------------------------
+  private circusDone = false;
+  private get mySide(): 'host' | 'guest' {
+    return this.net?.role ?? 'host';
+  }
+  /** O / N: answer the deal (only the player who received it) */
+  private answerPact(yes: boolean) {
+    const s = this.site;
+    if (!(s instanceof CircusTent) || s.phase !== 'morning' || s.offerTo !== this.mySide || this.finished) return;
+    if (this.net?.role === 'guest') {
+      this.net.send({ k: 'pact', yes });
+      s.offerTo = null;
+    } else s.answer(this.mySide, yes);
+    this.state.showToast(yes ? '🔪 Marché conclu. Les clowns vont s\'occuper de votre « ami ».' : '🤝 Vous avez refusé. Votre partenaire n\'en saura rien.');
+  }
+  private circusCheck(s: CircusTent) {
+    if (!s.result || this.circusDone) return;
+    this.circusDone = true;
+    // The host stops right after: send the final state now so the guest sees the end too
+    if (this.net?.role === 'host') this.net.send({ k: 'snap', w: this.buildSnapshot() });
+    const me = this.mySide;
+    const partner = this.net?.partnerName ?? 'votre partenaire';
+    let won = false;
+    let text = '';
+    if (s.result === 'trust') {
+      won = true;
+      text = `🤝 Trois nuits, aucune trahison. ${partner} et vous sortez ensemble du cirque. Le Directeur range ses contrats… pour cette fois.`;
+      this.ach('circus_trust');
+    } else if (s.result === 'traitor') {
+      won = me === s.traitor;
+      text = won
+        ? `Les clowns ont attrapé ${partner}. Le Directeur tient parole : vous êtes libre… et seul.`
+        : `Trahi ! ${partner} vous a livré au Directeur, et les clowns vous ont rattrapé.`;
+      if (won) this.ach('circus_traitor');
+    } else if (s.result === 'escaped') {
+      won = me !== s.traitor;
+      text = won ? `Vous avez échappé aux clowns… et à ${partner}, qui vous avait vendu.` : `${partner} s'est enfui par le rideau. Le Directeur n'aime pas les marchés ratés.`;
+      if (won) this.ach('circus_escape');
+    } else text = 'Les clowns ont eu raison de vous deux. Le spectacle continue sans vous.';
+    this.finished = true;
+    this.running = false;
+    this.player.inputEnabled = false;
+    sound.setHeartbeat(60, false);
+    document.exitPointerLock?.();
+    this.cb.onVersusEnd(won, text);
   }
 
   private nurseWarned = false;
@@ -749,6 +801,8 @@ export class GameEngine {
       const em = ['Digit6', 'Digit7', 'Digit8', 'Digit9'].indexOf(e.code);
       if (em >= 0 && !e.repeat) this.sendEmote(em);
       if ((e.code === 'Space' || e.code === 'Enter') && this.intro) this.skipIntro();
+      if (e.code === 'KeyO' && !e.repeat) this.answerPact(true);
+      if (e.code === 'KeyN' && !e.repeat) this.answerPact(false);
     }) as EventListener);
     this.mic.onPcm = (s, r) => this.voice.onMic(s, r);
     // Phones keep audio asleep until a touch
@@ -1162,6 +1216,12 @@ export class GameEngine {
     this.stairsBuilt = true;
     this.ventOpen = false;
     this.ductWarned = true;
+    if (this.chapter === 9) {
+      this.site = new CircusTent(this.map, this.scene, this.difficulty, this.lowEndGpu, (msg) => this.shout(msg), this.levelSeed ?? Math.random());
+      this.site.guest = this.net?.role === 'guest';
+      this.monsters.push(...this.site.clowns);
+      return;
+    }
     if (this.chapter === 8) {
       this.site = new DreamHouse(this.map, this.scene, this.difficulty, this.lowEndGpu, (msg) => this.shout(msg), this.levelSeed ?? Math.random());
       this.site.guest = this.net?.role === 'guest';
@@ -1553,7 +1613,11 @@ export class GameEngine {
       this.player.reset(lv.start.clone().add(off), lv.startYaw);
     } else this.player.reset(start, sewers ? this.map.sewer.startYaw : this.map.playerStartYaw);
     this.chapterToast = null;
-    if (this.site instanceof DreamHouse)
+    if (this.site instanceof CircusTent)
+      this.queueChapterToast(
+        '🎪 LA NUIT DU CIRQUE. Survivez ensemble à 3 nuits sous le chapiteau. Mais chaque matin, le Directeur écrit en secret à l\'un de vous : « Livre-moi ton ami… et tu sortiras libre. »'
+      );
+    else if (this.site instanceof DreamHouse)
       this.queueChapterToast(
         this.difficulty >= 2
           ? 'CHAPITRE SECRET — LE RÊVE DE LUCAS. Sa maison d\'enfance, comme il s\'en souvient. Retrouvez ses 5 souvenirs, puis sortez par le portail du jardin. Une ombre vous suit… elle ne bouge que quand personne ne la regarde.'
@@ -1628,6 +1692,7 @@ export class GameEngine {
     // Multiplayer state (a spectator only ever watches)
     this.spectating = this.watchOnly;
     this.nurseWarned = false;
+    this.circusDone = false;
     if (this.danceT >= 0) this.endDance();
     this.danceT = -1;
     this.remoteCaught = false;
@@ -1692,7 +1757,12 @@ export class GameEngine {
     this.hemi.groundColor.copy(this.baseHemi.ground);
     this.hemi.intensity = this.baseHemi.intensity;
     // Sewers: no windows, no white paint… a bit more fill light so the torch reveals the bricks
-    if (this.chapter === 8) {
+    if (this.chapter === 9) {
+      // Under the big top at night: warm bulbs, deep shadows
+      this.hemi.intensity = this.baseHemi.intensity * 2.4;
+      this.hemi.color.set(0xb08a6a);
+      this.hemi.groundColor.set(0x1a0a08);
+    } else if (this.chapter === 8) {
       // A dream at dusk: soft purple light
       this.hemi.intensity = this.baseHemi.intensity * 2.2;
       this.hemi.color.set(0x9a80c0);
@@ -2309,6 +2379,9 @@ export class GameEngine {
     const host = this.net?.role === 'host';
     if (this.watchOnly && GameEngine.WATCH_IGNORE.has(msg.k)) return;
     switch (msg.k) {
+      case 'pact':
+        if (host && this.site instanceof CircusTent) this.site.answer('guest', msg.yes);
+        break;
       case 'resync':
         // A spectator arrived: full snapshot + our look again
         this.lastWorldSent = -1;
@@ -3063,6 +3136,7 @@ export class GameEngine {
       if (this.site) {
         if (this.site instanceof DreamHouse) this.site.found = this.state.notesCollected.filter((n) => MEMORY_IDS.includes(n.id)).length;
         this.site.mirror(delta);
+        if (this.site instanceof CircusTent) this.circusCheck(this.site);
         this.applyUvLamp();
         this.hemi.intensity = this.forestHemi + this.site.flash * 3;
       }
@@ -3126,12 +3200,13 @@ export class GameEngine {
       if (!(this.dying && this.killer === sb.stalker)) {
         const pls: SitePlayer[] = [{ pos: p.position, yaw: p.yaw, pitch: p.pitch, flashlight: p.flashlightOn, crouch: p.isCrouching, uv: sb.uv, dead: meDead }];
         if (rs) pls.push({ pos: new THREE.Vector3(rs.x, 1.7, rs.z), yaw: rs.yaw, pitch: rs.pitch, flashlight: rs.fl, crouch: rs.cr, uv: !!rs.uv, dead: rs.dead || this.remoteCaught });
-        sb.update(delta, pls, listener, levelCatch(sb.stalker, dead), () =>
+        sb.update(delta, pls, listener, (i: number, mm?: MonsterAI) => levelCatch(mm ?? sb.stalker, dead)(i), () =>
           this.shout('Un hurlement résonne dans les conduits… Il est là. Il vous attendait.', 0.5)
         );
       }
       this.applyUvLamp();
       this.hemi.intensity = this.forestHemi + sb.flash * 3;
+      if (sb instanceof CircusTent) this.circusCheck(sb);
       if (sb.ending && !dead) {
         const end = sb.ending;
         sb.ending = null;
@@ -3141,6 +3216,7 @@ export class GameEngine {
     for (const m of this.monsters) {
       if (this.dying && m === this.killer) continue;
       if (m === this.maze?.stalker || m === this.forest?.stalker || m === this.site?.stalker) continue;
+      if (this.site instanceof CircusTent && this.site.owns(m)) continue;
       if (m.nurse) {
         m.observed = this.nurseObserved(m);
         if (m.observed && !this.nurseWarned && m.position.distanceTo(this.player.position) < 14) {
@@ -3271,6 +3347,7 @@ export class GameEngine {
       versusRole: this.vsRole,
       timeLeft: this.vsRole ? this.timeLeft : null,
       hideCount: this.hideSeek && this.hideCount > 0 ? Math.ceil(this.hideCount) : null,
+      pact: this.site instanceof CircusTent && this.site.phase === 'morning' && this.site.offerTo === this.mySide ? Math.ceil(this.site.offerT) : null,
       race: this.net?.mode === 'race',
       canBlind: this.canBlind(),
       blindLeft: this.blindTimer,
