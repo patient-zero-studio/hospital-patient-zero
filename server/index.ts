@@ -1415,9 +1415,9 @@ const roomSettings = (r: Room) => {
   if (r.chapter >= 4 && r.mode !== 'coop') r.chapter = 1;
   if (r.mode !== 'versus') r.hide = false;
   if (r.mode !== 'coop') r.imp = false;
-  // Imposteur: the hospital, and no other monster than the impostor
+  // Imposteur: the hospital, the sewers or the forest, and no other monster than the impostor
   if (r.imp) {
-    r.chapter = 1;
+    if (r.chapter !== 2 && r.chapter !== 4) r.chapter = 1;
     r.difficulty = 1;
   }
   return { difficulty: r.difficulty, mode: r.mode, monster: r.monster, chapter: r.chapter, hide: !!r.hide, imp: !!r.imp, pub: !!r.pub };

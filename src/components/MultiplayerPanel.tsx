@@ -22,9 +22,16 @@ export interface MatchSettings {
   pub?: boolean;
 }
 
+/** 🔪 Imposteur maps (no story unlock needed: no monster, no exit) */
+const IMP_MAPS: { ch: 1 | 2 | 4; icon: string; name: string; sub: string; where: string }[] = [
+  { ch: 1, icon: '🏥', name: 'Hôpital', sub: 'couloirs et chambres', where: "dans l'hôpital" },
+  { ch: 2, icon: '🕳️', name: 'Égouts', sub: 'tunnels étroits', where: 'dans les égouts' },
+  { ch: 4, icon: '🌲', name: 'Forêt', sub: 'grande et ouverte', where: 'dans la forêt' },
+];
+
 const roomLabel = (r: PublicRoom) =>
   r.imp
-    ? '🔪 Imposteur'
+    ? `🔪 Imposteur · ${IMP_MAPS.find((m) => m.ch === r.chapter)?.name ?? 'Hôpital'}`
     : r.mode === 'versus'
       ? r.hide
         ? '🫣 Cache-cache'
@@ -377,7 +384,7 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
             disabled={readOnly}
             title="De 4 à 8 joueurs"
             className={tab(value.mode === 'coop' && !!value.imp)}
-            onClick={() => onChange({ mode: 'coop', hide: false, imp: true, chapter: 1 })}
+            onClick={() => onChange({ mode: 'coop', hide: false, imp: true, chapter: value.chapter === 2 || value.chapter === 4 ? value.chapter : 1 })}
           >
             🔪 Imposteur
             <div className="text-[9px] normal-case tracking-normal text-zinc-500">4 à 8 joueurs</div>
@@ -389,11 +396,22 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
           </p>
         )}
         {value.mode === 'coop' && value.imp ? (
+          <>
+          <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Carte</div>
+          <div className="grid grid-cols-3 gap-1">
+            {IMP_MAPS.map((m) => (
+              <button key={m.ch} disabled={readOnly} className={tab(value.chapter === m.ch)} onClick={() => onChange({ chapter: m.ch })}>
+                {m.icon} {m.name}
+                <div className="text-[9px] normal-case tracking-normal text-zinc-500">{m.sub}</div>
+              </button>
+            ))}
+          </div>
           <p className="text-[10px] font-mono text-zinc-500 leading-relaxed">
-            🔪 De 4 à 8 joueurs, dans l'hôpital. L'un de vous est tiré au sort en secret : c'est un monstre déguisé. La nuit, il peut tuer
+            🔪 De 4 à 8 joueurs, {IMP_MAPS.find((m) => m.ch === value.chapter)?.where ?? "dans l'hôpital"}. L'un de vous est tiré au sort en secret : c'est un monstre déguisé. La nuit, il peut tuer
             quelqu'un en s'approchant ([K]). Chaque matin, tout le monde vote pour bannir un suspect. Les survivants gagnent s'ils le
             démasquent, ou si l'un d'eux tient autant de nuits qu'il y a de joueurs. Rôles secrets : 🩺 un Médecin protège quelqu'un chaque nuit, et dès 5 joueurs 🔍 un Détective peut démasquer une personne.
           </p>
+          </>
         ) : value.mode === 'versus' ? (
           <>
             <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">{readOnly ? 'Votre rôle' : 'Vous jouez'}</div>
