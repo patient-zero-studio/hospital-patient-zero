@@ -3,6 +3,26 @@
  * Keys are the French texts exactly as they appear on screen (spaces collapsed).
  */
 export const EN: Record<string, string> = {
+  // ---- Menu (arena) ----
+  'Choisis ta partie': 'Pick your game',
+  JOUER: 'PLAY',
+  CHAPITRE: 'CHAPTER',
+  DIFFICULTÉ: 'DIFFICULTY',
+  Survie: 'Survival',
+  Duel: 'Duel',
+  Invité: 'Guest',
+  'Connecte-toi pour progresser': 'Log in to level up',
+  'Niveau max !': 'Max level!',
+  Aide: 'Help',
+  Code: 'Code',
+  Top: 'Top',
+  Pass: 'Pass',
+  '🎨 Personnaliser': '🎨 Customize',
+  '🎓 Nouveau ? Tutoriel': '🎓 New? Tutorial',
+  '2 min pour apprendre à survivre': '2 min to learn how to survive',
+  '⚙️ Options & Son': '⚙️ Options & Sound',
+  'Chapitre spécial · skin unique 🎁': 'Special chapter · unique skin 🎁',
+  '🎄 Nuit de Noël': '🎄 Christmas Night',
   // ---- Menu (2026 layout) ----
   'Saint-Aurore · Alerte biologique 4': 'Saint-Aurore · Biohazard alert 4',
   'Jouer en Solo': 'Play Solo',

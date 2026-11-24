@@ -1466,6 +1466,8 @@ export default function App() {
             refreshWallet();
             setShopOpen(true);
           }}
+          look={look}
+          onCustomize={session ? () => setCustomize('edit') : undefined}
           chapter={chapter}
           ch2Unlocked={ch2Unlocked}
           ch3Unlocked={ch3Unlocked}

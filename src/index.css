@@ -1,4 +1,7 @@
 @import "tailwindcss";
+/* Main menu: big layout only on screens that are wide AND tall enough */
+@custom-variant wide (@media (min-width: 640px));
+@custom-variant short (@media (min-width: 640px) and (max-height: 559px));
 
 html,
 body,
@@ -105,3 +108,21 @@ canvas {
 .title-flicker {
   animation: title-flicker 5s infinite;
 }
+
+/* ---- 🎮 Main menu "arena" style ---- */
+.font-game { font-family: 'Lilita One', 'Impact', 'Arial Black', sans-serif; letter-spacing: 0.01em; }
+.outl { -webkit-text-stroke: 1.5px #000; paint-order: stroke fill; text-shadow: 0 2px 0 #000; }
+.outl-lg { -webkit-text-stroke: 3px #000; paint-order: stroke fill; text-shadow: 0 4px 0 #000; }
+.chunky {
+  border: 3px solid #000;
+  border-radius: 14px;
+  box-shadow: inset 0 -5px 0 rgba(0, 0, 0, 0.38), inset 0 2px 0 rgba(255, 255, 255, 0.12), 0 3px 0 #000;
+  transition: transform 0.12s, filter 0.12s, box-shadow 0.12s;
+}
+.chunky:hover { transform: translateY(-2px); filter: brightness(1.12); }
+.chunky:active { transform: translateY(2px); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.38), 0 1px 0 #000; }
+.chunky:disabled { filter: grayscale(0.8) brightness(0.7); transform: none; cursor: not-allowed; }
+@keyframes menu-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+.menu-pulse { animation: menu-pulse 1.8s ease-in-out infinite; }
+.menu-pulse:hover { animation-play-state: paused; }
+@keyframes menu-rays { to { transform: rotate(360deg); } }

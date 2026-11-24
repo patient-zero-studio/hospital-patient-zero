@@ -18,7 +18,7 @@ const DAILY_LINES = [
 ];
 
 import { RANK_TIERS } from '../ranked';
-import { Bell, BellOff, ChevronRight, Coins, Medal, Music, Play, ShoppingBag, Sliders, Trophy, Users, VolumeX, X } from 'lucide-react';
+import { Bell, BellOff, Music, Plus, Settings, VolumeX, X } from 'lucide-react';
 import type { ChallengeDef } from '../challenges';
 import { ACHIEVEMENTS } from '../achievements';
 import { AudioSettings, ControlSettings } from '../types';
@@ -31,6 +31,8 @@ import { getLang, setLang } from '../i18n';
 import { SEASON_INFO, Season } from '../seasons';
 import { LevelInfo, levelColor } from '../levels';
 import type { Boost } from '../net/api';
+import type { Appearance } from '../appearance';
+import { MenuStage } from './MenuStage';
 
 export const BOOST_LABEL: Record<string, string> = {
   coins2: '🪙 PIÈCES DOUBLÉES',
@@ -39,22 +41,19 @@ export const BOOST_LABEL: Record<string, string> = {
   all2: '⚡ TOUT EST DOUBLÉ (pièces, XP, friandises)',
 };
 
-/** "⚡ PIÈCES DOUBLÉES — encore 5 h 12" */
-const BoostBanner: React.FC<{ boost: Boost }> = ({ boost }) => {
+/** "5 h 12 min" left on the surprise event */
+const useBoostLeft = (boost: Boost | null) => {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30000);
     return () => clearInterval(t);
   }, []);
+  if (!boost) return null;
   const left = Math.max(0, boost.until - now);
   if (left <= 0) return null;
   const h = Math.floor(left / 3600000);
   const m = Math.floor((left % 3600000) / 60000);
-  return (
-    <div className="relative z-10 mx-auto w-full max-w-6xl px-4 py-2 rounded-lg border border-amber-400/70 bg-amber-500/15 text-amber-200 font-mono text-[11px] sm:text-xs uppercase tracking-[0.2em] text-center animate-pulse shadow-[0_0_24px_rgba(251,191,36,0.3)]">
-      ⚡ Événement surprise : {BOOST_LABEL[boost.kind]} — encore {h > 0 ? `${h} h ` : ''}{String(m).padStart(2, '0')} min
-    </div>
-  );
+  return `${h > 0 ? `${h} h ` : ''}${String(m).padStart(2, '0')} min`;
 };
 
 interface StartScreenProps {
@@ -115,6 +114,9 @@ interface StartScreenProps {
   menuMusic?: boolean;
   onToggleMusic?: () => void;
   onShop: () => void;
+  /** 🎭 your character, shown in the middle of the menu */
+  look?: Appearance | null;
+  onCustomize?: () => void;
   chapter?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   ch2Unlocked?: boolean;
   ch3Unlocked?: boolean;
@@ -142,67 +144,41 @@ interface StartScreenProps {
 
 type ChapterN = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
-/** Small square icon button of the top bar */
-const IconBtn: React.FC<{ onClick: () => void; title: string; active?: boolean; children: React.ReactNode; label?: string }> = ({ onClick, title, active, children, label }) => (
+/** Dark "horror" palette for the chunky buttons */
+const C = {
+  blood: '#9b1c1c',
+  rust: '#9a4f12',
+  toxic: '#2f6b2a',
+  steel: '#3b4250',
+  bruise: '#4a2a6e',
+  teal: '#1d5560',
+  bone: '#6b5d45',
+  night: '#1a1d2a',
+};
+
+/** Square chunky button with an icon on top and a short label */
+const Sq: React.FC<{ icon: React.ReactNode; label: string; color: string; onClick?: () => void; badge?: number | string; wide?: boolean; title?: string }> = ({ icon, label, color, onClick, badge, wide, title }) => (
   <button
     onClick={onClick}
-    title={title}
-    className={`h-9 min-w-9 px-2.5 flex items-center justify-center gap-1.5 rounded-lg border text-xs font-mono transition-colors ${
-      active ? 'border-red-700/70 bg-red-950/40 text-red-200' : 'border-white/10 bg-black/50 text-zinc-400 hover:text-zinc-100 hover:border-white/25'
-    }`}
+    title={title ?? label}
+    className={`chunky relative flex items-center justify-center h-[58px] short:h-[46px] text-white ${wide ? 'col-span-2 flex-row gap-2' : 'w-full flex-col gap-0.5'}`}
+    style={{ background: color }}
   >
+    <span className={`leading-none ${wide ? 'text-[26px] short:text-[20px]' : 'text-[22px] short:text-[17px]'}`}>{icon}</span>
+    <span className={`font-game outl leading-none ${wide ? 'text-[17px] short:text-[14px]' : 'text-[11px] short:text-[10px]'} max-w-full truncate px-0.5`}>{label}</span>
+    {badge != null && badge !== 0 && (
+      <span className="absolute -top-2 -right-2 min-w-[22px] h-[22px] px-1 rounded-full bg-red-600 border-[3px] border-black text-[11px] font-game text-white flex items-center justify-center animate-pulse">
+        {badge}
+      </span>
+    )}
+  </button>
+);
+
+/** Small square button of the top bar */
+const TopBtn: React.FC<{ onClick: () => void; title: string; children: React.ReactNode; color?: string }> = ({ onClick, title, children, color = C.steel }) => (
+  <button onClick={onClick} title={title} className="chunky w-10 h-10 flex items-center justify-center text-white !rounded-xl" style={{ background: color }}>
     {children}
-    {label && <span className="hidden md:inline uppercase tracking-wider">{label}</span>}
   </button>
-);
-
-/** A line of the right-hand menu */
-const NavRow: React.FC<{ icon: React.ReactNode; label: string; onClick: () => void; right?: React.ReactNode; badge?: number; badgeColor?: string; hover?: string }> = ({
-  icon,
-  label,
-  onClick,
-  right,
-  badge = 0,
-  badgeColor = 'bg-red-600 text-white',
-  hover = 'group-hover:text-red-300',
-}) => (
-  <button onClick={onClick} className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left hover:bg-white/[0.06] transition-colors">
-    <span className="w-7 h-7 shrink-0 flex items-center justify-center rounded-md bg-white/[0.05] text-base">{icon}</span>
-    <span className={`flex-1 min-w-0 text-[13px] text-zinc-200 transition-colors ${hover}`}>{label}</span>
-    {right && <span className="text-[11px] font-mono text-zinc-400 truncate max-w-[45%]">{right}</span>}
-    {badge > 0 && <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold flex items-center justify-center animate-pulse ${badgeColor}`}>{badge}</span>}
-    <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-300 group-hover:translate-x-0.5 transition-all" />
-  </button>
-);
-
-/** A secondary game mode */
-const ModeCard: React.FC<{ icon: string; title: string; sub: string; onClick?: () => void; locked?: boolean; tone: string; extra?: React.ReactNode; wide?: boolean }> = ({
-  icon,
-  title,
-  sub,
-  onClick,
-  locked,
-  tone,
-  extra,
-  wide,
-}) => (
-  <button
-    onClick={locked ? undefined : onClick}
-    disabled={locked}
-    className={`group relative flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-black/55 backdrop-blur-sm text-left transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 ${tone} ${wide ? 'sm:col-span-2' : ''}`}
-  >
-    <span className="w-11 h-11 shrink-0 flex items-center justify-center rounded-lg bg-white/[0.06] text-2xl">{locked ? '🔒' : icon}</span>
-    <span className="flex-1 min-w-0">
-      <span className="block text-sm font-semibold text-zinc-100">{title}</span>
-      <span className="block text-[11px] text-zinc-400 leading-snug">{sub}</span>
-    </span>
-    {extra}
-    {!locked && <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-200 transition-colors" />}
-  </button>
-);
-
-const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-2">{children}</div>
 );
 
 export const StartScreen: React.FC<StartScreenProps> = ({
@@ -240,6 +216,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   season = null,
   adventReady = false,
   onShop,
+  look = null,
+  onCustomize,
   achCount = null,
   onAchievements,
   chapter = 1,
@@ -266,16 +244,20 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onUpdateControls,
 }) => {
   const [showSettings, setShowSettings] = useState(false);
+  const [picker, setPicker] = useState(false);
+  const boostLeft = useBoostLeft(boost);
 
-  const CHAPTERS: { n: ChapterN; icon: string; name: string; sub: string }[] = [
-    { n: 1, icon: '🏥', name: 'L\'Hôpital', sub: 'Échappez au Patient Zéro' },
-    { n: 2, icon: '🐀', name: 'Les Égouts', sub: 'Il n\'a pas d\'yeux. Il écoute.' },
-    { n: 3, icon: '🌀', name: 'Le Dédale', sub: 'Il suit ta trace. Ne t\'arrête pas.' },
-    { n: 4, icon: '🌲', name: 'La Forêt', sub: 'Lampe allumée, il te voit de loin.' },
-    { n: 5, icon: '🟣', name: 'Le Site B', sub: 'Finale : la lumière devient une arme.' },
-    { n: 6, icon: '⛈️', name: 'Le Toit', sub: 'Épilogue : la tempête, et un hélicoptère.' },
-    { n: 7, icon: '💉', name: 'Le Cœur', sub: 'Boss final : le vrai Patient Zéro.' },
-    ch8Unlocked ? { n: 8, icon: '🌳', name: 'Le Rêve de Lucas', sub: 'Chapitre secret : ses souvenirs, et une ombre.' } : { n: 8, icon: '❔', name: '???', sub: 'Chapitre secret' },
+  const CHAPTERS: { n: ChapterN; icon: string; name: string; sub: string; color: string }[] = [
+    { n: 1, icon: '🏥', name: 'L\'Hôpital', sub: 'Échappez au Patient Zéro', color: C.teal },
+    { n: 2, icon: '🐀', name: 'Les Égouts', sub: 'Il n\'a pas d\'yeux. Il écoute.', color: C.toxic },
+    { n: 3, icon: '🌀', name: 'Le Dédale', sub: 'Il suit ta trace. Ne t\'arrête pas.', color: C.bone },
+    { n: 4, icon: '🌲', name: 'La Forêt', sub: 'Lampe allumée, il te voit de loin.', color: '#24502e' },
+    { n: 5, icon: '🟣', name: 'Le Site B', sub: 'Finale : la lumière devient une arme.', color: C.bruise },
+    { n: 6, icon: '⛈️', name: 'Le Toit', sub: 'Épilogue : la tempête, et un hélicoptère.', color: C.steel },
+    { n: 7, icon: '💉', name: 'Le Cœur', sub: 'Boss final : le vrai Patient Zéro.', color: C.blood },
+    ch8Unlocked
+      ? { n: 8, icon: '🌳', name: 'Le Rêve de Lucas', sub: 'Chapitre secret : ses souvenirs, et une ombre.', color: '#2d4a3a' }
+      : { n: 8, icon: '❔', name: '???', sub: 'Chapitre secret', color: C.night },
   ];
   const unlocked = [true, ch2Unlocked, ch3Unlocked, ch4Unlocked, ch5Unlocked, ch6Unlocked, ch7Unlocked, ch8Unlocked];
   let eff: number = chapter;
@@ -295,76 +277,223 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               : n === 3
                 ? 'Sortez une fois des égouts'
                 : 'Sortez une fois de l\'hôpital';
-  const heat = ['#71717a', '#eab308', '#f97316', '#dc2626', '#9f1239'];
+  const heat = ['#52525b', '#a16207', '#c2410c', '#b91c1c', '#881337'];
+  const diff = DIFFICULTIES[difficulty - 1];
   const tier = RANK_TIERS.find((t) => t.id === rankTier) ?? RANK_TIERS[0];
-  const unlockedCount = unlocked.filter(Boolean).length;
+  const shopBadge = (giftReady ? 1 : 0) + (adventReady ? 1 : 0);
+  const daily = DAILY_LINES[Math.floor(Date.now() / 86400000) % DAILY_LINES.length];
+
+  // ── Pieces (placed differently on big screens and on phones) ──
+  const leftButtons = (
+    <>
+      <Sq
+        wide
+        icon={shopLocked ? '🔒' : '🛒'}
+        label="Boutique"
+        color={C.rust}
+        onClick={onShop}
+        badge={shopBadge ? '!' : undefined}
+        title={shopLocked ? 'Finis une partie en Exploration pour ouvrir la boutique' : 'Skins & boîtes mystère'}
+      />
+      {onProgression && <Sq icon="🏆" label="Pass" color={C.bruise} onClick={onProgression} badge={progressionAlert} title="Pass & défis" />}
+      {onRanked && <Sq icon={tier.emoji} label="Classé" color={C.steel} onClick={onRanked} title={`Classé — ${tier.name}`} />}
+      {onFriends && <Sq icon="👥" label="Amis" color={C.toxic} onClick={onFriends} badge={friendsAlert} title={friendsOnline ? `Amis — ${friendsOnline} en ligne` : 'Amis'} />}
+      {onClans && <Sq icon="🛡️" label={clanTag ? `[${clanTag}]` : 'Clans'} color={C.teal} onClick={onClans} title="Clans" />}
+      {onAchievements && <Sq icon="🎖️" label={achCount != null ? `${achCount}/${ACHIEVEMENTS.length}` : 'Succès'} color={C.bone} onClick={onAchievements} title="Succès" />}
+      {onLeaderboard && <Sq icon="🏅" label="Top" color={C.night} onClick={onLeaderboard} title="Classement" />}
+    </>
+  );
+  const rightButtons = (
+    <>
+      {onBestiary && <Sq icon="📖" label="Bestiaire" color={C.bruise} onClick={onBestiary} />}
+      {onGallery && <Sq icon="🖼️" label="Galerie" color={C.bone} onClick={onGallery} />}
+      {onMusic && <Sq icon="🎵" label="Musiques" color={C.teal} onClick={onMusic} />}
+      {onRedeem && <Sq icon="🎟️" label="Code" color={C.rust} onClick={onRedeem} title="Code cadeau" />}
+      {onTutorial && tutorialDone && <Sq icon="🎓" label="Tutoriel" color={C.toxic} onClick={onTutorial} />}
+      <Sq icon="❓" label="Aide" color={C.steel} onClick={() => (location.href = '/comment-jouer/')} title="Comment jouer : touches, chapitres, monstres et astuces" />
+    </>
+  );
+
+  const eventList = [
+    onTutorial && !tutorialDone && (
+        <button onClick={onTutorial} className="chunky menu-pulse w-full text-left px-3 py-2 text-white" style={{ background: '#1f6b3a' }}>
+          <span className="block font-game outl text-[17px] leading-tight">🎓 Nouveau ? Tutoriel</span>
+          <span className="block text-[11px] font-bold text-emerald-100/90">2 min pour apprendre à survivre</span>
+        </button>
+      ),
+    boostLeft && boost && (
+        <div className="chunky overflow-hidden w-full text-white" style={{ background: '#7a3a0a' }}>
+          <div className="bg-black px-2.5 py-0.5 font-game text-[12px] text-amber-300">⚡ ÉVÉNEMENT — {boostLeft}</div>
+          <div className="px-2.5 py-1.5 font-game outl text-[15px] leading-tight">{BOOST_LABEL[boost.kind]}</div>
+        </div>
+      ),
+    season && (
+        <button onClick={onShop} className="chunky w-full text-left px-3 py-2 text-white" style={{ background: SEASON_INFO[season].color + 'cc' }}>
+          <span className="block font-game outl text-[16px] leading-tight">
+            {SEASON_INFO[season].emoji} {SEASON_INFO[season].name}
+          </span>
+          <span className="block text-[11px] font-bold">Skins limités{season === 'noel' ? ' & calendrier' : ''}</span>
+        </button>
+      ),
+    onXmasNight && (
+        <button onClick={onXmasNight} className="chunky w-full text-left px-3 py-2 text-white" style={{ background: '#7f1d1d' }}>
+          <span className="block font-game outl text-[16px] leading-tight">🎄 Nuit de Noël</span>
+          <span className="block text-[11px] font-bold text-red-100">Chapitre spécial · skin unique 🎁</span>
+        </button>
+      ),
+    challenge && onToggleChallenge && (
+        <button onClick={onToggleChallenge} className="chunky w-full text-left px-3 py-2 text-white" style={{ background: challengeOn ? '#1f6b3a' : C.night }}>
+          <span className="flex items-center justify-between gap-2">
+            <span className="font-game outl text-[12px] text-emerald-300 whitespace-nowrap">🎯 DÉFI {challengeDone ? '✔' : `+${challenge.reward}🪙`}</span>
+            <span className={`relative shrink-0 w-9 h-5 rounded-full border-2 border-black ${challengeOn ? 'bg-emerald-400' : 'bg-zinc-600'}`}>
+              <span className={`absolute top-[1px] w-3.5 h-3.5 rounded-full bg-white border border-black transition-all ${challengeOn ? 'left-[17px]' : 'left-[1px]'}`} />
+            </span>
+          </span>
+          <span className="block font-game outl text-[15px] leading-tight mt-0.5">
+            {challenge.icon} {challenge.name}
+          </span>
+          <span className="block text-[10px] font-bold text-zinc-300 leading-snug">{challenge.desc}</span>
+        </button>
+      ),
+  ];
+  const eventCards = eventList.filter(Boolean).slice(0, 2).map((el, i) => <React.Fragment key={i}>{el}</React.Fragment>);
+
+  const chip = 'chunky flex items-center justify-center gap-1.5 h-10 short:h-8 px-2 text-white font-game outl text-[14px] short:text-[12px] whitespace-nowrap';
+  const modeChips = (
+    <>
+      <button onClick={onMultiplayer} className={chip} style={{ background: C.teal }} title="Coop et Imposteur jusqu'à 8, Chasse, Course">
+        👥 Multijoueur
+      </button>
+      {onSurvival && (
+        <button onClick={onSurvival} className={chip} style={{ background: C.blood }} title="Survie infinie : tiens le plus longtemps">
+          🧟 Survie
+        </button>
+      )}
+      {onFindOpponent && (
+        <button onClick={onFindOpponent} className={chip} style={{ background: C.rust }} title="Chasse en ligne : l'un de vous est le monstre">
+          ⚔️ Duel
+        </button>
+      )}
+      {onCampaign && (
+        <button
+          onClick={ch5Unlocked ? onCampaign : undefined}
+          disabled={!ch5Unlocked}
+          className={chip}
+          style={{ background: C.bruise }}
+          title={ch5Unlocked ? 'Les 5 chapitres d\'affilée' : 'Finissez la forêt pour débloquer la campagne'}
+        >
+          {ch5Unlocked ? '🏆' : '🔒'} Campagne
+        </button>
+      )}
+    </>
+  );
+
+  const chapterCard = (
+    <button
+      onClick={() => setPicker(true)}
+      className="chunky relative overflow-hidden text-left text-white h-[92px] short:h-[64px] w-full wide:w-[250px] short:w-[190px] px-3 py-2 short:py-1.5"
+      style={{ background: cur.color }}
+      title="Changer de chapitre et de difficulté"
+    >
+      <span className="block font-game outl text-[12px] text-zinc-200">CHAPITRE {cur.n} ▸ CHANGER</span>
+      <span className="block font-game outl text-[23px] short:text-[18px] leading-tight pr-12">{cur.name}</span>
+      <span className="block short:hidden text-[11px] font-bold text-white/85 pr-12 truncate">{cur.sub}</span>
+      <span className="absolute -right-1 -bottom-3 text-[58px] short:text-[42px] rotate-[-10deg] opacity-90 pointer-events-none">{cur.icon}</span>
+    </button>
+  );
+  const diffCard = (
+    <button
+      onClick={() => setPicker(true)}
+      className="chunky flex flex-col items-center justify-center text-white h-[92px] short:h-[64px] w-full wide:w-[130px] short:w-[100px] px-2"
+      style={{ background: heat[difficulty - 1] }}
+      title={diff.description}
+    >
+      <span className="font-game outl text-[11px] text-white/80">DIFFICULTÉ</span>
+      <span className="font-game outl text-[20px] short:text-[16px] leading-tight">{diff.name}</span>
+      <span className="text-[14px] tracking-widest">{diff.monsters === 0 ? '🕊️' : '☠'.repeat(diff.monsters)}</span>
+    </button>
+  );
+  const playBtn = (
+    <button
+      onClick={onStartGame}
+      className="chunky menu-pulse w-full h-[96px] short:h-[64px] flex flex-col items-center justify-center text-white !rounded-[20px]"
+      style={{ background: 'linear-gradient(#d42a2a, #8e1010)', boxShadow: 'inset 0 -9px 0 #5a0808, inset 0 3px 0 rgba(255,255,255,.25), 0 5px 0 #000' }}
+    >
+      <span className="font-game outl-lg text-[44px] short:text-[32px] leading-none">JOUER</span>
+      <span className="font-game outl text-[12px] text-red-100 mt-1 short:hidden">
+        SOLO · {cur.name} · {diff.name}
+      </span>
+    </button>
+  );
 
   return (
     <div className="fixed inset-0 z-50 select-none overflow-y-auto overflow-x-hidden">
-      {/* The 3D hospital is rendered behind this translucent overlay */}
-      <div
-        className="fixed inset-0 pointer-events-none"
-        style={{
-          background:
-            'linear-gradient(90deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.7) 45%, rgba(0,0,0,0.55) 65%, rgba(0,0,0,0.9) 100%), radial-gradient(ellipse at 30% 20%, rgba(120,0,0,0.25) 0%, rgba(0,0,0,0) 60%)',
-        }}
-      />
+      {/* Dark vignette over the 3D hospital, slow red light rays behind the character */}
+      <div className="fixed inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 55%, rgba(40,6,6,0.55) 0%, rgba(0,0,0,0.82) 60%, rgba(0,0,0,0.96) 100%)' }} />
+      <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-60">
+        <div
+          className="absolute left-1/2 top-[52%] w-[1600px] h-[1600px] -ml-[800px] -mt-[800px]"
+          style={{
+            background: 'repeating-conic-gradient(rgba(160,20,20,0.10) 0 9deg, transparent 9deg 18deg)',
+            animation: 'menu-rays 80s linear infinite',
+            maskImage: 'radial-gradient(circle, #000 0%, transparent 45%)',
+            WebkitMaskImage: 'radial-gradient(circle, #000 0%, transparent 45%)',
+          }}
+        />
+      </div>
       {season && <SeasonalOverlay season={season} />}
 
-      <div className="relative z-10 min-h-full flex flex-col gap-5 px-3 py-3 sm:px-6 sm:py-5 lg:px-10">
+      <div className="relative min-h-full wide:h-full wide:min-h-[560px] short:min-h-[360px] flex flex-col gap-3 p-3 wide:block wide:p-0">
         {/* ── Top bar ── */}
-        <header className="w-full max-w-6xl mx-auto flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="relative flex w-2.5 h-2.5 shrink-0">
-              <span className="absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-60 animate-ping" />
-              <span className="relative inline-flex w-2.5 h-2.5 rounded-full bg-red-600" />
-            </span>
-            <span className="hidden sm:block text-[10px] font-mono uppercase tracking-[0.25em] text-zinc-500 truncate">
-              Saint-Aurore · Alerte biologique 4
-            </span>
+        <header className="wide:absolute wide:top-3 short:top-2 wide:left-4 wide:right-4 z-20 flex items-start justify-between gap-2">
+          <div className="chunky flex items-center gap-2.5 pl-1.5 pr-3 py-1.5 text-white !rounded-2xl min-w-0" style={{ background: 'rgba(10,10,14,0.85)' }}>
+            <button
+              onClick={onCustomize}
+              disabled={!onCustomize}
+              title={onCustomize ? 'Personnaliser mon personnage' : ''}
+              className="relative shrink-0 w-12 h-12 rounded-xl border-[3px] border-black flex items-center justify-center text-2xl disabled:cursor-default"
+              style={{ background: level ? levelColor(level.level) : C.steel }}
+            >
+              🧍
+              {level && (
+                <span className="absolute -bottom-2 -right-2 min-w-[24px] h-6 px-1 rounded-lg bg-black border-2 border-zinc-700 font-game text-[12px] text-white flex items-center justify-center">
+                  {level.level}
+                </span>
+              )}
+            </button>
+            <div className="min-w-0">
+              <div data-no-i18n className="font-game outl text-[18px] leading-tight max-w-[140px] truncate">
+                {username ?? 'Invité'}
+              </div>
+              {level && level.need > 0 ? (
+                <div className="w-[120px] h-3 mt-0.5 rounded-md bg-black p-[2px]" title={`${level.into} / ${level.need} XP avant le niveau ${level.level + 1}`}>
+                  <div className="h-full rounded-[3px]" style={{ width: `${(level.into / level.need) * 100}%`, background: 'linear-gradient(#7ef08a, #2f9e44)' }} />
+                </div>
+              ) : (
+                <div className="text-[11px] font-bold text-zinc-400">{username ? 'Niveau max !' : 'Connecte-toi pour progresser'}</div>
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Profile chip */}
-            {(username || level || coins != null) && (
-              <div className="flex items-center gap-2.5 h-9 pl-2 pr-3 rounded-lg border border-white/10 bg-black/50">
-                {level && (
-                  <span
-                    className="w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-bold font-mono text-black"
-                    style={{ background: levelColor(level.level) }}
-                    title={level.need ? `${level.into} / ${level.need} XP avant le niveau ${level.level + 1}` : 'Niveau maximum !'}
-                  >
-                    {level.level}
-                  </span>
-                )}
-                <span className="hidden sm:flex flex-col leading-tight">
-                  {username && (
-                    <span data-no-i18n className="text-[12px] text-zinc-100 font-semibold max-w-[120px] truncate">
-                      {username}
-                    </span>
-                  )}
-                  {level && level.need > 0 && (
-                    <span className="block w-20 h-1 rounded-full bg-zinc-800 overflow-hidden mt-0.5">
-                      <span className="block h-full rounded-full" style={{ width: `${(level.into / level.need) * 100}%`, background: levelColor(level.level) }} />
-                    </span>
-                  )}
+          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+            {coins != null && (
+              <button onClick={onShop} className="chunky flex items-center gap-1.5 h-10 pl-1 pr-1 text-white !rounded-xl" style={{ background: 'rgba(10,10,14,0.85)' }} title="Boutique">
+                <span className="w-7 h-7 rounded-full border-2 border-black bg-amber-400 flex items-center justify-center text-[14px]">🪙</span>
+                <span className="font-game outl text-[17px] px-0.5">{fmtCoins(coins)}</span>
+                <span className="w-6 h-6 rounded-md border-2 border-black flex items-center justify-center" style={{ background: '#2f9e44' }}>
+                  <Plus className="w-4 h-4" strokeWidth={4} />
                 </span>
-                {coins != null && (
-                  <span className="flex items-center gap-1 text-[12px] font-mono text-amber-300 border-l border-white/10 pl-2.5">
-                    <Coins className="w-3.5 h-3.5" /> {fmtCoins(coins)}
-                  </span>
-                )}
-              </div>
+              </button>
             )}
-            <IconBtn onClick={() => setLang(getLang() === 'fr' ? 'en' : 'fr')} title={getLang() === 'fr' ? 'Play in English' : 'Jouer en français'}>
-              <span data-no-i18n className="uppercase font-bold text-[11px]">
+            <TopBtn onClick={() => setLang(getLang() === 'fr' ? 'en' : 'fr')} title={getLang() === 'fr' ? 'Play in English' : 'Jouer en français'}>
+              <span data-no-i18n className="font-game outl text-[13px]">
                 {getLang() === 'fr' ? 'FR' : 'EN'}
               </span>
-            </IconBtn>
+            </TopBtn>
             {notifications && notifications !== 'unsupported' && onToggleNotifications && (
-              <IconBtn
+              <TopBtn
                 onClick={onToggleNotifications}
-                active={notifications === 'on'}
+                color={notifications === 'on' ? C.toxic : C.steel}
                 title={
                   notifications === 'on'
                     ? 'Notifications activées (invitations, cadeaux, événements). Cliquer pour couper.'
@@ -373,388 +502,166 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                       : 'Être prévenu quand un ami t\'invite, d\'un cadeau ou d\'un événement, même jeu fermé.'
                 }
               >
-                {notifications === 'on' ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
-              </IconBtn>
+                {notifications === 'on' ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
+              </TopBtn>
             )}
             {onToggleMusic && (
-              <IconBtn onClick={onToggleMusic} title="Musique du menu" active={menuMusic}>
-                {menuMusic ? <Music className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-              </IconBtn>
+              <TopBtn onClick={onToggleMusic} title="Musique du menu" color={menuMusic ? C.bruise : C.steel}>
+                {menuMusic ? <Music className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+              </TopBtn>
             )}
-            <IconBtn onClick={() => setShowSettings(true)} title="Options & Son" label="Options">
-              <Sliders className="w-4 h-4" />
-            </IconBtn>
+            <TopBtn onClick={() => setShowSettings(true)} title="Options & Son">
+              <Settings className="w-5 h-5" />
+            </TopBtn>
           </div>
         </header>
 
-        {/* ⚡ Surprise event */}
-        {boost && boost.until > Date.now() && <BoostBanner boost={boost} />}
+        {/* ── Centre: title + your character ── */}
+        <section className="relative h-[360px] wide:absolute wide:left-1/2 wide:-translate-x-1/2 wide:top-[64px] wide:bottom-[118px] short:top-[50px] short:bottom-[6px] wide:h-auto wide:w-[min(40vw,620px)]">
+          <div className="absolute inset-x-0 top-0 z-10 text-center pointer-events-none">
+            <h1 className="title-flicker font-game text-[42px] wide:text-[52px] short:text-[30px] leading-none text-zinc-100 outl-lg tracking-wide">
+              HOSPITAL
+              {season && <span className="ml-1 text-[0.6em] align-top">{season === 'noel' ? '🎅' : SEASON_INFO[season].emoji}</span>}
+            </h1>
+            <span className="inline-block mt-1 px-3 py-0.5 rounded-lg border-[3px] border-black bg-red-800 font-game outl text-[13px] short:text-[10px] text-white tracking-[0.2em]">PATIENT ZÉRO</span>
+          </div>
+          <MenuStage look={look} />
+          {onCustomize && (
+            <button onClick={onCustomize} className="chunky absolute left-1/2 -translate-x-1/2 bottom-1 z-10 h-9 px-3 font-game outl text-[13px] text-white !rounded-xl whitespace-nowrap" style={{ background: C.night }}>
+              🎨 Personnaliser
+            </button>
+          )}
+        </section>
 
-        <main className="w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-5 lg:gap-8 items-start">
-          {/* ── Left: title + new game ── */}
-          <div className="flex flex-col gap-5 min-w-0">
-            {/* Title */}
-            <div className="text-center lg:text-left pt-1">
-              <span className="block text-[10px] sm:text-xs font-mono uppercase tracking-[0.35em] text-red-500/90 font-bold mb-1 [@media(max-height:520px)]:hidden">
-                SURVIE & HORREUR PSYCHOLOGIQUE 3D
-              </span>
-              <h1 className="relative inline-block title-flicker text-5xl sm:text-7xl [@media(max-height:520px)]:text-4xl font-serif tracking-[0.12em] font-black text-zinc-100 leading-none drop-shadow-[0_0_35px_rgba(200,0,0,0.55)]">
-                HOSPITAL
-                {season && (
-                  <span className="absolute -top-[0.45em] -left-[0.35em] text-[0.6em] -rotate-[25deg] select-none" aria-hidden>
-                    {season === 'noel' ? '🎅' : SEASON_INFO[season].emoji}
-                  </span>
-                )}
-              </h1>
-              <div className="flex items-center justify-center lg:justify-start gap-3 mt-2">
-                <span className="h-px w-10 bg-red-700" />
-                <span className="font-mono tracking-[0.45em] text-sm text-red-400">PATIENT ZERO</span>
-                <span className="h-px w-10 bg-red-700 lg:hidden" />
-              </div>
-              <p className="hidden sm:block [@media(max-height:720px)]:hidden mt-3 text-[13px] text-zinc-400 leading-relaxed font-serif italic max-w-xl mx-auto lg:mx-0">
-                « Vous vous réveillez dans une chambre verrouillée de l'Hôpital Saint-Aurore. Les alarmes de confinement résonnent. Une entité déformée erre dans les couloirs obscurs. Échappez-vous avant qu'elle ne sente votre présence. »
-              </p>
-              {season && (
-                <button
-                  onClick={onShop}
-                  className="mt-3 px-4 py-1.5 rounded-full border font-mono text-[11px] uppercase tracking-[0.2em] animate-pulse"
-                  style={{ borderColor: SEASON_INFO[season].color, color: SEASON_INFO[season].color, background: SEASON_INFO[season].color + '1a' }}
-                >
-                  {SEASON_INFO[season].emoji} Événement {SEASON_INFO[season].name} — skins limités{season === 'noel' ? ' & calendrier' : ''}
-                </button>
-              )}
-            </div>
+        {/* ── Big JOUER (first thing under the character on phones) ── */}
+        <div className="wide:absolute wide:right-4 wide:bottom-4 short:bottom-2 wide:w-[250px] short:w-[200px] z-10">{playBtn}</div>
 
-            {/* Tutorial for newcomers */}
-            {onTutorial && !tutorialDone && (
-              <button
-                onClick={onTutorial}
-                className="lg:hidden w-full flex items-center gap-3 p-3 rounded-xl bg-emerald-800/80 hover:bg-emerald-700 border border-emerald-400/70 text-left shadow-[0_0_24px_rgba(16,185,129,0.35)] transition-colors"
-              >
-                <span className="text-2xl">🎓</span>
-                <span className="flex-1">
-                  <span className="block text-sm font-semibold text-white">Nouveau ? Commence par le tutoriel (2 min)</span>
-                  <span className="block text-[11px] text-emerald-100/80">Les touches, les cachettes, la lampe… tout en douceur.</span>
-                </span>
-                <ChevronRight className="w-5 h-5 text-emerald-100" />
-              </button>
-            )}
+        {/* ── Chapter + difficulty ── */}
+        <div className="grid grid-cols-[1fr_110px] gap-2 wide:flex wide:absolute wide:left-4 wide:bottom-4 short:bottom-2 z-10">
+          {chapterCard}
+          {diffCard}
+        </div>
 
-            {/* ── New game panel ── */}
-            <section className="rounded-2xl border border-white/10 bg-black/60 backdrop-blur-md p-4 sm:p-5 shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
-              {onChangeChapter && (
-                <div className="mb-4">
-                  <div className="flex items-baseline justify-between">
-                    <SectionTitle>Chapitre</SectionTitle>
-                    <span className="text-[10px] font-mono text-zinc-600">{unlockedCount}/8 débloqués</span>
-                  </div>
-                  <div className="grid grid-cols-4 lg:grid-cols-8 gap-1.5 sm:gap-2">
-                    {CHAPTERS.map((c) => {
-                      const locked = !unlocked[c.n - 1];
-                      const active = eff === c.n;
-                      return (
-                        <button
-                          key={c.n}
-                          disabled={locked}
-                          onClick={() => onChangeChapter(c.n)}
-                          title={locked ? `${lockText(c.n)} (connecté) pour débloquer ce chapitre` : `Chapitre ${c.n} — ${c.name}`}
-                          className={`relative flex flex-col items-center justify-center gap-1 py-2.5 sm:py-3 lg:py-2 rounded-xl border transition-all ${
-                            active
-                              ? 'border-red-500 bg-gradient-to-b from-red-900/50 to-red-950/30 shadow-[0_0_22px_rgba(220,38,38,0.35)]'
-                              : 'border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]'
-                          } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-white/10`}
-                        >
-                          <span className={`text-2xl sm:text-3xl [@media(max-height:520px)]:text-xl ${locked ? 'grayscale' : ''}`}>{locked ? '🔒' : c.icon}</span>
-                          <span className={`text-[10px] font-mono ${active ? 'text-red-200' : 'text-zinc-500'}`}>{c.n}</span>
-                          <span className={`hidden sm:block lg:hidden px-1 text-[11px] leading-tight text-center ${active ? 'text-zinc-100 font-semibold' : 'text-zinc-400'}`}>{locked ? '???' : c.name}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-2.5 flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5">
-                    <span className="text-lg">{cur.icon}</span>
-                    <span className="min-w-0">
-                      <span className="block text-[12px] font-semibold text-zinc-100">
-                        Chapitre {cur.n} — {cur.name}
-                      </span>
-                      <span className="block text-[11px] text-zinc-400 truncate">{cur.n === 3 ? `${cur.sub} (solo)` : cur.n >= 4 ? `${cur.sub} (solo ou coop)` : cur.sub}</span>
-                    </span>
-                  </div>
-                </div>
-              )}
+        {/* ── Other modes (above JOUER) ── */}
+        <div className="grid grid-cols-2 gap-2 wide:absolute wide:right-4 wide:bottom-[124px] short:bottom-[78px] wide:w-[250px] short:w-[200px] z-10">{modeChips}</div>
 
-              {/* Difficulty: level N = N - 1 creatures */}
-              <div className="mb-4">
-                <SectionTitle>Difficulté</SectionTitle>
-                <div className="grid grid-cols-5 gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/10">
-                  {DIFFICULTIES.map((d) => {
-                    const active = d.level === difficulty;
-                    const h = heat[d.level - 1];
+        {/* ── Left column ── */}
+        <nav className="grid grid-cols-4 gap-2 wide:grid-cols-2 wide:absolute wide:left-4 wide:top-[92px] short:top-[74px] wide:w-[140px] short:w-[120px] z-10">{leftButtons}</nav>
+
+        {/* ── Right column: events + more ── */}
+        <aside className="flex flex-col gap-2 wide:absolute wide:right-4 wide:top-[70px] short:top-[74px] wide:w-[210px] short:w-[176px] z-10">
+          <div className="flex flex-col gap-2 short:hidden">{eventCards}</div>
+          <div className="grid grid-cols-4 wide:grid-cols-3 gap-2 mt-1">{rightButtons}</div>
+        </aside>
+
+        {/* Phone-only footer */}
+        <div className="wide:hidden text-center pt-2 pb-4 space-y-2">
+          <p className="text-[12px] italic text-red-300/80 font-serif">« {daily} »</p>
+          {touch && <p className="text-[11px] text-zinc-500">📱 Tiens ton téléphone en paysage : le jeu passe en plein écran.</p>}
+          <InstallButton />
+        </div>
+        {/* Big screens: daily line under the character */}
+        <p className="hidden wide:block short:hidden absolute left-1/2 -translate-x-1/2 bottom-3 w-[min(30vw,360px)] text-center text-[11px] italic text-red-300/70 font-serif pointer-events-none">« {daily} »</p>
+      </div>
+
+      {/* ── Chapter & difficulty picker ── */}
+      {picker && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 bg-black/80" onClick={() => setPicker(false)}>
+          <div className="chunky relative w-full max-w-2xl max-h-[92vh] overflow-y-auto p-4 sm:p-5 text-white !rounded-3xl" style={{ background: '#121218' }} onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setPicker(false)} className="absolute top-3 right-3 w-9 h-9 rounded-xl border-[3px] border-black bg-red-800 flex items-center justify-center" aria-label="Fermer">
+              <X className="w-5 h-5" strokeWidth={3} />
+            </button>
+            <h2 className="font-game outl text-[24px] mb-3">Choisis ta partie</h2>
+            {onChangeChapter && (
+              <>
+                <div className="font-game text-[13px] text-zinc-400 mb-1.5">CHAPITRE</div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+                  {CHAPTERS.map((c) => {
+                    const locked = !unlocked[c.n - 1];
+                    const active = eff === c.n;
                     return (
                       <button
-                        key={d.level}
-                        onClick={() => onChangeDifficulty(d.level)}
-                        className={`flex flex-col items-center gap-0.5 py-2 px-0.5 rounded-lg transition-all ${active ? 'bg-zinc-900' : 'hover:bg-white/[0.05]'}`}
-                        style={active ? { boxShadow: `inset 0 0 0 1px ${h}, 0 0 18px ${h}44` } : undefined}
+                        key={c.n}
+                        disabled={locked}
+                        onClick={() => onChangeChapter(c.n)}
+                        title={locked ? `${lockText(c.n)} (connecté) pour débloquer ce chapitre` : c.sub}
+                        className={`chunky relative overflow-hidden h-[84px] text-left px-2.5 py-2 ${active ? 'ring-4 ring-amber-400' : ''}`}
+                        style={{ background: locked ? '#26262b' : c.color }}
                       >
-                        <span className={`max-w-full truncate text-[9px] sm:text-[11px] uppercase sm:tracking-wide font-semibold ${active ? 'text-zinc-100' : 'text-zinc-500'}`}>{d.name}</span>
-                        <span className="flex gap-0.5 h-3 items-center" title={`${d.monsters} monstre(s)`}>
-                          {d.monsters === 0 ? (
-                            <span className="text-[9px] text-zinc-500">aucun</span>
-                          ) : (
-                            Array.from({ length: d.monsters }).map((_, i) => (
-                              <span key={i} className="text-[11px]" style={{ color: active ? h : '#52525b' }}>
-                                ☠
-                              </span>
-                            ))
-                          )}
-                        </span>
+                        <span className="block font-game outl text-[11px] text-white/80">CHAPITRE {c.n}</span>
+                        <span className="block font-game outl text-[16px] leading-tight pr-6">{locked ? '???' : c.name}</span>
+                        {locked && <span className="block text-[10px] font-bold text-zinc-400 leading-tight pr-6">{lockText(c.n)}</span>}
+                        <span className="absolute right-1 bottom-0 text-[34px] opacity-90">{locked ? '🔒' : c.icon}</span>
+                        {active && <span className="absolute top-1 right-1.5 font-game text-amber-300 text-[16px]">✔</span>}
                       </button>
                     );
                   })}
                 </div>
-                <div className="text-[11px] font-serif italic text-zinc-400 mt-2 min-h-[1.2em]">{DIFFICULTIES[difficulty - 1].description}</div>
-              </div>
-
-              {/* Daily challenge (solo) */}
-              {challenge && onToggleChallenge && (
-                <button
-                  onClick={onToggleChallenge}
-                  className={`w-full mb-4 flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors ${
-                    challengeOn ? 'border-emerald-500/80 bg-emerald-950/40' : 'border-white/10 bg-white/[0.03] hover:border-white/25'
-                  }`}
-                >
-                  <span className="text-2xl">{challenge.icon}</span>
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-[10px] font-mono uppercase tracking-[0.2em] text-emerald-400">
-                      🎯 Défi du jour {challengeDone ? '— réussi ✔' : `— +${challenge.reward} pièces`}
-                    </span>
-                    <span className="block text-[13px] text-zinc-100 font-semibold">{challenge.name}</span>
-                    <span className="block text-[11px] text-zinc-400">{challenge.desc} Solo, difficulté 2+.</span>
-                  </span>
-                  {/* Switch */}
-                  <span className={`relative shrink-0 w-10 h-6 rounded-full transition-colors ${challengeOn ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
-                    <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${challengeOn ? 'left-[18px]' : 'left-0.5'}`} />
-                  </span>
-                </button>
-              )}
-
-              {/* ▶ Play */}
+              </>
+            )}
+            <div className="font-game text-[13px] text-zinc-400 mb-1.5">DIFFICULTÉ</div>
+            <div className="grid grid-cols-5 gap-1.5">
+              {DIFFICULTIES.map((d) => {
+                const active = d.level === difficulty;
+                return (
+                  <button
+                    key={d.level}
+                    onClick={() => onChangeDifficulty(d.level)}
+                    className={`chunky flex flex-col items-center justify-center h-[64px] px-1 text-white ${active ? 'ring-4 ring-amber-400' : ''}`}
+                    style={{ background: heat[d.level - 1] }}
+                  >
+                    <span className="font-game outl text-[11px] sm:text-[14px] leading-tight max-w-full truncate">{d.name}</span>
+                    <span className="text-[11px] tracking-wider">{d.monsters === 0 ? '🕊️' : '☠'.repeat(d.monsters)}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[12px] text-zinc-300 italic font-serif mt-2 min-h-[1.2em]">{diff.description}</p>
+            {challenge && onToggleChallenge && (
               <button
-                onClick={onStartGame}
-                className="group w-full flex items-center justify-center gap-3 py-4 rounded-xl bg-gradient-to-r from-red-800 via-red-600 to-red-800 bg-[length:200%_100%] hover:bg-[position:100%_0] text-white border border-red-400/70 shadow-[0_0_34px_rgba(220,38,38,0.5)] transition-all duration-500"
+                onClick={onToggleChallenge}
+                className="chunky w-full mt-3 flex items-center gap-3 px-3 py-2 text-left text-white"
+                style={{ background: challengeOn ? '#1f6b3a' : C.night }}
               >
-                <Play className="w-5 h-5 fill-white group-hover:scale-110 transition-transform" />
-                <span className="flex flex-col items-start leading-tight">
-                  <span className="font-mono text-base sm:text-lg uppercase tracking-[0.25em] font-bold">Jouer en Solo</span>
-                  <span className="text-[10px] font-mono uppercase tracking-widest text-red-100/75">
-                    {onChangeChapter ? `${cur.icon} ${cur.name} · ` : ''}
-                    {DIFFICULTIES[difficulty - 1].name} · le son s'active
-                  </span>
+                <span className="text-2xl">{challenge.icon}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block font-game outl text-[12px] text-emerald-300">🎯 DÉFI DU JOUR {challengeDone ? '✔' : `+${challenge.reward}🪙`}</span>
+                  <span className="block font-game outl text-[15px] leading-tight">{challenge.name}</span>
+                  <span className="block text-[11px] font-bold text-zinc-300">{challenge.desc}</span>
                 </span>
-              </button>
-            </section>
-
-            {/* ── Other modes ── */}
-            <section>
-              <SectionTitle>Autres modes</SectionTitle>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {onXmasNight && (
-                  <ModeCard
-                    icon="🎄"
-                    title="Chapitre spécial — Nuit de Noël"
-                    sub="Un chapitre de décembre, avec un skin unique à gagner 🎁"
-                    onClick={onXmasNight}
-                    tone="hover:border-emerald-400/70 bg-gradient-to-r from-red-950/60 to-emerald-950/60"
-                    wide
-                  />
-                )}
-                <ModeCard
-                  icon="👥"
-                  title="Multijoueur"
-                  sub="Coop et Imposteur jusqu'à 8, Chasse, Course"
-                  onClick={onMultiplayer}
-                  tone="hover:border-sky-400/70"
-                  extra={username ? <span data-no-i18n className="hidden sm:block text-[10px] font-mono text-emerald-400 max-w-[80px] truncate">{username}</span> : undefined}
-                />
-                {onSurvival && <ModeCard icon="🧟" title="Survie infinie" sub="Les vagues s'enchaînent : tiens le plus longtemps" onClick={onSurvival} tone="hover:border-red-400/70" />}
-                {onFindOpponent && <ModeCard icon="⚔️" title="Chercher un adversaire" sub="Chasse en ligne : l'un de vous est le monstre" onClick={onFindOpponent} tone="hover:border-orange-400/70" />}
-                {onCampaign && (
-                  <ModeCard
-                    icon="🏆"
-                    title="Campagne"
-                    sub={ch5Unlocked ? 'Les 5 chapitres d\'affilée, sans retour au menu' : 'Finissez la forêt pour la débloquer'}
-                    onClick={onCampaign}
-                    locked={!ch5Unlocked}
-                    tone="hover:border-violet-400/70"
-                  />
-                )}
-                {onTutorial && tutorialDone && <ModeCard icon="🎓" title="Tutoriel" sub="Revoir les bases en 2 minutes" onClick={onTutorial} tone="hover:border-emerald-400/70" />}
-              </div>
-            </section>
-          </div>
-
-          {/* ── Right: shop, progression, social, collection ── */}
-          <aside className="flex flex-col gap-3 min-w-0 lg:sticky lg:top-4">
-            {/* Tutorial for newcomers */}
-            {onTutorial && !tutorialDone && (
-              <button
-                onClick={onTutorial}
-                className="hidden lg:flex w-full items-center gap-3 p-3 rounded-xl bg-emerald-800/80 hover:bg-emerald-700 border border-emerald-400/70 text-left shadow-[0_0_24px_rgba(16,185,129,0.35)] transition-colors"
-              >
-                <span className="text-2xl">🎓</span>
-                <span className="flex-1">
-                  <span className="block text-sm font-semibold text-white">Nouveau ? Commence par le tutoriel (2 min)</span>
-                  <span className="block text-[11px] text-emerald-100/80">Les touches, les cachettes, la lampe… tout en douceur.</span>
+                <span className={`relative shrink-0 w-11 h-6 rounded-full border-2 border-black ${challengeOn ? 'bg-emerald-500' : 'bg-zinc-600'}`}>
+                  <span className={`absolute top-[1px] w-[18px] h-[18px] rounded-full bg-white border border-black transition-all ${challengeOn ? 'left-[21px]' : 'left-[1px]'}`} />
                 </span>
-                <ChevronRight className="w-5 h-5 text-emerald-100" />
               </button>
             )}
-            {/* Shop */}
             <button
-              onClick={onShop}
-              className="group relative overflow-hidden flex items-center gap-3 p-4 rounded-2xl border border-amber-600/50 bg-gradient-to-br from-amber-950/70 via-black/70 to-black/70 backdrop-blur-md text-left hover:border-amber-400 transition-colors"
+              onClick={() => {
+                setPicker(false);
+                onStartGame();
+              }}
+              className="chunky w-full mt-4 h-[60px] font-game outl text-[26px] text-white !rounded-2xl"
+              style={{ background: 'linear-gradient(#d42a2a, #8e1010)' }}
             >
-              <span className="w-12 h-12 shrink-0 flex items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30">
-                <ShoppingBag className="w-6 h-6 text-amber-300" />
-              </span>
-              <span className="flex-1 min-w-0">
-                <span className="block text-sm font-semibold text-amber-100">{shopLocked ? '🔒 Boutique' : 'Boutique'}</span>
-                <span className="block text-[11px] text-amber-200/70">{shopLocked ? 'Finis une partie en Exploration' : 'Skins & boîtes mystère'}</span>
-                {(giftReady || adventReady) && (
-                  <span className="flex gap-2 mt-1">
-                    {giftReady && <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] animate-pulse">🎁 cadeau !</span>}
-                    {adventReady && <span className="px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 text-[10px] animate-pulse">🎄 case du jour !</span>}
-                  </span>
-                )}
-              </span>
-              {coins != null && (
-                <span className="flex items-center gap-1 text-sm font-mono text-amber-200">
-                  <Coins className="w-4 h-4" /> {fmtCoins(coins)}
-                </span>
-              )}
+              JOUER
             </button>
-
-            {/* Progression */}
-            {(onProgression || onRanked || onAchievements || onLeaderboard) && (
-              <nav className="rounded-2xl border border-white/10 bg-black/60 backdrop-blur-md p-2">
-                <div className="px-3 pt-1.5 pb-1 text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Progression</div>
-                {onProgression && <NavRow icon="🏆" label="Pass & défis" onClick={onProgression} badge={progressionAlert} badgeColor="bg-emerald-500 text-black" hover="group-hover:text-violet-300" />}
-                {onRanked && <NavRow icon={tier.emoji} label="Classé" onClick={onRanked} right={<span style={{ color: tier.color }}>{tier.name}</span>} />}
-                {onAchievements && <NavRow icon={<Trophy className="w-4 h-4 text-amber-400" />} label="Succès" onClick={onAchievements} right={achCount != null ? `${achCount}/${ACHIEVEMENTS.length}` : undefined} hover="group-hover:text-amber-300" />}
-                {onLeaderboard && <NavRow icon={<Medal className="w-4 h-4 text-amber-400" />} label="Classement" onClick={onLeaderboard} hover="group-hover:text-amber-300" />}
-              </nav>
-            )}
-
-            {/* Social */}
-            {(onFriends || onClans) && (
-              <nav className="rounded-2xl border border-white/10 bg-black/60 backdrop-blur-md p-2">
-                <div className="px-3 pt-1.5 pb-1 text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Social</div>
-                {onFriends && (
-                  <NavRow
-                    icon={<Users className="w-4 h-4 text-emerald-400" />}
-                    label="Amis"
-                    onClick={onFriends}
-                    right={friendsOnline != null && friendsOnline > 0 ? <span className="text-emerald-400">● {friendsOnline} en ligne</span> : undefined}
-                    badge={friendsAlert}
-                    hover="group-hover:text-emerald-300"
-                  />
-                )}
-                {onClans && <NavRow icon="🛡️" label="Clans" onClick={onClans} right={clanTag ? <span data-no-i18n className="text-indigo-300">[{clanTag}]</span> : undefined} hover="group-hover:text-indigo-300" />}
-              </nav>
-            )}
-
-            {/* Collection */}
-            {(onGallery || onBestiary || onMusic || onRedeem) && (
-              <nav className="rounded-2xl border border-white/10 bg-black/60 backdrop-blur-md p-2">
-                <div className="px-3 pt-1.5 pb-1 text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500">Collection</div>
-                <div className="grid grid-cols-2 gap-1 p-1">
-                  {[
-                    onBestiary && { icon: '📖', label: 'Bestiaire', fn: onBestiary },
-                    onGallery && { icon: '🖼️', label: 'Galerie', fn: onGallery },
-                    onMusic && { icon: '🎵', label: 'Musiques', fn: onMusic },
-                    onRedeem && { icon: '🎟️', label: 'Code cadeau', fn: onRedeem },
-                  ]
-                    .filter((x): x is { icon: string; label: string; fn: () => void } => !!x)
-                    .map((x) => (
-                      <button key={x.label} onClick={x.fn} className="flex items-center gap-2 px-2.5 py-2.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] border border-white/5 hover:border-white/20 text-[12px] text-zinc-200 transition-colors">
-                        <span className="text-base">{x.icon}</span>
-                        <span>{x.label}</span>
-                      </button>
-                    ))}
-                </div>
-              </nav>
-            )}
-
-            {/* Daily line + help */}
-            <div className="rounded-2xl border border-red-900/40 bg-red-950/20 backdrop-blur-md p-4">
-              <p className="text-[13px] font-serif italic text-red-200/85 leading-relaxed">« {DAILY_LINES[Math.floor(Date.now() / 86400000) % DAILY_LINES.length]} »</p>
-              <a href="/comment-jouer/" className="inline-block mt-2 text-[11px] font-mono text-red-300 hover:text-red-200 underline underline-offset-2">
-                📖 Comment jouer : touches, chapitres, monstres et astuces
-              </a>
-              {controlSettings.micEnabled && <p className="mt-2 text-[11px] text-zinc-400">🎙 Autorisez le micro : le Patient Zéro entendra votre voix. Ne parlez pas.</p>}
-              <div className="mt-2 empty:hidden">
-                <InstallButton />
-              </div>
-            </div>
-          </aside>
-        </main>
-
-        {/* ── Footer: controls ── */}
-        <footer className="w-full max-w-6xl mx-auto mt-auto pt-3 border-t border-white/5 [@media(max-height:520px)]:hidden">
-          {touch ? (
-            <div className="flex flex-wrap justify-center gap-x-5 gap-y-1.5 text-[11px] font-mono text-zinc-500">
-              <span>📱 Tiens ton téléphone en paysage : le jeu passe en plein écran.</span>
-              <span>
-                <b className="text-zinc-300">Pouce gauche</b> se déplacer
-              </span>
-              <span>
-                <b className="text-zinc-300">Glisser à droite</b> regarder
-              </span>
-              <span>
-                <b className="text-zinc-300">✋</b> agir
-              </span>
-            </div>
-          ) : (
-            <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-[11px] text-zinc-500">
-              {[
-                ['ZQSD', 'Se déplacer'],
-                ['Souris', 'Regarder'],
-                ['E', 'Interagir'],
-                ['F', 'Lampe'],
-                ['Shift', 'Courir'],
-                ['C', 'S\'accroupir'],
-                ['Tab', 'Inventaire'],
-                ['P', 'Mode photo'],
-              ].map(([k, v]) => (
-                <span key={k} className="flex items-center gap-1.5">
-                  <kbd data-no-i18n className="min-w-[24px] px-1.5 py-0.5 rounded-md border border-white/15 border-b-2 bg-zinc-900/80 text-zinc-200 font-mono text-[10px] text-center">
-                    {k}
-                  </kbd>
-                  <span>{v}</span>
-                </span>
-              ))}
-            </div>
-          )}
-        </footer>
-      </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Settings window ── */}
       {showSettings && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setShowSettings(false)}>
-          <div className="relative w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-5 sm:p-6 shadow-[0_0_60px_rgba(220,38,38,0.15)]" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowSettings(false)} className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-100 hover:bg-white/5" aria-label="Fermer">
-              <X className="w-5 h-5" />
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80" onClick={() => setShowSettings(false)}>
+          <div className="chunky relative w-full max-w-md max-h-[92vh] overflow-y-auto p-5 sm:p-6 text-white !rounded-3xl" style={{ background: '#121218' }} onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowSettings(false)} className="absolute top-3 right-3 w-9 h-9 rounded-xl border-[3px] border-black bg-red-800 flex items-center justify-center" aria-label="Fermer">
+              <X className="w-5 h-5" strokeWidth={3} />
             </button>
-            <h2 className="flex items-center gap-2 text-sm font-mono uppercase tracking-[0.25em] text-zinc-100 mb-5">
-              <Sliders className="w-4 h-4 text-red-500" /> Options & Son
-            </h2>
+            <h2 className="font-game outl text-[24px] mb-4">⚙️ Options & Son</h2>
 
-            <div className="space-y-4 text-[13px] text-zinc-300">
+            <div className="space-y-4 text-[14px] text-zinc-200 font-bold">
               <div>
                 <div className="flex justify-between mb-1.5">
                   <span>Volume Principal</span>
-                  <span className="font-mono text-zinc-400">{Math.round(audioSettings.masterVolume * 100)}%</span>
+                  <span className="font-game text-amber-300">{Math.round(audioSettings.masterVolume * 100)}%</span>
                 </div>
                 <input
                   type="range"
@@ -767,14 +674,14 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                     onUpdateAudio({ masterVolume: val });
                     sound.updateSettings({ masterVolume: val });
                   }}
-                  className="w-full accent-red-600 h-1.5 cursor-pointer"
+                  className="w-full accent-red-600 h-2 cursor-pointer"
                 />
               </div>
 
               <div>
                 <div className="flex justify-between mb-1.5">
                   <span>Sensibilité de la Souris</span>
-                  <span className="font-mono text-zinc-400">{controlSettings.mouseSensitivity.toFixed(1)}x</span>
+                  <span className="font-game text-amber-300">{controlSettings.mouseSensitivity.toFixed(1)}x</span>
                 </div>
                 <input
                   type="range"
@@ -783,11 +690,11 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                   step="0.1"
                   value={controlSettings.mouseSensitivity}
                   onChange={(e) => onUpdateControls({ mouseSensitivity: parseFloat(e.target.value) })}
-                  className="w-full accent-red-600 h-1.5 cursor-pointer"
+                  className="w-full accent-red-600 h-2 cursor-pointer"
                 />
               </div>
 
-              <div className="rounded-xl border border-white/5 divide-y divide-white/5">
+              <div className="space-y-2">
                 {(
                   [
                     ['invertY', 'Inverser l\'Axe Vertical (Y)', null],
@@ -798,24 +705,46 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                 ).map(([key, label, sub]) => {
                   const on = !!controlSettings[key];
                   return (
-                    <button key={key} onClick={() => onUpdateControls({ [key]: !on } as Partial<ControlSettings>)} className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-white/[0.03]">
+                    <button
+                      key={key}
+                      onClick={() => onUpdateControls({ [key]: !on } as Partial<ControlSettings>)}
+                      className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border-2 border-black text-left"
+                      style={{ background: '#1d1d25' }}
+                    >
                       <span>
                         <span className="block">{label}</span>
-                        {sub && <span className="block text-[11px] text-zinc-500">{sub}</span>}
+                        {sub && <span className="block text-[11px] text-zinc-500 font-normal">{sub}</span>}
                       </span>
-                      <span className={`relative shrink-0 w-10 h-6 rounded-full transition-colors ${on ? 'bg-red-600' : 'bg-zinc-700'}`}>
-                        <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${on ? 'left-[18px]' : 'left-0.5'}`} />
+                      <span className={`relative shrink-0 w-11 h-6 rounded-full border-2 border-black ${on ? 'bg-emerald-500' : 'bg-zinc-600'}`}>
+                        <span className={`absolute top-[1px] w-[18px] h-[18px] rounded-full bg-white border border-black transition-all ${on ? 'left-[21px]' : 'left-[1px]'}`} />
                       </span>
                     </button>
                   );
                 })}
               </div>
+              {!touch && (
+                <div className="flex flex-wrap gap-x-3 gap-y-1.5 pt-1 text-[11px] text-zinc-400 font-normal">
+                  {[
+                    ['ZQSD', 'Se déplacer'],
+                    ['E', 'Interagir'],
+                    ['F', 'Lampe'],
+                    ['Shift', 'Courir'],
+                    ['C', 'S\'accroupir'],
+                    ['Tab', 'Inventaire'],
+                    ['P', 'Mode photo'],
+                  ].map(([k, v]) => (
+                    <span key={k} className="flex items-center gap-1">
+                      <kbd data-no-i18n className="px-1.5 py-0.5 rounded-md border-2 border-black bg-zinc-800 font-game text-[11px] text-zinc-100">
+                        {k}
+                      </kbd>
+                      {v}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <button
-              onClick={() => setShowSettings(false)}
-              className="w-full mt-5 py-3 rounded-xl bg-red-700 hover:bg-red-600 text-white font-mono text-xs uppercase tracking-widest font-bold transition-colors"
-            >
+            <button onClick={() => setShowSettings(false)} className="chunky w-full mt-5 h-12 font-game outl text-[18px] text-white !rounded-2xl" style={{ background: C.toxic }}>
               Enregistrer
             </button>
           </div>
@@ -824,4 +753,3 @@ export const StartScreen: React.FC<StartScreenProps> = ({
     </div>
   );
 };
-
