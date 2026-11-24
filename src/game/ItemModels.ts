@@ -97,6 +97,28 @@ export const buildItemModel = (item: GameItem, track: Track): THREE.Group => {
       add(track, g, new THREE.BoxGeometry(0.06, 0.006, 0.012), mat(track, 0xffffff, { roughness: 0.5 }), -0.01, 0.061, 0);
       break;
     }
+    case 'uvlamp': {
+      // Small black torch with a violet lens
+      const body = new THREE.Group();
+      body.rotation.z = Math.PI / 2;
+      body.position.y = 0.02;
+      g.add(body);
+      add(track, body, new THREE.CylinderGeometry(0.016, 0.016, 0.13, 16), mat(track, 0x1a1a1e, { roughness: 0.4, metalness: 0.5 }));
+      add(track, body, new THREE.CylinderGeometry(0.024, 0.017, 0.035, 16), mat(track, 0x2a2a30, { metalness: 0.7, roughness: 0.3 }), 0, 0.08, 0);
+      add(track, body, new THREE.CircleGeometry(0.021, 16), mat(track, 0x8a5cff, { emissive: 0x6a30ff, emissiveIntensity: 1.2 }), 0, 0.098, 0).rotation.x = -Math.PI / 2;
+      add(track, body, new THREE.BoxGeometry(0.012, 0.02, 0.006), mat(track, 0x8a5cff), 0, 0.02, 0.016);
+      break;
+    }
+    case 'talkie': {
+      // Walkie-talkie standing up: black body, speaker grille, antenna, green screen
+      const black = mat(track, 0x16171a, { roughness: 0.5 });
+      add(track, g, new THREE.BoxGeometry(0.06, 0.13, 0.035), black, 0, 0.065, 0);
+      add(track, g, new THREE.CylinderGeometry(0.005, 0.007, 0.09, 8), black, 0.018, 0.175, 0);
+      add(track, g, new THREE.BoxGeometry(0.04, 0.02, 0.002), mat(track, 0x40ff90, { emissive: 0x20a050, emissiveIntensity: 0.8 }), 0, 0.105, 0.0185);
+      for (let i = 0; i < 4; i++) add(track, g, new THREE.BoxGeometry(0.036, 0.003, 0.002), mat(track, 0x050505), 0, 0.04 + i * 0.01, 0.0185);
+      add(track, g, new THREE.CylinderGeometry(0.006, 0.006, 0.008, 10), mat(track, 0xd02020), -0.015, 0.132, 0);
+      break;
+    }
     case 'trap': {
       // Jaw trap lying open: base plate, two toothed half-rings, spring
       const iron = mat(track, 0x5a4a3a, { metalness: 0.7, roughness: 0.55 });

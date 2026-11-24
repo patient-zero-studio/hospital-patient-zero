@@ -17,6 +17,10 @@ export type ItemType =
   | 'smoke'
   /** jaw trap: put down, it holds the first creature that steps on it */
   | 'trap'
+  /** UV lamp: the flashlight shows hidden messages and marks */
+  | 'uvlamp'
+  /** walkie-talkie (co-op): hear the team anywhere, call them */
+  | 'talkie'
   /** coins found during a run (banked when you get out) */
   | 'coins'
   | 'special';

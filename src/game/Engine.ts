@@ -28,6 +28,8 @@ import type { ChallengeId } from '../challenges';
 import { Difficulty, difficultyInfo } from './Difficulty';
 import { CanSystem, FlipResult } from './CanSystem';
 import { RemotePlayer } from './RemotePlayer';
+import { MimicBody } from './Mimic';
+import type { HidingSpot } from './MapBuilder';
 import { NoiseMarkers } from './NoiseMarkers';
 import { VentCrawler, CRAWLER_STATES, CrawlerHuman } from './VentCrawler';
 import { buildItemModel } from './ItemModels';
@@ -414,6 +416,52 @@ type InteractTarget =
 
 /** An item lying in the world (dropped, or left on a table). */
 const SMOKE_ITEM: Omit<GameItem, 'id'> = { name: 'Fumigène', type: 'smoke', description: 'Un épais nuage pendant 12 s : les monstres ne vous voient plus à travers.', icon: 'CloudFog' };
+const UV_ITEM: Omit<GameItem, 'id'> = {
+  name: 'Lampe UV',
+  type: 'uvlamp',
+  description: 'Utilisez-la : votre lampe passe en lumière UV et révèle les messages cachés sur les murs… et d\'autres traces. Elle use la batterie plus vite.',
+  icon: 'FlashlightUv',
+};
+const TALKIE_ITEM: Omit<GameItem, 'id'> = {
+  name: 'Talkie-walkie',
+  type: 'talkie',
+  description: 'Coop : vous entendez l\'équipe partout, comme à la radio (le grésillement peut attirer les monstres). Utilisez-le pour appeler vos coéquipiers.',
+  icon: 'Radio',
+};
+/** 🔮 Messages written in UV ink on the walls */
+const UV_TEXTS = [
+  'IL N\'A PAS D\'YEUX',
+  'NE COURS PAS',
+  'ILS IMITENT NOS VOIX',
+  'PAS DANS CE CASIER',
+  'LA SORTIE EST UN MENSONGE',
+  'COMPTE JUSQU\'À 10',
+  'J\'AI VU LE PATIENT ZÉRO',
+  'LE CASIER RESPIRE',
+  'ÉTEINS TA LAMPE',
+  'ILS NOUS ÉCOUTENT',
+];
+/** 2D ray (origin, unit direction along x or z) against a box: distance or null */
+const rayBox2D = (ox: number, oz: number, dx: number, dz: number, b: { min: THREE.Vector3; max: THREE.Vector3 }) => {
+  let tmin = 0;
+  let tmax = Infinity;
+  for (const [o, d, lo, hi] of [
+    [ox, dx, b.min.x, b.max.x],
+    [oz, dz, b.min.z, b.max.z],
+  ]) {
+    if (d === 0) {
+      if (o < lo || o > hi) return null;
+    } else {
+      const t1 = (lo - o) / d;
+      const t2 = (hi - o) / d;
+      tmin = Math.max(tmin, Math.min(t1, t2));
+      tmax = Math.min(tmax, Math.max(t1, t2));
+    }
+  }
+  return tmax >= tmin && tmin > 0.05 ? tmin : null;
+};
+type UvMark = { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; text: string | null; found: boolean };
+
 const TRAP_ITEM: Omit<GameItem, 'id'> = { name: 'Piège à mâchoires', type: 'trap', description: 'Posez-le par terre : le premier monstre qui marche dessus reste bloqué 6 s.', icon: 'Cog' };
 
 interface WorldItem {
@@ -1770,6 +1818,8 @@ export class GameEngine {
     if (this.site) for (const n of [...this.site.noteDrops, ...this.site.supplyDrops()]) this.spawnWorldItem(n.item, n.pos, Math.random() * Math.PI, false);
     this.clearSmokes();
     this.spawnGadgets();
+    this.setupUv();
+    this.setupMimic();
 
     // Cans live inside the level group so interactions can raycast them
     this.cans = new CanSystem(this.map.sceneGroup, {
@@ -2763,6 +2813,22 @@ export class GameEngine {
     const rx = Math.cos(yaw);
     const rz = -Math.sin(yaw);
     const pan = dist < 0.5 ? 0 : ((dx * rx + dz * rz) / Math.max(0.5, Math.hypot(dx, dz))) * 0.85;
+    // 📻 Walkie-talkie: far away, the voice comes through the radio (and it crackles where you stand)
+    if (this.hasTalkie() && dist > 6 && vol < 0.6) {
+      const talking = this.voice.partnerTalking;
+      if (talking) {
+        if (!this.radioWasTalking) sound.playStatic(0.2, 0.06);
+        this.radioNoiseT -= delta;
+        if (this.radioNoiseT <= 0) {
+          this.radioNoiseT = 1.5;
+          this.alertAll(this.player.position.clone().setY(1.2), 5);
+        }
+      }
+      this.radioWasTalking = talking;
+      this.voice.update(delta, Math.max(vol, 0.65), 0, 2600, 0.04);
+      return;
+    }
+    this.radioWasTalking = false;
     this.voice.update(delta, vol, pan, cutoff, 0.12 + Math.min(1, dist / MAX) * 0.35);
   }
 
@@ -2909,6 +2975,412 @@ export class GameEngine {
         if (d < 8) this.player.shake = Math.max(this.player.shake, 0.3);
         this.state.showToast('🚪 Une porte a claqué toute seule… Il n\'y avait personne.');
         break;
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // 🔦 UV lamp: hidden messages on the walls (and the Mimic's handprints)
+  // -----------------------------------------------------------------------
+  private uvOn = false;
+  private uvMarks: UvMark[] = [];
+  private uvFound = 0;
+  private uvTotal = 0;
+  private uvTmp = new THREE.Vector3();
+  private uvTmp2 = new THREE.Vector3();
+  private setUv(on: boolean, quiet = false) {
+    this.uvOn = on;
+    const p = this.player;
+    p.flashlight.color.setHex(on ? 0x8a5cff : 0xfff1dc);
+    p.batteryDrainMul = this.baseDrain * (on ? 1.6 : 1);
+    if (quiet) return;
+    sound.playFlashlightToggle(on);
+    this.state.showToast(
+      on
+        ? p.flashlightOn
+          ? '🔦 Lumière UV : balayez les murs… des messages invisibles peuvent apparaître.'
+          : '🔦 Lumière UV prête : allumez la lampe [F] et balayez les murs.'
+        : '🔦 Lampe normale.'
+    );
+    this.pushHud();
+  }
+  private uvTexture(text: string | null) {
+    const c = document.createElement('canvas');
+    c.width = text ? 512 : 256;
+    c.height = text ? 128 : 256;
+    const g = c.getContext('2d')!;
+    g.shadowColor = '#b48cff';
+    g.shadowBlur = 16;
+    g.fillStyle = '#ece0ff';
+    if (text) {
+      g.font = 'bold 52px "Courier New", monospace';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(text, 256, 58, 492);
+      // Drips under the letters
+      for (let i = 0; i < 12; i++) g.fillRect(40 + Math.random() * 430, 78, 3, 8 + Math.random() * 30);
+    } else {
+      // Hands pressed against the door… from the inside
+      const hand = (x: number, y: number, r: number, s: number) => {
+        g.save();
+        g.translate(x, y);
+        g.rotate(r);
+        g.scale(s, 1);
+        g.beginPath();
+        g.ellipse(0, 0, 22, 26, 0, 0, Math.PI * 2);
+        g.fill();
+        for (let f = 0; f < 4; f++) {
+          g.beginPath();
+          g.ellipse(-15 + f * 10, -40 - (f === 1 || f === 2 ? 6 : 0), 4.5, 17, (f - 1.5) * 0.12, 0, Math.PI * 2);
+          g.fill();
+        }
+        g.beginPath();
+        g.ellipse(26, 2, 5, 14, -0.8, 0, Math.PI * 2);
+        g.fill();
+        g.restore();
+      };
+      hand(80, 90, -0.3, 1);
+      hand(175, 80, 0.25, -1);
+      hand(110, 190, -0.1, 1);
+      hand(190, 185, 0.4, -1);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+  private makeUvMark(text: string | null, w: number, h: number): UvMark {
+    const mat = new THREE.MeshBasicMaterial({
+      map: this.uvTexture(text),
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      toneMapped: false,
+      blending: THREE.AdditiveBlending,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    mesh.renderOrder = 5;
+    this.map.sceneGroup.add(mesh);
+    return { mesh, mat, text, found: false };
+  }
+  private disposeUvMark(m: UvMark | null) {
+    if (!m) return;
+    m.mesh.parent?.remove(m.mesh);
+    m.mesh.geometry.dispose();
+    m.mat.map?.dispose();
+    m.mat.dispose();
+  }
+  private setupUv() {
+    this.uvMarks.forEach((m) => this.disposeUvMark(m));
+    this.uvMarks = [];
+    this.uvFound = 0;
+    this.uvTotal = 0;
+    this.uvOn = false;
+    if (this.maze || this.forest || this.site || this.vsRole || this.imp || this.watchOnly) return;
+    const texts = [...UV_TEXTS].sort(() => Math.random() - 0.5).slice(0, 6);
+    const walls = this.map.collisionBoxes.filter((b) => !b.disabled && !b.doorId && b.min.y < 1.0 && b.max.y > 2.0);
+    const dirs: [number, number][] = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ];
+    for (const s of treatSpots(this.map, 16)) {
+      if (this.uvMarks.length >= texts.length) break;
+      let best: { t: number; dx: number; dz: number; b: (typeof walls)[number] } | null = null;
+      for (const [dx, dz] of dirs)
+        for (const b of walls) {
+          const t = rayBox2D(s.x, s.z, dx, dz, b);
+          if (t !== null && t < 4 && (!best || t < best.t)) best = { t, dx, dz, b };
+        }
+      if (!best) continue;
+      const b = best.b;
+      // A wide enough wall face, the text kept inside it
+      const along = best.dx !== 0 ? b.max.z - b.min.z : b.max.x - b.min.x;
+      if (along < 1.9) continue;
+      let x = s.x + best.dx * (best.t - 0.025);
+      let z = s.z + best.dz * (best.t - 0.025);
+      if (best.dx !== 0) z = THREE.MathUtils.clamp(z, b.min.z + 0.9, b.max.z - 0.9);
+      else x = THREE.MathUtils.clamp(x, b.min.x + 0.9, b.max.x - 0.9);
+      if (this.uvMarks.some((m) => Math.hypot(m.mesh.position.x - x, m.mesh.position.z - z) < 5)) continue;
+      const m = this.makeUvMark(texts[this.uvMarks.length], 1.6, 0.4);
+      m.mesh.position.set(x, 1.35 + Math.random() * 0.3, z);
+      m.mesh.lookAt(x - best.dx, m.mesh.position.y, z - best.dz);
+      m.mesh.rotation.z += (Math.random() - 0.5) * 0.12;
+      this.uvMarks.push(m);
+    }
+    this.uvTotal = this.uvMarks.length;
+  }
+  private updateUv(delta: number) {
+    if (this.uvOn && !this.state.inventory.some((i) => i.type === 'uvlamp')) this.setUv(false, true);
+    const all = this.mimicMark ? [...this.uvMarks, this.mimicMark] : this.uvMarks;
+    if (!all.length) return;
+    const p = this.player;
+    const lit = this.uvOn && p.flashlightOn && p.flashlightBattery > 0 && !p.isHidden;
+    const cam = this.camera.position;
+    const fwd = this.camera.getWorldDirection(this.uvTmp);
+    for (const m of all) {
+      let target = 0;
+      if (lit && m.mesh.visible) {
+        const d = m.mesh.position.distanceTo(cam);
+        if (d < 9) {
+          const c = this.uvTmp2.copy(m.mesh.position).sub(cam).normalize().dot(fwd);
+          if (c > 0.9) target = Math.min(1, (c - 0.9) / 0.05) * (1 - smooth01((d - 6) / 3));
+        }
+      }
+      m.mat.opacity = THREE.MathUtils.damp(m.mat.opacity, target, 6, delta);
+      if (!m.found && m.mat.opacity > 0.6) {
+        m.found = true;
+        this.onUvFound(m);
+      }
+    }
+  }
+  private onUvFound(m: UvMark) {
+    if (!m.text) {
+      sound.playHiss(1.2);
+      this.state.showToast('🖐 Des traces de mains sur ce casier… de l\'INTÉRIEUR. Quelque chose s\'y cache. N\'y entrez pas.');
+      return;
+    }
+    this.uvFound++;
+    const all = this.uvFound >= this.uvTotal;
+    const n = all ? 25 : 5;
+    if (this.net?.role === 'guest') this.net.send({ k: 'coins', n });
+    else this.state.runCoins += n;
+    sound.playItemPickup();
+    this.state.showToast(
+      all
+        ? `🔮 « ${m.text} » — Tous les messages cachés trouvés (${this.uvTotal}/${this.uvTotal}) ! +${n} 🪙`
+        : `🔮 Message caché (${this.uvFound}/${this.uvTotal}) : « ${m.text} »  +${n} 🪙`
+    );
+  }
+
+  // -----------------------------------------------------------------------
+  // 📻 Walkie-talkie (co-op)
+  // -----------------------------------------------------------------------
+  private radioT = 0;
+  private radioNoiseT = 0;
+  private radioWasTalking = false;
+  private hasTalkie() {
+    return this.state.inventory.some((i) => i.type === 'talkie');
+  }
+  private radioCall() {
+    if (!this.net || this.net.mode !== 'coop' || this.partnerGone) {
+      sound.playStatic(0.4, 0.08);
+      this.state.showToast('📻 Grrzzz… Personne au bout du fil. (Le talkie sert en coop.)');
+      return;
+    }
+    const now = performance.now();
+    if (now < this.radioT) return;
+    this.radioT = now + 4000;
+    const p = this.player.position;
+    this.net.send({ k: 'radio', x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10 });
+    sound.playStatic(0.35, 0.1);
+    this.state.showToast('📻 Appel radio envoyé : l\'équipe sait où vous êtes.');
+  }
+  private hearRadio(from: string, x: number, z: number) {
+    sound.playStatic(0.5, 0.12);
+    const cam = this.camera.position;
+    const dx = x - cam.x;
+    const dz = z - cam.z;
+    const d = Math.hypot(dx, dz);
+    const yaw = this.camera.rotation.y;
+    const f = (dx * -Math.sin(yaw) + dz * -Math.cos(yaw)) / Math.max(0.01, d);
+    const r = (dx * Math.cos(yaw) + dz * -Math.sin(yaw)) / Math.max(0.01, d);
+    const side = r > 0 ? 'à droite' : 'à gauche';
+    const where = d < 3 ? 'juste à côté de vous' : `à ${Math.round(d)} m, ${f > 0.75 ? 'devant vous' : f < -0.75 ? 'derrière vous' : f > 0.3 ? `devant ${side}` : f < -0.3 ? `derrière ${side}` : `sur votre ${r > 0 ? 'droite' : 'gauche'}`}`;
+    this.state.showToast(`📻 ${from} vous appelle : ${where}.`);
+    // The radio crackles where you stand
+    if (!this.spectating) this.alertAll(this.player.position.clone().setY(1.2), 5);
+  }
+
+  // -----------------------------------------------------------------------
+  // 🧟 The Mimic: hides in a locker, imitates sounds, bursts out screaming
+  // (each player has their own: it only shows itself to its victim)
+  // -----------------------------------------------------------------------
+  private mimic: {
+    spot: HidingSpot;
+    t: number;
+    near: number;
+    cool: number;
+    burstT: number;
+    body: MimicBody | null;
+    from: THREE.Vector3;
+    to: THREE.Vector3;
+    dir: THREE.Vector3;
+  } | null = null;
+  private mimicMark: UvMark | null = null;
+  private mimicMet = false;
+  private setupMimic() {
+    this.mimic?.body?.dispose();
+    this.mimic = null;
+    this.disposeUvMark(this.mimicMark);
+    this.mimicMark = null;
+    const lockers = this.map.hidingSpots.filter((s) => s.kind === 'locker');
+    if (this.maze || this.forest || this.site || this.imp || this.vsRole || this.watchOnly || this.survival || this.net?.mode === 'race') return;
+    if (!this.monsters.length || lockers.length < 3) return;
+    this.mimic = { spot: lockers[0], t: 25 + Math.random() * 20, near: 0, cool: 0, burstT: -1, body: null, from: new THREE.Vector3(), to: new THREE.Vector3(), dir: new THREE.Vector3() };
+    this.mimicMark = this.makeUvMark(null, 0.5, 0.5);
+    this.moveMimic();
+  }
+  private moveMimic() {
+    const m = this.mimic;
+    if (!m) return;
+    // (the world can be built before the player exists)
+    const p = this.player?.position ?? m.spot.position;
+    const lockers = this.map.hidingSpots.filter((s) => s.kind === 'locker' && s.id !== m.spot.id && s.id !== this.player?.currentHidingSpotId);
+    if (!lockers.length) return;
+    const far = lockers.filter((s) => Math.hypot(s.position.x - p.x, s.position.z - p.z) > 15);
+    const pool = far.length ? far : lockers;
+    m.spot = pool[Math.floor(Math.random() * pool.length)];
+    const s = m.spot.position;
+    const f = m.spot.viewDirection;
+    const mk = this.mimicMark;
+    if (mk) {
+      mk.mesh.position.set(s.x + f.x * 0.35, 1.25, s.z + f.z * 0.35);
+      mk.mesh.lookAt(mk.mesh.position.x + f.x, 1.25, mk.mesh.position.z + f.z);
+      mk.found = false;
+      mk.mat.opacity = 0;
+    }
+  }
+  private updateMimic(delta: number) {
+    const m = this.mimic;
+    if (!m) return;
+    if (m.burstT >= 0) {
+      this.animateMimicBurst(delta);
+      return;
+    }
+    if (m.cool > 0) {
+      m.cool -= delta;
+      return;
+    }
+    const p = this.player;
+    const s = m.spot.position;
+    const d = Math.hypot(p.position.x - s.x, p.position.z - s.z);
+    // Standing right in front of it for too long: it can't hold back
+    if (!p.isHidden && d < 1.3) {
+      m.near += delta;
+      if (m.near > 2.2) {
+        this.mimicBurst();
+        return;
+      }
+    } else m.near = Math.max(0, m.near - delta);
+    // Imitations, coming from its locker
+    m.t -= delta;
+    if (m.t <= 0) {
+      m.t = 12 + Math.random() * 14;
+      if (d > 4 && d < 24) this.mimicSound(d);
+    }
+  }
+  private mimicSound(d: number) {
+    const m = this.mimic!;
+    const s = m.spot.position;
+    const cam = this.camera.position;
+    const yaw = this.camera.rotation.y;
+    const dx = s.x - cam.x;
+    const dz = s.z - cam.z;
+    const pan = THREE.MathUtils.clamp((dx * Math.cos(yaw) - dz * Math.sin(yaw)) / Math.max(0.5, d), -1, 1) * 0.85;
+    const partner = this.net?.mode === 'coop' && !this.partnerGone ? this.peerName : null;
+    const kinds = ['steps', 'steps', 'knock', 'door', 'whisper'];
+    if (partner) kinds.push('name', 'name');
+    switch (kinds[Math.floor(Math.random() * kinds.length)]) {
+      case 'steps':
+        for (let i = 0; i < 5; i++) setTimeout(() => this.running && sound.playMonsterFootstep(d, pan, false), i * 430);
+        break;
+      case 'knock':
+        for (let i = 0; i < 3; i++) setTimeout(() => this.running && sound.playPipeKnock(pan, Math.min(0.6, 3 / (1 + d * 0.3))), i * 260);
+        break;
+      case 'door':
+        if (d < 14) sound.playDoorOpen();
+        else sound.playDistantSlam(pan);
+        break;
+      case 'whisper':
+        this.mimicSay(['Par ici…', 'Aide-moi…', 'Je suis là…', 'Viens voir…', 'Ouvre…'][Math.floor(Math.random() * 5)], d);
+        break;
+      case 'name':
+        this.mimicSay(`${partner} ?… Viens…`, d);
+        break;
+    }
+  }
+  private mimicSay(text: string, d: number) {
+    try {
+      const ss = window.speechSynthesis;
+      if (!ss || typeof SpeechSynthesisUtterance === 'undefined') {
+        sound.playHiss(1.5);
+        return;
+      }
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'fr-FR';
+      const v = ss.getVoices().find((x) => x.lang.startsWith('fr'));
+      if (v) u.voice = v;
+      u.pitch = 0.1;
+      u.rate = 0.7;
+      u.volume = Math.max(0.08, Math.min(0.7, 3.5 / (1 + d * 0.35)));
+      ss.speak(u);
+    } catch {
+      /* no speech here */
+    }
+  }
+  private mimicBurst() {
+    const m = this.mimic;
+    if (!m || m.burstT >= 0) return;
+    const p = this.player;
+    m.burstT = 0;
+    m.near = 0;
+    const s = m.spot.position;
+    const b = new MimicBody();
+    this.map.sceneGroup.add(b.group);
+    m.body = b;
+    m.from.set(s.x, 0, s.z);
+    const dir = new THREE.Vector3(p.position.x - s.x, 0, p.position.z - s.z);
+    const len = dir.length();
+    if (len > 0.01) dir.divideScalar(len);
+    else dir.copy(m.spot.viewDirection);
+    m.dir.copy(dir);
+    m.to.copy(m.from).addScaledVector(dir, Math.max(0.4, len - 1.1));
+    b.group.position.copy(m.from);
+    b.group.rotation.y = Math.atan2(dir.x, dir.z);
+    sound.playJumpscareStinger();
+    sound.playDoorSlam();
+    setTimeout(() => this.running && sound.playMonsterChaseRoar(), 250);
+    p.shake = Math.max(p.shake, 1);
+    p.stamina = Math.min(p.stamina, 10);
+    this.alertAll(s.clone().setY(1.2), 60);
+    this.state.showToast(
+      this.mimicMet
+        ? '👁 Le Mimic jaillit du casier en hurlant ! Les monstres arrivent…'
+        : '👁 UN MIMIC ! Il imitait les bruits depuis ce casier… Son hurlement a alerté tout l\'étage. FUYEZ !'
+    );
+    this.mimicMet = true;
+    this.pushHud();
+  }
+  private animateMimicBurst(delta: number) {
+    const m = this.mimic!;
+    const b = m.body;
+    m.burstT += delta;
+    const t = m.burstT;
+    if (b) {
+      const g = b.group;
+      if (t < 0.28) {
+        const k = 1 - Math.pow(1 - t / 0.28, 3);
+        g.position.lerpVectors(m.from, m.to, k);
+      } else if (t >= 1.1) {
+        // It skitters up into the ceiling and is gone
+        const u = (t - 1.1) / 0.7;
+        g.position.y = u * u * 4;
+        g.position.addScaledVector(m.dir, -delta * 3);
+      }
+      if (t < 1.1) {
+        const pp = this.player.position;
+        g.rotation.y = Math.atan2(pp.x - g.position.x, pp.z - g.position.z);
+      }
+      b.update(delta, t < 1.1);
+    }
+    if (t > 1.8) {
+      b?.dispose();
+      m.body = null;
+      m.burstT = -1;
+      m.cool = 30;
+      this.moveMimic();
     }
   }
 
@@ -3183,6 +3655,9 @@ export class GameEngine {
       }
       case 'rev':
         if (this.net?.role === 'guest' && typeof msg.e === 'string') this.applyRandomEvent(msg.e, msg.x, msg.z);
+        break;
+      case 'radio':
+        if (typeof msg.x === 'number' && typeof msg.z === 'number') this.hearRadio(this.peerName, msg.x, msg.z);
         break;
       case 'alarm': {
         const d = Math.hypot(msg.x - this.player.position.x, msg.z - this.player.position.z);
@@ -3773,6 +4248,8 @@ export class GameEngine {
 
     this.checkScares();
     this.updateRandomEvents(delta);
+    this.updateMimic(delta);
+    this.updateUv(delta);
     this.trackRun(delta);
     if (p.inDuct && !this.ductWarned && this.crawler) {
       this.ductWarned = true;
@@ -4905,6 +5382,10 @@ export class GameEngine {
           this.state.showToast('🚫 Défi du jour : impossible de se cacher. Courez !');
           return;
         }
+        if (this.mimic && this.mimic.burstT < 0 && spot.id === this.mimic.spot.id) {
+          this.mimicBurst();
+          return;
+        }
         p.enterHiding(spot.id, spot.position, spot.viewDirection);
         this.stat('hides');
         if (spot.kind === 'bed') {
@@ -5214,6 +5695,10 @@ export class GameEngine {
     } else if (item.type === 'smoke') {
       gs.removeItem(item.id);
       this.lightSmoke(p.position.x, p.position.z);
+    } else if (item.type === 'uvlamp') {
+      this.setUv(!this.uvOn);
+    } else if (item.type === 'talkie') {
+      this.radioCall();
     } else if (item.type === 'note' || item.type === 'cassette') {
       sound.playPaperRustle();
     } else {
@@ -5385,6 +5870,18 @@ export class GameEngine {
     const defs = [SMOKE_ITEM, TRAP_ITEM, Math.random() < 0.5 ? SMOKE_ITEM : TRAP_ITEM];
     spots.forEach((pos, i) => {
       const item: GameItem = { id: `gadget-${i}-${Math.floor(Math.random() * 1e6)}`, ...defs[i] };
+      this.spawnWorldItem(item, pos.setY(Math.max(0, pos.y)), Math.random() * Math.PI * 2, false);
+    });
+    // 🔦 UV lamp in the hospital levels, 📻 a walkie-talkie in co-op
+    const extra: Omit<GameItem, 'id'>[] = [];
+    if (!lv && !this.imp) extra.push(UV_ITEM);
+    if (this.net?.mode === 'coop') extra.push(TALKIE_ITEM);
+    if (!extra.length) return;
+    const xs = lv ? lv.freeSpots(extra.length) : treatSpots(this.map, extra.length).map((p) => p.setY(p.y - 0.45));
+    extra.forEach((d, i) => {
+      const pos = xs[i];
+      if (!pos) return;
+      const item: GameItem = { id: `gadget-x${i}-${Math.floor(Math.random() * 1e6)}`, ...d };
       this.spawnWorldItem(item, pos.setY(Math.max(0, pos.y)), Math.random() * Math.PI * 2, false);
     });
   }
