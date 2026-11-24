@@ -23,6 +23,8 @@ export interface WalletView {
   upgrades?: Record<string, number>;
   /** 🎁 golden gifts found this Christmas */
   xgifts?: number;
+  /** 📋 daily quests */
+  quests?: { day: string; list: { id: string; text: string; goal: number; prog: number; done: boolean; coins: number; xp: number }[]; bonus: boolean; bonusCoins: number; next: number };
   /** ids of today's offers */
   shop: string[];
   day: string;
@@ -342,6 +344,7 @@ export const api = {
   },
   ranked: (token: string): Promise<RankedView> => getJson('/api/ranked', token),
   upgrade: (token: string, id: string): Promise<WalletView> => post('/api/upgrade', { id }, token),
+  quests: (token: string, run: Record<string, number>): Promise<WalletView & { completed: string[]; bonus: boolean }> => post('/api/quests/progress', { run }, token),
   xmasGifts: (token: string, n: number): Promise<WalletView & { total: number; newSkins: string[] }> => post('/api/xmas/gifts', { n }, token),
   stars: (token: string, chapter: number, mask: number): Promise<WalletView & { before: number; after: number; bonus: number }> => post('/api/stars', { chapter, mask }, token),
   claimRankedPass: (token: string, tier: number): Promise<WalletView & { result: BoxResult }> => post('/api/rpass/claim', { tier }, token),

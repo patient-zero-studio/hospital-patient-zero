@@ -46,6 +46,7 @@ import { CLAN_CHEST_LEVELS, CLAN_COLORS, CLAN_EMBLEMS, CLAN_MAX, CLAN_NAME_RE, C
 import { MENU_TRACKS } from '../src/music.ts';
 import { STAR_REWARD } from '../src/stars.ts';
 import { MAX_UPGRADE, UPGRADE_PRICES, isUpgradeId } from '../src/upgrades.ts';
+import { QUEST_BONUS, QuestStat, dailyQuests } from '../src/quests.ts';
 import { ENDING_KEYS, isEndingKey } from '../src/gallery.ts';
 import { GALLERY_DOCS, isDocId } from '../src/galleryDocs.ts';
 import { BEASTS, ITEM_ENTRIES, isBeastId, isItemEntryId } from '../src/bestiary.ts';
@@ -149,6 +150,8 @@ interface User {
   upgrades?: Record<string, number>;
   /** 🎁 golden gifts found this Christmas */
   xgifts?: { key: string; n: number; at: number };
+  /** 📋 daily quests: progress of the day */
+  quests?: { day: string; prog: Record<string, number>; done: string[]; bonus: boolean; at: number };
   /** 🏅 ranked season (month): points, best tier; past seasons */
   rank?: { season: string; points: number; best: number; wins: number; losses: number };
   rankHistory?: { season: string; tier: string; points: number }[];
@@ -508,6 +511,7 @@ const walletView = (u: User) => ({
   ranked: rankView(u),
   stars: u.stars ?? {},
   upgrades: u.upgrades ?? {},
+  quests: questsView(u),
   xgifts: u.xgifts && u.xgifts.key === xgiftKey() ? u.xgifts.n : 0,
   tracks: isAdmin(u) ? MENU_TRACKS.map((t) => t.id) : (u.tracks ?? []),
   gallery: isAdmin(u)
@@ -1332,6 +1336,58 @@ app.post('/api/wallet/reward', (req, res) => {
   if (diff >= 2) payReferral(user);
   saveUsers();
   res.json({ gained, xp, rankGain, ...walletView(user) });
+});
+
+// 📋 Daily quests: 3 a day, progress sent at the end of each game
+const todaysQuests = () => dailyQuests(todayKey(), currentSeason() === 'noel');
+function questsOf(u: User) {
+  const day = todayKey();
+  if (!u.quests || u.quests.day !== day) u.quests = { day, prog: {}, done: [], bonus: false, at: 0 };
+  return u.quests;
+}
+function questsView(u: User) {
+  const q = questsOf(u);
+  return {
+    day: q.day,
+    list: todaysQuests().map((d) => ({ id: d.id, text: d.text, goal: d.goal, prog: Math.min(d.goal, q.prog[d.id] ?? 0), done: q.done.includes(d.id), coins: d.coins, xp: d.xp })),
+    bonus: q.bonus,
+    bonusCoins: QUEST_BONUS.coins,
+    next: nextReset(),
+  };
+}
+const QUEST_CAP: Record<QuestStat, number> = { hides: 20, chases: 20, docs: 10, escape: 1, nosprint: 1, distance: 3000, unhurt: 1, cat: 600, uv: 10, coop: 1, gifts: 3 };
+app.post('/api/quests/progress', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const q = questsOf(user);
+  const now = Date.now();
+  // One report per game (and a game takes a little while)
+  if (now - q.at < 15000) return res.json({ completed: [], bonus: false, ...walletView(user) });
+  q.at = now;
+  const run = (req.body?.run ?? {}) as Record<string, unknown>;
+  const completed: string[] = [];
+  let bonus = false;
+  for (const d of todaysQuests()) {
+    if (q.done.includes(d.id)) continue;
+    const add = Math.max(0, Math.min(QUEST_CAP[d.stat], Math.floor(Number(run[d.stat]) || 0)));
+    if (!add) continue;
+    q.prog[d.id] = (q.prog[d.id] ?? 0) + add;
+    if (q.prog[d.id] >= d.goal) {
+      q.done.push(d.id);
+      completed.push(d.text);
+      // (walletOf() may swap the wallet object: never keep it across addXp)
+      walletOf(user).coins += d.coins * boostMul('coins');
+      addXp(user, d.xp);
+    }
+  }
+  if (!q.bonus && todaysQuests().every((d) => q.done.includes(d.id))) {
+    q.bonus = true;
+    bonus = true;
+    walletOf(user).coins += QUEST_BONUS.coins * boostMul('coins');
+    addXp(user, QUEST_BONUS.xp);
+  }
+  saveUsers();
+  res.json({ completed, bonus, ...walletView(user) });
 });
 
 // 🎁 Golden gifts (December): 5 / 15 / 30 found = exclusive skins

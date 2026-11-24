@@ -62,6 +62,7 @@ import { StartScreen } from './components/StartScreen';
 import { ownedEmotes } from './components/LobbyStage';
 import { MapOverlay } from './components/MapOverlay';
 import { AtelierMenu } from './components/AtelierMenu';
+import { QuestsMenu } from './components/QuestsMenu';
 import { RunStats, starsOf, starMask } from './stars';
 
 const SETTINGS_KEY = 'hospital-pz-settings-v2';
@@ -162,6 +163,9 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
+  /** 📋 last quest message (shown on the game over screen too) */
+  const [questMsg, setQuestMsg] = useState<string | null>(null);
+  const [questsOpen, setQuestsOpen] = useState(false);
   /** ⭐ last finished run: numbers + stars (null stars = mode without stars) */
   const [runResult, setRunResult] = useState<{ stats: RunStats; stars: [boolean, boolean, boolean] | null; chapter: number; before: number; bonus: number } | null>(null);
   /** 🗺️ [M] map */
@@ -497,6 +501,7 @@ export default function App() {
     reportGalleryRef.current(ending);
     const e = engineRef.current!;
     starsRef.current();
+    questsRef.current(true);
     grantRewardRef.current(e.builtDifficulty ?? 2);
     bankTreatsRef.current();
     if (e.xmasNight) xmasRewardRef.current(e.runPresents);
@@ -595,6 +600,7 @@ export default function App() {
     setRunMsg(null);
     if (fresh || engine.builtDifficulty !== diff || engine.builtChapter !== ch || engine.builtSeason !== getActiveSeason()) engine.reset();
     afterReset?.();
+    setQuestMsg(null);
     engine.start();
     engine.maybeIntro();
     setRewardMsg(null);
@@ -842,6 +848,7 @@ export default function App() {
   };
   /** A lost run still gives a little XP. */
   const deathXp = async () => {
+    questsRef.current(false);
     const s = sessionRef.current;
     if (!s || onlineRef.current?.mode === 'versus') return;
     try {
@@ -967,6 +974,43 @@ export default function App() {
       /* offline */
     }
   };
+  /** 📋 Daily quests: what this game counts for (won or lost) */
+  const reportQuests = async (escaped: boolean) => {
+    const e = engineRef.current;
+    const s = sessionRef.current;
+    const on = onlineRef.current;
+    if (!e || !s || on?.mode === 'versus' || on?.watching || e.survival) return;
+    const st = e.runStats();
+    const qn = e.questNumbers();
+    const esc = escaped && e.builtDifficulty >= 2;
+    const run: Record<string, number> = {
+      hides: st.hides,
+      chases: st.chases,
+      docs: st.docs,
+      distance: st.distance,
+      escape: esc ? 1 : 0,
+      nosprint: esc && !qn.sprinted ? 1 : 0,
+      unhurt: esc && st.hits === 0 ? 1 : 0,
+      cat: qn.cat,
+      uv: qn.uv,
+      coop: on?.mode === 'coop' ? 1 : 0,
+      gifts: qn.gifts,
+    };
+    try {
+      await new Promise((r) => setTimeout(r, 1300));
+      const r = await api.quests(s.token, run);
+      setWallet(r);
+      if (r.completed.length) {
+        const msg = `📋 Quête${r.completed.length > 1 ? 's' : ''} réussie${r.completed.length > 1 ? 's' : ''} : ${r.completed.join(' · ')}${r.bonus ? ' — les 3 quêtes du jour : BONUS !' : ''}`;
+        setRunMsg((m) => (m ? `${m}  ·  ${msg}` : msg));
+        setQuestMsg(msg);
+      }
+    } catch {
+      /* offline */
+    }
+  };
+  const questsRef = useRef(reportQuests);
+  questsRef.current = reportQuests;
   const starsRef = useRef(awardStars);
   starsRef.current = awardStars;
   const submitRunRef = useRef(submitRun);
@@ -1545,6 +1589,8 @@ export default function App() {
           onGallery={session ? () => setGalleryOpen(true) : undefined}
           onBestiary={session ? () => setBestiaryOpen(true) : undefined}
           onAtelier={session ? () => setAtelierOpen(true) : () => setMpOpen(true)}
+          onQuests={session ? () => setQuestsOpen(true) : () => setMpOpen(true)}
+          questsLeft={wallet?.quests ? wallet.quests.list.filter((q) => !q.done).length : 0}
           onRanked={session ? () => setRankedOpen(true) : undefined}
           rankTier={wallet?.ranked?.tier ?? null}
           onFriends={
@@ -1732,6 +1778,7 @@ export default function App() {
       )}
       {rankedOpen && session && !isPlaying && <RankedMenu token={session.token} me={session.username} onProfile={setProfileOf} onWallet={setWallet} onClose={() => setRankedOpen(false)} />}
       {musicOpen && !isPlaying && <MusicMenu token={session?.token ?? null} wallet={wallet} onWallet={setWallet} onClose={() => setMusicOpen(false)} />}
+      {questsOpen && session && wallet?.quests && !isPlaying && <QuestsMenu quests={wallet.quests} onClose={() => setQuestsOpen(false)} />}
       {atelierOpen && session && wallet && !isPlaying && (
         <AtelierMenu
           levels={wallet.upgrades ?? {}}
@@ -2046,6 +2093,7 @@ export default function App() {
           onRestart={online?.role === 'guest' ? undefined : handleRestart}
           onMainMenu={handleMainMenu}
           online={!!online}
+          questMsg={questMsg}
         />
       )}
 

@@ -31,6 +31,7 @@ import { RemotePlayer } from './RemotePlayer';
 import { MimicBody } from './Mimic';
 import { ShadeBody } from './Shade';
 import { CatBody, CatPose } from './Cat';
+const CAT_POSES: CatPose[] = ['sit', 'walk', 'run', 'hiss', 'scratch'];
 import { upgradeEffects } from '../upgrades';
 import type { RunStats } from '../stars';
 import type { CollisionBox, ContainerObject, FlickerLight, HidingSpot } from './MapBuilder';
@@ -1459,7 +1460,7 @@ export class GameEngine {
   public builtSeason: string | null = null;
   private spawnFouettard() {
     if (getActiveSeason() !== 'noel' || this.chapter !== 1 || this.difficulty < 2) return;
-    if (this.survival || this.xmasNight || this.imp || this.vsRole || this.net || this.watchOnly) return;
+    if (this.survival || this.xmasNight || this.imp || this.vsRole || (this.net && this.net.mode !== 'coop')) return;
     const spawns = this.map.monsterSpawns;
     const s = spawns[(this.monsters.length + 1) % spawns.length];
     if (!s) return;
@@ -2167,7 +2168,7 @@ export class GameEngine {
   public reset() {
     this.destroyWorld();
     this.buildWorld();
-    this.run = { time: 0, light: 0, hid: false, chased: false, voiced: false, crawler: 'LURK', dist: 0, lx: NaN, lz: NaN, hides: 0, wasHid: false, hits: 0, chases: 0, inChase: false };
+    this.run = { time: 0, light: 0, hid: false, chased: false, voiced: false, crawler: 'LURK', dist: 0, lx: NaN, lz: NaN, hides: 0, wasHid: false, hits: 0, chases: 0, inChase: false, sprinted: false, catT: 0, uv: 0 };
     this.waterWarned = false;
     // Online, the guest wakes up a little further in room 104 (not inside the host)
     const sewers = this.chapter === 2;
@@ -2720,6 +2721,16 @@ export class GameEngine {
     }
     if (this.forest) w.lv = this.forest.netState();
     if (this.site) w.lv = this.site.netState();
+    if (this.shade) {
+      const sh = this.shade;
+      const off: number[] = [];
+      this.map.lights.forEach((l, i) => this.shadeOff.has(l) && off.push(i));
+      w.sh = [r(sh.pos.x), r(sh.pos.z), sh.state === 'gone' ? 0 : sh.state === 'feed' ? 1 : 2, ...off];
+    }
+    if (this.cat) {
+      const c = this.cat;
+      w.cat = [r(c.pos.x), r(c.pos.z), r(c.yaw), CAT_POSES.indexOf(c.pose), c.state === 'away' ? 0 : 1];
+    }
     const notes = this.raceKit ? this.raceKit.notes : this.state.notesCollected;
     if (notes.length !== this.lastNotesSent) {
       w.notes = notes;
@@ -2730,6 +2741,29 @@ export class GameEngine {
 
   /** Guest: mirror the host's world. */
   private applySnapshot(w: WorldSnapshot) {
+    if (w.sh && this.shade) {
+      const s = this.shade;
+      s.pos.set(w.sh[0], 0, w.sh[1]);
+      s.state = w.sh[2] === 0 ? 'gone' : w.sh[2] === 1 ? 'feed' : 'stalk';
+      const before = this.shadeOff.size;
+      this.shadeOff.clear();
+      for (const i of w.sh.slice(3)) {
+        const l = this.map.lights[i];
+        if (l) this.shadeOff.set(l, 2);
+      }
+      if (this.shadeOff.size > before && !this.shadeWarn.lights && Math.hypot(s.pos.x - this.player.position.x, s.pos.z - this.player.position.z) < 26) {
+        this.shadeWarn.lights = true;
+        sound.playFlickerHum();
+        this.state.showToast('Les lumières s\'éteignent une à une, tout près… Quelque chose aime le noir.');
+      }
+    }
+    if (w.cat && this.cat) {
+      const c = this.cat;
+      c.pos.set(w.cat[0], 0, w.cat[1]);
+      c.yaw = w.cat[2];
+      c.netPose = CAT_POSES[w.cat[3]] ?? 'sit';
+      c.state = w.cat[4] ? 'follow' : 'away';
+    }
     w.monsters.forEach((v, i) => this.monsters[i]?.netApply(v[0], v[1], v[2], MONSTER_STATES[v[3]] ?? 'PATROL', v[4]));
     for (const [id, open, locked] of w.doors) {
       const d = this.map.doors.get(id);
@@ -2782,11 +2816,16 @@ export class GameEngine {
   // Achievements
   // -----------------------------------------------------------------------
   /** What happened during this run (for the escape achievements). */
-  private run = { time: 0, light: 0, hid: false, chased: false, voiced: false, crawler: 'LURK' as string, dist: 0, lx: NaN, lz: NaN, hides: 0, wasHid: false, hits: 0, chases: 0, inChase: false };
+  private run = { time: 0, light: 0, hid: false, chased: false, voiced: false, crawler: 'LURK' as string, dist: 0, lx: NaN, lz: NaN, hides: 0, wasHid: false, hits: 0, chases: 0, inChase: false, sprinted: false, catT: 0, uv: 0 };
   /** ⭐ End-of-run numbers (stars + the victory screen) */
   public runStats(): RunStats {
     const r = this.run;
     return { time: r.time, distance: Math.round(r.dist), hides: r.hides, hits: r.hits, chases: r.chases, docs: this.state.notesCollected.length };
+  }
+  /** 📋 extra numbers for the daily quests */
+  public questNumbers() {
+    const r = this.run;
+    return { sprinted: r.sprinted, cat: Math.round(r.catT), uv: r.uv, gifts: this.runGold };
   }
 
   private ach(id: string) {
@@ -2817,6 +2856,10 @@ export class GameEngine {
     r.lx = p.position.x;
     r.lz = p.position.z;
     if (p.isHidden && !r.wasHid) r.hides++;
+    if (p.isSprinting) r.sprinted = true;
+    // 🐈‍⬛ the cat walking with you
+    const cat = this.cat;
+    if (cat && cat.state !== 'away' && Math.hypot(cat.pos.x - p.position.x, cat.pos.z - p.position.z) < 6) r.catT += delta;
     r.wasHid = p.isHidden;
     const chasing = this.monsters.some((m) => m.state === 'CHASE' && Math.hypot(m.position.x - p.position.x, m.position.z - p.position.z) < 18);
     if (chasing) {
@@ -3257,6 +3300,7 @@ export class GameEngine {
     }
   }
   private onUvFound(m: UvMark) {
+    this.run.uv++;
     if (m === this.secret?.mark) {
       sound.playHiss(0.8);
       this.state.showToast('👁 Un symbole étrange sur le mur… Gardez la lumière UV dessus.');
@@ -3726,6 +3770,72 @@ export class GameEngine {
   } | null = null;
   private shadeOff = new Map<FlickerLight, number>();
   private shadeWarn = { lights: false, drink: false, seen: false };
+  private shadeGuestCd = 0;
+
+  /** Host: the player the shadow drifts towards (closest one still standing) */
+  private shadeTarget(from: THREE.Vector3) {
+    const p = this.player;
+    const cands: { x: number; z: number; hid: boolean }[] = [];
+    if (!this.dying && !this.spectating) cands.push({ x: p.position.x, z: p.position.z, hid: p.isHidden });
+    for (const { s, caught } of this.livePeers()) if (!s.dead && !caught) cands.push({ x: s.x, z: s.z, hid: s.hid });
+    let best: { x: number; z: number; hid: boolean; d: number } | null = null;
+    for (const c of cands) {
+      const d = Math.hypot(c.x - from.x, c.z - from.z);
+      if (!best || d < best.d) best = { ...c, d };
+    }
+    return best;
+  }
+
+  /** Guest: the host moves it; here we only draw it and feel it (torch, touch, UV) */
+  private updateShadeGuest(delta: number) {
+    const s = this.shade!;
+    const p = this.player;
+    const pp = p.position;
+    this.shadeGuestCd -= delta;
+    const dx = pp.x - s.pos.x;
+    const dz = pp.z - s.pos.z;
+    const d = Math.hypot(dx, dz);
+    const fade = (cur: number, want: number) => cur + (want - cur) * (1 - Math.exp(-5 * delta));
+    const alive = !this.dying && !this.spectating && !this.finished;
+    if (alive && s.state === 'stalk') {
+      if (d < 8 && p.flashlightOn) {
+        p.flashlightBattery = Math.max(0, p.flashlightBattery - delta * 3);
+        if (!this.shadeWarn.drink) {
+          this.shadeWarn.drink = true;
+          this.state.showToast('Ta lampe faiblit à vue d\'œil… quelque chose la boit. Éteins-la, ou trouve de la lumière.');
+        }
+      }
+      if (d < 1.1 && this.shadeGuestCd <= 0) {
+        this.shadeGuestCd = 5;
+        p.flashlightBattery = Math.max(0, p.flashlightBattery - 40);
+        this.lightsOutTimer = Math.max(this.lightsOutTimer, 3);
+        this.fear = 1;
+        this.damage = Math.max(this.damage, 0.5);
+        p.shake = Math.max(p.shake, 0.7);
+        sound.playStatic(1.2, 0.3);
+        this.buzz([90, 40, 90]);
+        this.net?.send({ k: 'noise', x: pp.x, z: pp.z, loud: 40, hid: false });
+        this.net?.send({ k: 'shadeHit' } as GameMsg);
+        this.state.showToast('Une main glacée te traverse… ta lampe meurt. Au loin, quelque chose t\'a entendu. Cache-toi !');
+      }
+      if (this.uvOn && p.flashlightOn && d < 10 && this.shadeGuestCd <= 0) {
+        const fx = -Math.sin(p.yaw);
+        const fz = -Math.cos(p.yaw);
+        if ((-dx * fx + -dz * fz) / (d || 1) > 0.8) {
+          this.shadeGuestCd = 3;
+          this.net?.send({ k: 'shadeBurn' } as GameMsg);
+          this.ach('uv_shade');
+        }
+      }
+    }
+    const show = s.state !== 'gone' && d < 18 && alive;
+    s.body01 = fade(s.body01, show && !p.flashlightOn ? 1 : 0);
+    s.eyes01 = fade(s.eyes01, show && d < 16 ? 1 : 0);
+    s.body.group.position.copy(s.pos);
+    s.body.group.rotation.y = Math.atan2(dx, dz);
+    s.body.update(delta, s.body01, s.eyes01);
+    if ((s.body01 > 0.5 || s.eyes01 > 0.5) && d < 10) this.markSeen('eteigneur');
+  }
 
   // -----------------------------------------------------------------------
   // 🐈‍⬛ The hospital's black cat: follows you for a while, hisses when a
@@ -3745,6 +3855,9 @@ export class GameEngine {
     goal: ContainerObject | null;
     speed: number;
     fleeDir: THREE.Vector3;
+    /** pose drawn this frame (sent to the guests) / received from the host */
+    pose: CatPose;
+    netPose: CatPose;
   } | null = null;
   private catScratched = new Set<string>();
   private catWarn = { seen: false, hiss: false, scratch: false, flee: false };
@@ -3758,7 +3871,7 @@ export class GameEngine {
     const body = new CatBody();
     body.group.visible = false;
     this.scene.add(body.group);
-    this.cat = { body, pos: new THREE.Vector3(), yaw: 0, state: 'away', t: 35 + Math.random() * 40, stay: 0, stuck: 0, hissCd: 0, scratchCd: 4, goal: null, speed: 0, fleeDir: new THREE.Vector3() };
+    this.cat = { body, pos: new THREE.Vector3(), yaw: 0, state: 'away', t: 35 + Math.random() * 40, stay: 0, stuck: 0, hissCd: 0, scratchCd: 4, goal: null, speed: 0, fleeDir: new THREE.Vector3(), pose: 'sit', netPose: 'sit' };
   }
 
   private catBlocked(x: number, z: number) {
@@ -3801,9 +3914,55 @@ export class GameEngine {
     return false;
   }
 
+  /** Guest: the host moves the cat; here we draw it and hear it */
+  private updateCatGuest(delta: number) {
+    const c = this.cat!;
+    const p = this.player;
+    const d = Math.hypot(p.position.x - c.pos.x, p.position.z - c.pos.z);
+    const was = c.pose;
+    const now = c.netPose;
+    c.body.group.visible = c.state !== 'away';
+    if (c.state !== 'away' && now !== was) {
+      if (now === 'hiss' && d < 18) {
+        sound.playHiss(0.9);
+        if (!this.catWarn.hiss && d < 14) {
+          this.catWarn.hiss = true;
+          this.state.showToast('😾 Le chat se hérisse et feule vers le couloir… Quelque chose approche. Cache-toi !');
+        }
+      }
+      if (now === 'run' && was !== 'walk' && d < 20) sound.playMeow(d, 0, true);
+      if (now === 'scratch' && !this.catWarn.scratch && d < 12) {
+        this.catWarn.scratch = true;
+        this.state.showToast('🐈‍⬛ Le chat gratte un meuble en miaulant doucement… Il y a peut-être quelque chose dedans.');
+      }
+    }
+    if (c.state !== 'away' && !this.catWarn.seen && d < 10) {
+      this.catWarn.seen = true;
+      this.markSeen('chat');
+      this.state.showToast('🐈‍⬛ Un chat noir vous suit… Ne courez pas près de lui, il hurlerait.');
+    }
+    c.pose = now;
+    c.body.group.position.copy(c.pos);
+    c.body.group.rotation.y = c.yaw;
+    c.body.update(delta, now, now === 'run' ? 1 : 0.5);
+  }
+
+  /** Host: the team mate the cat follows (closest one still standing) */
+  private catLeader() {
+    const c = this.cat!;
+    const p = this.player;
+    const list: { x: number; z: number; yaw: number; sprint: boolean; hid: boolean }[] = [];
+    if (!this.dying && !this.spectating) list.push({ x: p.position.x, z: p.position.z, yaw: p.yaw, sprint: p.isSprinting, hid: p.isHidden });
+    for (const { s, caught } of this.livePeers()) if (!s.dead && !caught) list.push({ x: s.x, z: s.z, yaw: s.yaw, sprint: !!s.sp, hid: s.hid });
+    let best = list[0] ?? null;
+    for (const l of list) if (Math.hypot(l.x - c.pos.x, l.z - c.pos.z) < Math.hypot(best!.x - c.pos.x, best!.z - c.pos.z)) best = l;
+    return { best, all: list };
+  }
+
   private updateCat(delta: number) {
     const c = this.cat;
     if (!c) return;
+    if (this.net?.role === 'guest') return this.updateCatGuest(delta);
     const p = this.player;
     const pp = p.position;
     c.t -= delta;
@@ -3843,13 +4002,15 @@ export class GameEngine {
     }
     c.body.group.visible = true;
 
-    // 🏃 You run near it: it bolts with a yowl the creatures hear
-    if (c.state !== 'flee' && p.isSprinting && d < 4.5) {
+    // 🏃 Someone runs near it: it bolts with a yowl the creatures hear
+    const team = this.catLeader();
+    const runner = team.all.find((q) => q.sprint && Math.hypot(q.x - c.pos.x, q.z - c.pos.z) < 4.5);
+    if (c.state !== 'flee' && runner) {
       c.state = 'flee';
       c.t = 2.5;
-      c.fleeDir.set(-dx, 0, -dz).normalize();
+      c.fleeDir.set(c.pos.x - runner.x, 0, c.pos.z - runner.z).normalize();
       sound.playMeow(d, pan(), true);
-      if (this.net?.role !== 'guest') this.alertAll(c.pos.clone().setY(0.5), 15);
+      this.alertAll(c.pos.clone().setY(0.5), 15);
       if (!this.catWarn.flee) {
         this.catWarn.flee = true;
         this.state.showToast('🐈‍⬛ MRRAAOOW ! Le chat s\'enfuit en hurlant… Ça s\'entend de loin.');
@@ -3910,10 +4071,11 @@ export class GameEngine {
         }
       }
     } else {
-      // Following: a couple of metres behind you
+      // Following: a couple of metres behind the closest team mate
       c.stay -= delta;
-      const bx = pp.x + Math.sin(p.yaw) * 1.6;
-      const bz = pp.z + Math.cos(p.yaw) * 1.6;
+      const L = team.best ?? { x: pp.x, z: pp.z, yaw: p.yaw };
+      const bx = L.x + Math.sin(L.yaw) * 1.6;
+      const bz = L.z + Math.cos(L.yaw) * 1.6;
       const bd = Math.hypot(bx - c.pos.x, bz - c.pos.z);
       if (bd > 0.6) {
         const spd = Math.min(3.6, 1 + bd * 0.8);
@@ -3921,11 +4083,12 @@ export class GameEngine {
         if (this.catStep(bx, bz, spd, delta)) c.stuck = 0;
         else c.stuck += delta;
         c.speed = spd / 3.6;
-      } else c.yaw = Math.atan2(dx, dz);
+      } else c.yaw = Math.atan2(L.x - c.pos.x, L.z - c.pos.z);
       // Lost behind a wall or too far: it finds its own way (pops up near you later)
-      if (c.stuck > 2.5 || d > 14) {
+      const ld = Math.hypot(L.x - c.pos.x, L.z - c.pos.z);
+      if (c.stuck > 2.5 || ld > 14) {
         c.stuck = 0;
-        if (!this.catAppear(pp, 2, 4)) {
+        if (!this.catAppear(new THREE.Vector3(L.x, 0, L.z), 2, 4)) {
           c.state = 'away';
           c.t = 8;
         }
@@ -3958,6 +4121,7 @@ export class GameEngine {
         sound.playMeow(d, pan(), false);
       }
     }
+    c.pose = pose;
     c.body.group.position.copy(c.pos);
     c.body.group.rotation.y = c.yaw;
     c.body.update(delta, pose, c.speed);
@@ -3969,7 +4133,7 @@ export class GameEngine {
     this.shadeOff.clear();
     this.shadeWarn = { lights: false, drink: false, seen: false };
     if (this.chapter !== 1 || this.difficulty < 3 || this.maze || this.forest || this.site) return;
-    if (this.imp || this.vsRole || this.watchOnly || this.survival || this.xmasNight || this.net) return;
+    if (this.imp || this.vsRole || this.survival || this.xmasNight || (this.net && this.net.mode !== 'coop')) return;
     const body = new ShadeBody();
     body.update(0, 0, 0);
     this.scene.add(body.group);
@@ -4001,6 +4165,7 @@ export class GameEngine {
     }
     const s = this.shade;
     if (!s) return;
+    if (this.net?.role === 'guest') return this.updateShadeGuest(delta);
     const p = this.player;
     const pp = p.position;
     const fade = (cur: number, want: number) => cur + (want - cur) * (1 - Math.exp(-5 * delta));
@@ -4054,12 +4219,15 @@ export class GameEngine {
         s.t = 35;
       }
     } else {
-      // Stalking: drifts through the walls towards you, unless you stand in the light
-      const inLight = this.map.lights.some((l) => l.current > 0.5 && !this.shadeOff.has(l) && Math.hypot(l.position.x - pp.x, l.position.z - pp.z) < 4.5);
-      if (d < 16 && !inLight && !p.isHidden) {
-        const step = Math.min(d, 1.35 * delta);
-        s.pos.x += (dx / (d || 1)) * step;
-        s.pos.z += (dz / (d || 1)) * step;
+      // Stalking: drifts through the walls towards the closest player, unless they stand in the light
+      const tg = this.shadeTarget(s.pos);
+      if (tg) {
+        const inLight = this.map.lights.some((l) => l.current > 0.5 && !this.shadeOff.has(l) && Math.hypot(l.position.x - tg.x, l.position.z - tg.z) < 4.5);
+        if (tg.d < 16 && !inLight && !tg.hid) {
+          const step = Math.min(tg.d, 1.35 * delta);
+          s.pos.x += ((tg.x - s.pos.x) / (tg.d || 1)) * step;
+          s.pos.z += ((tg.z - s.pos.z) / (tg.d || 1)) * step;
+        }
       }
       wantEyes = d < 16 ? 1 : 0;
       // 🟣 The UV lamp burns it
@@ -4074,7 +4242,7 @@ export class GameEngine {
         }
       }
       // It drinks your torch
-      if (s.state === 'stalk' && d < 8 && p.flashlightOn) {
+      if (s.state === 'stalk' && d < 8 && p.flashlightOn && !this.spectating) {
         p.flashlightBattery = Math.max(0, p.flashlightBattery - delta * 3);
         if (!this.shadeWarn.drink) {
           this.shadeWarn.drink = true;
@@ -4082,7 +4250,7 @@ export class GameEngine {
         }
       }
       // Its touch: your light dies, and the Patient Zero heard it
-      if (s.state === 'stalk' && d < 1.1) {
+      if (s.state === 'stalk' && d < 1.1 && !this.spectating) {
         p.flashlightBattery = Math.max(0, p.flashlightBattery - 40);
         this.lightsOutTimer = Math.max(this.lightsOutTimer, 3);
         this.fear = 1;
@@ -4497,6 +4665,16 @@ export class GameEngine {
       case 'snap':
         if (!host) this.applySnapshot(msg.w);
         break;
+      case 'shadeHit':
+        if (host) this.shadeGone(25);
+        break;
+      case 'shadeBurn':
+        if (host && this.shade && this.shade.state !== 'gone') {
+          sound.playHiss(1.2);
+          this.shout('La lumière violette la brûle : l\'ombre se déchire et disparaît en sifflant.');
+          this.shadeGone(35);
+        }
+        break;
       case 'noise':
         if (this.vsRole === 'monster') this.markers?.add(new THREE.Vector3(msg.x, 1.2, msg.z), msg.loud);
         else if (host) this.alertAll(new THREE.Vector3(msg.x, 1.2, msg.z), msg.loud, msg.hid);
@@ -4806,14 +4984,19 @@ export class GameEngine {
     p.noiseMul = fx.noise;
     this.baseDrain = (ch === 'dim' ? 3 : ch === 'dive' ? 2 : 1) * fx.drain;
     p.batteryDrainMul = this.baseDrain;
-    // Team pockets live on the host: the guest's own upgrades don't change them
-    if (this.net?.role === 'guest') return;
-    this.state.maxInventorySlots = ch === 'pack3' ? 3 : fx.slots;
     // 🩹 Starting kit
     const kit: Omit<GameItem, 'id'>[] = [];
     if (fx.kit >= 1) kit.push(BANDAGE_ITEM);
     if (fx.kit >= 2) kit.push({ name: 'Pile', type: 'battery', description: 'Recharge 55 % de la batterie de la lampe torche.', icon: 'BatteryCharging' });
     if (fx.kit >= 3) kit.push(BANDAGE_ITEM);
+    // Team pockets live on the host: the guest hands its kit over (the host's bag size counts)
+    if (this.net?.role === 'guest') {
+      if (this.survival || this.imp || this.vsRole) return;
+      const net = this.net;
+      kit.forEach((d, i) => setTimeout(() => net.send({ k: 'act', req: { kind: 'give', item: { id: `kit-g${i}-${Math.floor(Math.random() * 1e6)}`, ...d } } }), 1500 + i * 300));
+      return;
+    }
+    this.state.maxInventorySlots = ch === 'pack3' ? 3 : fx.slots;
     if (this.survival || this.imp || this.vsRole) return;
     kit.forEach((d, i) => {
       if (this.state.inventory.length < this.state.maxInventorySlots) this.state.inventory.push({ id: `kit-${i}-${Math.floor(Math.random() * 1e6)}`, ...d });

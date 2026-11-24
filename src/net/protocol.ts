@@ -75,6 +75,10 @@ export interface WorldSnapshot {
   wi?: [number, number, number, number, GameItem][];
   /** Chapters 4-5: the level's own state (ForestNet / SiteNet) */
   lv?: unknown;
+  /** 🕯️ l'Éteigneur: x, z, state (0 gone / 1 feed / 2 stalk), then the indices of the lights it snuffed out */
+  sh?: number[];
+  /** 🐈‍⬛ the cat: x, z, yaw, pose index, visible (1/0) */
+  cat?: number[];
 }
 
 export const MONSTER_STATES: MonsterState[] = ['PATROL', 'LISTEN', 'INVESTIGATE', 'SEARCH', 'CHASE', 'TARGET_LOST', 'RETURN', 'STUNNED'];
@@ -107,6 +111,9 @@ export type GameMsg =
   | { k: 'radio'; x: number; z: number }
   /** 🗺️ a mark on the shared map (unmark: removes the one at x/z) */
   | { k: 'mark'; x: number; z: number; m: 'danger' | 'item' | 'hide' }
+  /** guest → host: l'Éteigneur touched me / I burnt it with the UV lamp */
+  | { k: 'shadeHit' }
+  | { k: 'shadeBurn' }
   | { k: 'unmark'; x: number; z: number }
   /** a smoke grenade goes off at (x, z) */
   | { k: 'smoke'; x: number; z: number }

@@ -6,9 +6,11 @@ interface GameOverModalProps {
   onRestart?: () => void;
   onMainMenu: () => void;
   online?: boolean;
+  /** 📋 quests completed during this game */
+  questMsg?: string | null;
 }
 
-export const GameOverModal: React.FC<GameOverModalProps> = ({ onRestart, onMainMenu, online }) => {
+export const GameOverModal: React.FC<GameOverModalProps> = ({ onRestart, onMainMenu, online, questMsg }) => {
   return (
     <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4">
       {/* Red horror noise overlay */}
@@ -36,6 +38,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({ onRestart, onMainM
           </p>
         </div>
 
+        {questMsg && <p className="mb-4 text-xs font-mono text-emerald-300">{questMsg}</p>}
         {/* Buttons */}
         <div className="w-full flex flex-col gap-3">
           {onRestart ? (

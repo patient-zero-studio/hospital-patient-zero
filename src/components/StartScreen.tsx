@@ -18,7 +18,7 @@ const DAILY_LINES = [
 ];
 
 import { RANK_TIERS, tierOf } from '../ranked';
-import { Award, Bell, BellOff, BookOpen, Coins, Crown, Flag, GraduationCap, HelpCircle, Image as ImageIcon, ListOrdered, Lock, Medal, Star, Wrench, Music, Plus, Settings, Shield, Shirt, ShoppingBag, Skull, Swords, Target, Ticket, User, Users, VolumeX, X, Zap } from 'lucide-react';
+import { Award, Bell, BellOff, BookOpen, Coins, Crown, Flag, GraduationCap, HelpCircle, Image as ImageIcon, ListOrdered, Lock, Medal, Star, Wrench, ClipboardList, Music, Plus, Settings, Shield, Shirt, ShoppingBag, Skull, Swords, Target, Ticket, User, Users, VolumeX, X, Zap } from 'lucide-react';
 import type { ChallengeDef } from '../challenges';
 import { ACHIEVEMENTS } from '../achievements';
 import { AudioSettings, ControlSettings } from '../types';
@@ -103,6 +103,9 @@ interface StartScreenProps {
   onBestiary?: () => void;
   /** 🔧 L'Atelier (permanent upgrades) */
   onAtelier?: () => void;
+  /** 📋 daily quests (number still to do) */
+  onQuests?: () => void;
+  questsLeft?: number;
   friendsOnline?: number | null;
   /** friend requests + invitations waiting */
   friendsAlert?: number;
@@ -234,6 +237,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onGallery,
   onBestiary,
   onAtelier,
+  onQuests,
+  questsLeft = 0,
   friendsOnline = null,
   friendsAlert = 0,
   season = null,
@@ -339,7 +344,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
       {onMusic && <Sq icon={<Music />} label="Musiques" color={C.teal} onClick={onMusic} />}
       {onRedeem && <Sq icon={<Ticket />} label="Code" color={C.rust} onClick={onRedeem} title="Code cadeau" />}
       {onTutorial && tutorialDone && <Sq icon={<GraduationCap />} label="Tutoriel" color={C.toxic} onClick={onTutorial} />}
-      <Sq icon={<HelpCircle />} label="Aide" color={C.steel} onClick={() => (location.href = '/comment-jouer/')} title="Comment jouer : touches, chapitres, monstres et astuces" />
+      {onQuests && <Sq icon={<ClipboardList />} label="Quêtes" color={C.blood} onClick={onQuests} badge={questsLeft} title="Quêtes du jour : 3 missions, des pièces et un bonus" />}
     </>
   );
 
@@ -840,7 +845,10 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               )}
             </div>
 
-            <button onClick={() => setShowSettings(false)} className="chunky w-full mt-5 h-12 font-game outl text-[18px] text-white !rounded-2xl" style={{ background: C.blood }}>
+            <a href="/comment-jouer/" className="mt-4 flex items-center justify-center gap-1.5 text-[12px] text-red-300 hover:text-red-200 underline underline-offset-2">
+              <HelpCircle className="w-4 h-4" /> Comment jouer : touches, chapitres, monstres et astuces
+            </a>
+            <button onClick={() => setShowSettings(false)} className="chunky w-full mt-4 h-12 font-game outl text-[18px] text-white !rounded-2xl" style={{ background: C.blood }}>
               Enregistrer
             </button>
           </div>
