@@ -43,7 +43,7 @@ export const MenuStage: React.FC<{ look: Appearance | null }> = ({ look }) => {
     rim.position.set(-1.2, 2.2, -1.8);
     scene.add(rim);
     // Sickly green fill from the side
-    const fill = new THREE.PointLight(0x5cff8a, 2.5, 6, 2);
+    const fill = new THREE.PointLight(0x8a9ab0, 1.6, 6, 2);
     fill.position.set(2, 1.2, 1.5);
     scene.add(fill);
 
@@ -51,7 +51,7 @@ export const MenuStage: React.FC<{ look: Appearance | null }> = ({ look }) => {
     const podium = new THREE.Group();
     const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.82, 0.9, 0.22, 40), new THREE.MeshStandardMaterial({ color: 0x1c1c22, roughness: 0.6, metalness: 0.5 }));
     disc.position.y = -0.11;
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.035, 8, 48), new THREE.MeshStandardMaterial({ color: 0x8a0d0d, emissive: 0xb01010, emissiveIntensity: 0.9 }));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.035, 8, 48), new THREE.MeshStandardMaterial({ color: 0x5a0606, emissive: 0x8a0808, emissiveIntensity: 0.55 }));
     ring.rotation.x = Math.PI / 2;
     ring.position.y = 0.005;
     podium.add(disc, ring);

@@ -18,7 +18,7 @@ const DAILY_LINES = [
 ];
 
 import { RANK_TIERS } from '../ranked';
-import { Bell, BellOff, Music, Plus, Settings, VolumeX, X } from 'lucide-react';
+import { Award, Bell, BellOff, BookOpen, Coins, Crown, Flag, GraduationCap, HelpCircle, Image as ImageIcon, ListOrdered, Lock, Medal, Music, Plus, Settings, Shield, Shirt, ShoppingBag, Skull, Swords, Target, Ticket, User, Users, VolumeX, X, Zap } from 'lucide-react';
 import type { ChallengeDef } from '../challenges';
 import { ACHIEVEMENTS } from '../achievements';
 import { AudioSettings, ControlSettings } from '../types';
@@ -146,14 +146,14 @@ type ChapterN = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 /** Dark "horror" palette for the chunky buttons */
 const C = {
-  blood: '#9b1c1c',
-  rust: '#9a4f12',
-  toxic: '#2f6b2a',
-  steel: '#3b4250',
-  bruise: '#4a2a6e',
-  teal: '#1d5560',
-  bone: '#6b5d45',
-  night: '#1a1d2a',
+  blood: '#4a0808',
+  rust: '#1c0c0b',
+  toxic: '#120f0e',
+  steel: '#141416',
+  bruise: '#1a0b10',
+  teal: '#0f1315',
+  bone: '#18120f',
+  night: '#0c0a0a',
 };
 
 /** Square chunky button with an icon on top and a short label */
@@ -164,10 +164,10 @@ const Sq: React.FC<{ icon: React.ReactNode; label: string; color: string; onClic
     className={`chunky relative flex items-center justify-center h-[58px] short:h-[46px] text-white ${wide ? 'col-span-2 flex-row gap-2' : 'w-full flex-col gap-0.5'}`}
     style={{ background: color }}
   >
-    <span className={`leading-none ${wide ? 'text-[26px] short:text-[20px]' : 'text-[22px] short:text-[17px]'}`}>{icon}</span>
-    <span className={`font-game outl leading-none ${wide ? 'text-[17px] short:text-[14px]' : 'text-[11px] short:text-[10px]'} max-w-full truncate px-0.5`}>{label}</span>
+    <span className={`leading-none text-red-500 [&>svg]:w-full [&>svg]:h-full ${wide ? 'w-6 h-6 short:w-5 short:h-5' : 'w-5 h-5 short:w-4 short:h-4'}`}>{icon}</span>
+    <span className={`font-game outl leading-none text-zinc-200 ${wide ? 'text-[16px] short:text-[13px]' : 'text-[10px] short:text-[9px]'} max-w-full truncate px-0.5`}>{label}</span>
     {badge != null && badge !== 0 && (
-      <span className="absolute -top-2 -right-2 min-w-[22px] h-[22px] px-1 rounded-full bg-red-600 border-[3px] border-black text-[11px] font-game text-white flex items-center justify-center animate-pulse">
+      <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-red-600 border-2 border-black text-[10px] font-game text-white flex items-center justify-center animate-pulse">
         {badge}
       </span>
     )}
@@ -248,13 +248,13 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   const boostLeft = useBoostLeft(boost);
 
   const CHAPTERS: { n: ChapterN; icon: string; name: string; sub: string; color: string }[] = [
-    { n: 1, icon: '🏥', name: 'L\'Hôpital', sub: 'Échappez au Patient Zéro', color: C.teal },
-    { n: 2, icon: '🐀', name: 'Les Égouts', sub: 'Il n\'a pas d\'yeux. Il écoute.', color: C.toxic },
-    { n: 3, icon: '🌀', name: 'Le Dédale', sub: 'Il suit ta trace. Ne t\'arrête pas.', color: C.bone },
-    { n: 4, icon: '🌲', name: 'La Forêt', sub: 'Lampe allumée, il te voit de loin.', color: '#24502e' },
-    { n: 5, icon: '🟣', name: 'Le Site B', sub: 'Finale : la lumière devient une arme.', color: C.bruise },
-    { n: 6, icon: '⛈️', name: 'Le Toit', sub: 'Épilogue : la tempête, et un hélicoptère.', color: C.steel },
-    { n: 7, icon: '💉', name: 'Le Cœur', sub: 'Boss final : le vrai Patient Zéro.', color: C.blood },
+    { n: 1, icon: '🏥', name: 'L\'Hôpital', sub: 'Échappez au Patient Zéro', color: '#0d1416' },
+    { n: 2, icon: '🐀', name: 'Les Égouts', sub: 'Il n\'a pas d\'yeux. Il écoute.', color: '#0f140d' },
+    { n: 3, icon: '🌀', name: 'Le Dédale', sub: 'Il suit ta trace. Ne t\'arrête pas.', color: '#16120d' },
+    { n: 4, icon: '🌲', name: 'La Forêt', sub: 'Lampe allumée, il te voit de loin.', color: '#0c160e' },
+    { n: 5, icon: '🟣', name: 'Le Site B', sub: 'Finale : la lumière devient une arme.', color: '#150c18' },
+    { n: 6, icon: '⛈️', name: 'Le Toit', sub: 'Épilogue : la tempête, et un hélicoptère.', color: '#111317' },
+    { n: 7, icon: '💉', name: 'Le Cœur', sub: 'Boss final : le vrai Patient Zéro.', color: '#2a0606' },
     ch8Unlocked
       ? { n: 8, icon: '🌳', name: 'Le Rêve de Lucas', sub: 'Chapitre secret : ses souvenirs, et une ombre.', color: '#2d4a3a' }
       : { n: 8, icon: '❔', name: '???', sub: 'Chapitre secret', color: C.night },
@@ -277,7 +277,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               : n === 3
                 ? 'Sortez une fois des égouts'
                 : 'Sortez une fois de l\'hôpital';
-  const heat = ['#52525b', '#a16207', '#c2410c', '#b91c1c', '#881337'];
+  const heat = ['#151515', '#241009', '#320b08', '#440707', '#5a0410'];
   const diff = DIFFICULTIES[difficulty - 1];
   const tier = RANK_TIERS.find((t) => t.id === rankTier) ?? RANK_TIERS[0];
   const shopBadge = (giftReady ? 1 : 0) + (adventReady ? 1 : 0);
@@ -288,47 +288,47 @@ export const StartScreen: React.FC<StartScreenProps> = ({
     <>
       <Sq
         wide
-        icon={shopLocked ? '🔒' : '🛒'}
+        icon={shopLocked ? <Lock /> : <ShoppingBag />}
         label="Boutique"
         color={C.rust}
         onClick={onShop}
         badge={shopBadge ? '!' : undefined}
         title={shopLocked ? 'Finis une partie en Exploration pour ouvrir la boutique' : 'Skins & boîtes mystère'}
       />
-      {onProgression && <Sq icon="🏆" label="Pass" color={C.bruise} onClick={onProgression} badge={progressionAlert} title="Pass & défis" />}
-      {onRanked && <Sq icon={tier.emoji} label="Classé" color={C.steel} onClick={onRanked} title={`Classé — ${tier.name}`} />}
-      {onFriends && <Sq icon="👥" label="Amis" color={C.toxic} onClick={onFriends} badge={friendsAlert} title={friendsOnline ? `Amis — ${friendsOnline} en ligne` : 'Amis'} />}
-      {onClans && <Sq icon="🛡️" label={clanTag ? `[${clanTag}]` : 'Clans'} color={C.teal} onClick={onClans} title="Clans" />}
-      {onAchievements && <Sq icon="🎖️" label={achCount != null ? `${achCount}/${ACHIEVEMENTS.length}` : 'Succès'} color={C.bone} onClick={onAchievements} title="Succès" />}
-      {onLeaderboard && <Sq icon="🏅" label="Top" color={C.night} onClick={onLeaderboard} title="Classement" />}
+      {onProgression && <Sq icon={<Crown />} label="Pass" color={C.bruise} onClick={onProgression} badge={progressionAlert} title="Pass & défis" />}
+      {onRanked && <Sq icon={<Medal style={{ color: tier.color }} />} label="Classé" color={C.steel} onClick={onRanked} title={`Classé — ${tier.name}`} />}
+      {onFriends && <Sq icon={<Users />} label="Amis" color={C.toxic} onClick={onFriends} badge={friendsAlert} title={friendsOnline ? `Amis — ${friendsOnline} en ligne` : 'Amis'} />}
+      {onClans && <Sq icon={<Shield />} label={clanTag ? `[${clanTag}]` : 'Clans'} color={C.teal} onClick={onClans} title="Clans" />}
+      {onAchievements && <Sq icon={<Award />} label={achCount != null ? `${achCount}/${ACHIEVEMENTS.length}` : 'Succès'} color={C.bone} onClick={onAchievements} title="Succès" />}
+      {onLeaderboard && <Sq icon={<ListOrdered />} label="Top" color={C.night} onClick={onLeaderboard} title="Classement" />}
     </>
   );
   const rightButtons = (
     <>
-      {onBestiary && <Sq icon="📖" label="Bestiaire" color={C.bruise} onClick={onBestiary} />}
-      {onGallery && <Sq icon="🖼️" label="Galerie" color={C.bone} onClick={onGallery} />}
-      {onMusic && <Sq icon="🎵" label="Musiques" color={C.teal} onClick={onMusic} />}
-      {onRedeem && <Sq icon="🎟️" label="Code" color={C.rust} onClick={onRedeem} title="Code cadeau" />}
-      {onTutorial && tutorialDone && <Sq icon="🎓" label="Tutoriel" color={C.toxic} onClick={onTutorial} />}
-      <Sq icon="❓" label="Aide" color={C.steel} onClick={() => (location.href = '/comment-jouer/')} title="Comment jouer : touches, chapitres, monstres et astuces" />
+      {onBestiary && <Sq icon={<BookOpen />} label="Bestiaire" color={C.bruise} onClick={onBestiary} />}
+      {onGallery && <Sq icon={<ImageIcon />} label="Galerie" color={C.bone} onClick={onGallery} />}
+      {onMusic && <Sq icon={<Music />} label="Musiques" color={C.teal} onClick={onMusic} />}
+      {onRedeem && <Sq icon={<Ticket />} label="Code" color={C.rust} onClick={onRedeem} title="Code cadeau" />}
+      {onTutorial && tutorialDone && <Sq icon={<GraduationCap />} label="Tutoriel" color={C.toxic} onClick={onTutorial} />}
+      <Sq icon={<HelpCircle />} label="Aide" color={C.steel} onClick={() => (location.href = '/comment-jouer/')} title="Comment jouer : touches, chapitres, monstres et astuces" />
     </>
   );
 
   const eventList = [
     onTutorial && !tutorialDone && (
-        <button onClick={onTutorial} className="chunky menu-pulse w-full text-left px-3 py-2 text-white" style={{ background: '#1f6b3a' }}>
-          <span className="block font-game outl text-[17px] leading-tight">🎓 Nouveau ? Tutoriel</span>
-          <span className="block text-[11px] font-bold text-emerald-100/90">2 min pour apprendre à survivre</span>
+        <button onClick={onTutorial} className="chunky w-full text-left px-3 py-2 text-white !border-red-600" style={{ background: '#3a0707' }}>
+          <span className="flex items-center gap-1.5 font-game outl text-[15px] leading-tight"><GraduationCap className="w-4 h-4 text-red-400" /> Nouveau ? Tutoriel</span>
+          <span className="block text-[11px] text-red-100/70">2 min pour apprendre à survivre</span>
         </button>
       ),
     boostLeft && boost && (
-        <div className="chunky overflow-hidden w-full text-white" style={{ background: '#7a3a0a' }}>
-          <div className="bg-black px-2.5 py-0.5 font-game text-[12px] text-amber-300">⚡ ÉVÉNEMENT — {boostLeft}</div>
+        <div className="chunky overflow-hidden w-full text-white" style={{ background: '#1c0b06' }}>
+          <div className="flex items-center gap-1 bg-black/70 px-2.5 py-0.5 font-game text-[11px] text-amber-400"><Zap className="w-3 h-3" /> ÉVÉNEMENT — {boostLeft}</div>
           <div className="px-2.5 py-1.5 font-game outl text-[15px] leading-tight">{BOOST_LABEL[boost.kind]}</div>
         </div>
       ),
     season && (
-        <button onClick={onShop} className="chunky w-full text-left px-3 py-2 text-white" style={{ background: SEASON_INFO[season].color + 'cc' }}>
+        <button onClick={onShop} className="chunky w-full text-left px-3 py-2 text-white" style={{ background: '#140c0c', borderColor: SEASON_INFO[season].color }}>
           <span className="block font-game outl text-[16px] leading-tight">
             {SEASON_INFO[season].emoji} {SEASON_INFO[season].name}
           </span>
@@ -336,21 +336,21 @@ export const StartScreen: React.FC<StartScreenProps> = ({
         </button>
       ),
     onXmasNight && (
-        <button onClick={onXmasNight} className="chunky w-full text-left px-3 py-2 text-white" style={{ background: '#7f1d1d' }}>
+        <button onClick={onXmasNight} className="chunky w-full text-left px-3 py-2 text-white" style={{ background: '#2a0606' }}>
           <span className="block font-game outl text-[16px] leading-tight">🎄 Nuit de Noël</span>
           <span className="block text-[11px] font-bold text-red-100">Chapitre spécial · skin unique 🎁</span>
         </button>
       ),
     challenge && onToggleChallenge && (
-        <button onClick={onToggleChallenge} className="chunky w-full text-left px-3 py-2 text-white" style={{ background: challengeOn ? '#1f6b3a' : C.night }}>
+        <button onClick={onToggleChallenge} className="chunky w-full text-left px-3 py-2 text-white" style={{ background: challengeOn ? '#3a0707' : C.night }}>
           <span className="flex items-center justify-between gap-2">
-            <span className="font-game outl text-[12px] text-emerald-300 whitespace-nowrap">🎯 DÉFI {challengeDone ? '✔' : `+${challenge.reward}🪙`}</span>
-            <span className={`relative shrink-0 w-9 h-5 rounded-full border-2 border-black ${challengeOn ? 'bg-emerald-400' : 'bg-zinc-600'}`}>
+            <span className="flex items-center gap-1 font-game outl text-[11px] text-red-400 whitespace-nowrap"><Target className="w-3 h-3" /> DÉFI DU JOUR {challengeDone ? '✔' : `+${challenge.reward}`}</span>
+            <span className={`relative shrink-0 w-9 h-5 rounded-full border-2 border-black ${challengeOn ? 'bg-red-600' : 'bg-zinc-700'}`}>
               <span className={`absolute top-[1px] w-3.5 h-3.5 rounded-full bg-white border border-black transition-all ${challengeOn ? 'left-[17px]' : 'left-[1px]'}`} />
             </span>
           </span>
           <span className="block font-game outl text-[15px] leading-tight mt-0.5">
-            {challenge.icon} {challenge.name}
+            {challenge.name}
           </span>
           <span className="block text-[10px] font-bold text-zinc-300 leading-snug">{challenge.desc}</span>
         </button>
@@ -358,20 +358,20 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   ];
   const eventCards = eventList.filter(Boolean).slice(0, 2).map((el, i) => <React.Fragment key={i}>{el}</React.Fragment>);
 
-  const chip = 'chunky flex items-center justify-center gap-1.5 h-10 short:h-8 px-2 text-white font-game outl text-[14px] short:text-[12px] whitespace-nowrap';
+  const chip = 'chunky flex items-center justify-center gap-1.5 h-10 short:h-8 px-2 text-zinc-100 font-game outl text-[13px] short:text-[11px] whitespace-nowrap [&>svg]:w-4 [&>svg]:h-4 [&>svg]:text-red-500';
   const modeChips = (
     <>
       <button onClick={onMultiplayer} className={chip} style={{ background: C.teal }} title="Coop et Imposteur jusqu'à 8, Chasse, Course">
-        👥 Multijoueur
+        <Users /> Multijoueur
       </button>
       {onSurvival && (
         <button onClick={onSurvival} className={chip} style={{ background: C.blood }} title="Survie infinie : tiens le plus longtemps">
-          🧟 Survie
+          <Skull /> Survie
         </button>
       )}
       {onFindOpponent && (
         <button onClick={onFindOpponent} className={chip} style={{ background: C.rust }} title="Chasse en ligne : l'un de vous est le monstre">
-          ⚔️ Duel
+          <Swords /> Duel
         </button>
       )}
       {onCampaign && (
@@ -382,7 +382,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           style={{ background: C.bruise }}
           title={ch5Unlocked ? 'Les 5 chapitres d\'affilée' : 'Finissez la forêt pour débloquer la campagne'}
         >
-          {ch5Unlocked ? '🏆' : '🔒'} Campagne
+          {ch5Unlocked ? <Flag /> : <Lock />} Campagne
         </button>
       )}
     </>
@@ -395,10 +395,10 @@ export const StartScreen: React.FC<StartScreenProps> = ({
       style={{ background: cur.color }}
       title="Changer de chapitre et de difficulté"
     >
-      <span className="block font-game outl text-[12px] text-zinc-200">CHAPITRE {cur.n} ▸ CHANGER</span>
+      <span className="block font-game outl text-[11px] text-red-400">CHAPITRE {cur.n} ▸ CHANGER</span>
       <span className="block font-game outl text-[23px] short:text-[18px] leading-tight pr-12">{cur.name}</span>
       <span className="block short:hidden text-[11px] font-bold text-white/85 pr-12 truncate">{cur.sub}</span>
-      <span className="absolute -right-1 -bottom-3 text-[58px] short:text-[42px] rotate-[-10deg] opacity-90 pointer-events-none">{cur.icon}</span>
+      <span className="absolute right-2 -bottom-3 font-game text-[72px] short:text-[52px] leading-none text-red-700/50 pointer-events-none">{String(cur.n).padStart(2, '0')}</span>
     </button>
   );
   const diffCard = (
@@ -408,19 +408,19 @@ export const StartScreen: React.FC<StartScreenProps> = ({
       style={{ background: heat[difficulty - 1] }}
       title={diff.description}
     >
-      <span className="font-game outl text-[11px] text-white/80">DIFFICULTÉ</span>
+      <span className="font-game outl text-[11px] text-red-400">DIFFICULTÉ</span>
       <span className="font-game outl text-[20px] short:text-[16px] leading-tight">{diff.name}</span>
-      <span className="text-[14px] tracking-widest">{diff.monsters === 0 ? '🕊️' : '☠'.repeat(diff.monsters)}</span>
+      <span className="flex gap-0.5 h-4 items-center text-red-400">{diff.monsters === 0 ? <span className="text-[10px] text-zinc-400">AUCUN MONSTRE</span> : Array.from({ length: diff.monsters }).map((_, i) => <Skull key={i} className="w-3.5 h-3.5" />)}</span>
     </button>
   );
   const playBtn = (
     <button
       onClick={onStartGame}
       className="chunky menu-pulse w-full h-[96px] short:h-[64px] flex flex-col items-center justify-center text-white !rounded-[20px]"
-      style={{ background: 'linear-gradient(#d42a2a, #8e1010)', boxShadow: 'inset 0 -9px 0 #5a0808, inset 0 3px 0 rgba(255,255,255,.25), 0 5px 0 #000' }}
+      style={{ background: 'linear-gradient(#8f0c0c, #3d0303)', borderColor: '#d11a1a' }}
     >
-      <span className="font-game outl-lg text-[44px] short:text-[32px] leading-none">JOUER</span>
-      <span className="font-game outl text-[12px] text-red-100 mt-1 short:hidden">
+      <span className="font-game outl-lg text-[42px] short:text-[30px] leading-none tracking-[0.18em] text-red-50">JOUER</span>
+      <span className="font-game outl text-[11px] text-red-200/70 mt-1 short:hidden">
         SOLO · {cur.name} · {diff.name}
       </span>
     </button>
@@ -434,8 +434,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
         <div
           className="absolute left-1/2 top-[52%] w-[1600px] h-[1600px] -ml-[800px] -mt-[800px]"
           style={{
-            background: 'repeating-conic-gradient(rgba(160,20,20,0.10) 0 9deg, transparent 9deg 18deg)',
-            animation: 'menu-rays 80s linear infinite',
+            background: 'radial-gradient(circle, rgba(150,0,0,0.35) 0%, rgba(80,0,0,0.15) 25%, transparent 45%)',
             maskImage: 'radial-gradient(circle, #000 0%, transparent 45%)',
             WebkitMaskImage: 'radial-gradient(circle, #000 0%, transparent 45%)',
           }}
@@ -451,12 +450,12 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               onClick={onCustomize}
               disabled={!onCustomize}
               title={onCustomize ? 'Personnaliser mon personnage' : ''}
-              className="relative shrink-0 w-12 h-12 rounded-xl border-[3px] border-black flex items-center justify-center text-2xl disabled:cursor-default"
-              style={{ background: level ? levelColor(level.level) : C.steel }}
+              className="relative shrink-0 w-12 h-12 rounded-lg border border-red-900 flex items-center justify-center disabled:cursor-default"
+              style={{ background: '#1a0a0a', boxShadow: `inset 0 0 0 2px ${level ? levelColor(level.level) + '66' : '#0000'}` }}
             >
-              🧍
+              <User className="w-6 h-6 text-zinc-200" />
               {level && (
-                <span className="absolute -bottom-2 -right-2 min-w-[24px] h-6 px-1 rounded-lg bg-black border-2 border-zinc-700 font-game text-[12px] text-white flex items-center justify-center">
+                <span className="absolute -bottom-2 -right-2 min-w-[22px] h-[22px] px-1 rounded-md bg-red-700 border border-black font-game text-[11px] text-white flex items-center justify-center">
                   {level.level}
                 </span>
               )}
@@ -467,7 +466,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               </div>
               {level && level.need > 0 ? (
                 <div className="w-[120px] h-3 mt-0.5 rounded-md bg-black p-[2px]" title={`${level.into} / ${level.need} XP avant le niveau ${level.level + 1}`}>
-                  <div className="h-full rounded-[3px]" style={{ width: `${(level.into / level.need) * 100}%`, background: 'linear-gradient(#7ef08a, #2f9e44)' }} />
+                  <div className="h-full rounded-[3px]" style={{ width: `${(level.into / level.need) * 100}%`, background: 'linear-gradient(#e33, #8b0000)' }} />
                 </div>
               ) : (
                 <div className="text-[11px] font-bold text-zinc-400">{username ? 'Niveau max !' : 'Connecte-toi pour progresser'}</div>
@@ -478,9 +477,9 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           <div className="flex items-center gap-1.5 flex-wrap justify-end">
             {coins != null && (
               <button onClick={onShop} className="chunky flex items-center gap-1.5 h-10 pl-1 pr-1 text-white !rounded-xl" style={{ background: 'rgba(10,10,14,0.85)' }} title="Boutique">
-                <span className="w-7 h-7 rounded-full border-2 border-black bg-amber-400 flex items-center justify-center text-[14px]">🪙</span>
+                <Coins className="w-5 h-5 ml-1 text-amber-500" />
                 <span className="font-game outl text-[17px] px-0.5">{fmtCoins(coins)}</span>
-                <span className="w-6 h-6 rounded-md border-2 border-black flex items-center justify-center" style={{ background: '#2f9e44' }}>
+                <span className="w-6 h-6 rounded-md border border-black flex items-center justify-center bg-red-700">
                   <Plus className="w-4 h-4" strokeWidth={4} />
                 </span>
               </button>
@@ -493,7 +492,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             {notifications && notifications !== 'unsupported' && onToggleNotifications && (
               <TopBtn
                 onClick={onToggleNotifications}
-                color={notifications === 'on' ? C.toxic : C.steel}
+                color={notifications === 'on' ? C.blood : C.steel}
                 title={
                   notifications === 'on'
                     ? 'Notifications activées (invitations, cadeaux, événements). Cliquer pour couper.'
@@ -506,7 +505,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               </TopBtn>
             )}
             {onToggleMusic && (
-              <TopBtn onClick={onToggleMusic} title="Musique du menu" color={menuMusic ? C.bruise : C.steel}>
+              <TopBtn onClick={onToggleMusic} title="Musique du menu" color={menuMusic ? C.blood : C.steel}>
                 {menuMusic ? <Music className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
               </TopBtn>
             )}
@@ -519,16 +518,16 @@ export const StartScreen: React.FC<StartScreenProps> = ({
         {/* ── Centre: title + your character ── */}
         <section className="relative h-[360px] wide:absolute wide:left-1/2 wide:-translate-x-1/2 wide:top-[64px] wide:bottom-[118px] short:top-[50px] short:bottom-[6px] wide:h-auto wide:w-[min(40vw,620px)]">
           <div className="absolute inset-x-0 top-0 z-10 text-center pointer-events-none">
-            <h1 className="title-flicker font-game text-[42px] wide:text-[52px] short:text-[30px] leading-none text-zinc-100 outl-lg tracking-wide">
+            <h1 className="title-flicker font-serif font-black text-[44px] wide:text-[56px] short:text-[30px] leading-none text-zinc-100 tracking-[0.14em] drop-shadow-[0_0_26px_rgba(200,0,0,0.75)]">
               HOSPITAL
               {season && <span className="ml-1 text-[0.6em] align-top">{season === 'noel' ? '🎅' : SEASON_INFO[season].emoji}</span>}
             </h1>
-            <span className="inline-block mt-1 px-3 py-0.5 rounded-lg border-[3px] border-black bg-red-800 font-game outl text-[13px] short:text-[10px] text-white tracking-[0.2em]">PATIENT ZÉRO</span>
+            <span className="inline-block mt-1.5 px-3 py-0.5 border border-red-800 bg-black/70 font-game text-[12px] short:text-[10px] text-red-500 tracking-[0.4em]">PATIENT ZÉRO</span>
           </div>
           <MenuStage look={look} />
           {onCustomize && (
             <button onClick={onCustomize} className="chunky absolute left-1/2 -translate-x-1/2 bottom-1 z-10 h-9 px-3 font-game outl text-[13px] text-white !rounded-xl whitespace-nowrap" style={{ background: C.night }}>
-              🎨 Personnaliser
+              <Shirt className="inline w-4 h-4 -mt-0.5 mr-1 text-red-500" />Personnaliser
             </button>
           )}
         </section>
@@ -568,7 +567,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
       {picker && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 bg-black/80" onClick={() => setPicker(false)}>
           <div className="chunky relative w-full max-w-2xl max-h-[92vh] overflow-y-auto p-4 sm:p-5 text-white !rounded-3xl" style={{ background: '#121218' }} onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setPicker(false)} className="absolute top-3 right-3 w-9 h-9 rounded-xl border-[3px] border-black bg-red-800 flex items-center justify-center" aria-label="Fermer">
+            <button onClick={() => setPicker(false)} className="absolute top-3 right-3 w-9 h-9 rounded-xl border border-red-800 bg-black flex items-center justify-center text-red-400" aria-label="Fermer">
               <X className="w-5 h-5" strokeWidth={3} />
             </button>
             <h2 className="font-game outl text-[24px] mb-3">Choisis ta partie</h2>
@@ -585,14 +584,14 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                         disabled={locked}
                         onClick={() => onChangeChapter(c.n)}
                         title={locked ? `${lockText(c.n)} (connecté) pour débloquer ce chapitre` : c.sub}
-                        className={`chunky relative overflow-hidden h-[84px] text-left px-2.5 py-2 ${active ? 'ring-4 ring-amber-400' : ''}`}
-                        style={{ background: locked ? '#26262b' : c.color }}
+                        className={`chunky relative overflow-hidden h-[84px] text-left px-2.5 py-2 ${active ? '!border-red-500 ring-2 ring-red-600' : ''}`}
+                        style={{ background: locked ? '#0c0c0e' : c.color }}
                       >
                         <span className="block font-game outl text-[11px] text-white/80">CHAPITRE {c.n}</span>
                         <span className="block font-game outl text-[16px] leading-tight pr-6">{locked ? '???' : c.name}</span>
                         {locked && <span className="block text-[10px] font-bold text-zinc-400 leading-tight pr-6">{lockText(c.n)}</span>}
-                        <span className="absolute right-1 bottom-0 text-[34px] opacity-90">{locked ? '🔒' : c.icon}</span>
-                        {active && <span className="absolute top-1 right-1.5 font-game text-amber-300 text-[16px]">✔</span>}
+                        <span className="absolute right-1.5 bottom-0 font-game text-[40px] leading-none text-red-700/45">{locked ? <Lock className="w-6 h-6 mb-2 text-zinc-600" /> : String(c.n).padStart(2, '0')}</span>
+                        {active && <span className="absolute top-1 right-1.5 font-game text-red-400 text-[14px]">✔</span>}
                       </button>
                     );
                   })}
@@ -607,11 +606,11 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                   <button
                     key={d.level}
                     onClick={() => onChangeDifficulty(d.level)}
-                    className={`chunky flex flex-col items-center justify-center h-[64px] px-1 text-white ${active ? 'ring-4 ring-amber-400' : ''}`}
+                    className={`chunky flex flex-col items-center justify-center h-[64px] px-1 text-white ${active ? '!border-red-500 ring-2 ring-red-600' : ''}`}
                     style={{ background: heat[d.level - 1] }}
                   >
                     <span className="font-game outl text-[11px] sm:text-[14px] leading-tight max-w-full truncate">{d.name}</span>
-                    <span className="text-[11px] tracking-wider">{d.monsters === 0 ? '🕊️' : '☠'.repeat(d.monsters)}</span>
+                    <span className="flex gap-0.5 h-3.5 items-center text-red-400">{d.monsters === 0 ? <span className="text-[9px] text-zinc-400">AUCUN</span> : Array.from({ length: d.monsters }).map((_, i) => <Skull key={i} className="w-3 h-3" />)}</span>
                   </button>
                 );
               })}
@@ -621,15 +620,15 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               <button
                 onClick={onToggleChallenge}
                 className="chunky w-full mt-3 flex items-center gap-3 px-3 py-2 text-left text-white"
-                style={{ background: challengeOn ? '#1f6b3a' : C.night }}
+                style={{ background: challengeOn ? '#3a0707' : C.night }}
               >
-                <span className="text-2xl">{challenge.icon}</span>
+                <Target className="w-6 h-6 shrink-0 text-red-500" />
                 <span className="flex-1 min-w-0">
-                  <span className="block font-game outl text-[12px] text-emerald-300">🎯 DÉFI DU JOUR {challengeDone ? '✔' : `+${challenge.reward}🪙`}</span>
+                  <span className="block font-game outl text-[11px] text-red-400">DÉFI DU JOUR {challengeDone ? '✔' : `· +${challenge.reward} pièces`}</span>
                   <span className="block font-game outl text-[15px] leading-tight">{challenge.name}</span>
                   <span className="block text-[11px] font-bold text-zinc-300">{challenge.desc}</span>
                 </span>
-                <span className={`relative shrink-0 w-11 h-6 rounded-full border-2 border-black ${challengeOn ? 'bg-emerald-500' : 'bg-zinc-600'}`}>
+                <span className={`relative shrink-0 w-11 h-6 rounded-full border-2 border-black ${challengeOn ? 'bg-red-600' : 'bg-zinc-700'}`}>
                   <span className={`absolute top-[1px] w-[18px] h-[18px] rounded-full bg-white border border-black transition-all ${challengeOn ? 'left-[21px]' : 'left-[1px]'}`} />
                 </span>
               </button>
@@ -640,7 +639,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                 onStartGame();
               }}
               className="chunky w-full mt-4 h-[60px] font-game outl text-[26px] text-white !rounded-2xl"
-              style={{ background: 'linear-gradient(#d42a2a, #8e1010)' }}
+              style={{ background: 'linear-gradient(#8f0c0c, #3d0303)', borderColor: '#d11a1a' }}
             >
               JOUER
             </button>
@@ -652,16 +651,16 @@ export const StartScreen: React.FC<StartScreenProps> = ({
       {showSettings && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80" onClick={() => setShowSettings(false)}>
           <div className="chunky relative w-full max-w-md max-h-[92vh] overflow-y-auto p-5 sm:p-6 text-white !rounded-3xl" style={{ background: '#121218' }} onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setShowSettings(false)} className="absolute top-3 right-3 w-9 h-9 rounded-xl border-[3px] border-black bg-red-800 flex items-center justify-center" aria-label="Fermer">
+            <button onClick={() => setShowSettings(false)} className="absolute top-3 right-3 w-9 h-9 rounded-xl border border-red-800 bg-black flex items-center justify-center text-red-400" aria-label="Fermer">
               <X className="w-5 h-5" strokeWidth={3} />
             </button>
-            <h2 className="font-game outl text-[24px] mb-4">⚙️ Options & Son</h2>
+            <h2 className="flex items-center gap-2 font-game outl text-[22px] mb-4"><Settings className="w-5 h-5 text-red-500" /> Options & Son</h2>
 
             <div className="space-y-4 text-[14px] text-zinc-200 font-bold">
               <div>
                 <div className="flex justify-between mb-1.5">
                   <span>Volume Principal</span>
-                  <span className="font-game text-amber-300">{Math.round(audioSettings.masterVolume * 100)}%</span>
+                  <span className="font-game text-red-400">{Math.round(audioSettings.masterVolume * 100)}%</span>
                 </div>
                 <input
                   type="range"
@@ -681,7 +680,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               <div>
                 <div className="flex justify-between mb-1.5">
                   <span>Sensibilité de la Souris</span>
-                  <span className="font-game text-amber-300">{controlSettings.mouseSensitivity.toFixed(1)}x</span>
+                  <span className="font-game text-red-400">{controlSettings.mouseSensitivity.toFixed(1)}x</span>
                 </div>
                 <input
                   type="range"
@@ -715,7 +714,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                         <span className="block">{label}</span>
                         {sub && <span className="block text-[11px] text-zinc-500 font-normal">{sub}</span>}
                       </span>
-                      <span className={`relative shrink-0 w-11 h-6 rounded-full border-2 border-black ${on ? 'bg-emerald-500' : 'bg-zinc-600'}`}>
+                      <span className={`relative shrink-0 w-11 h-6 rounded-full border-2 border-black ${on ? 'bg-red-600' : 'bg-zinc-700'}`}>
                         <span className={`absolute top-[1px] w-[18px] h-[18px] rounded-full bg-white border border-black transition-all ${on ? 'left-[21px]' : 'left-[1px]'}`} />
                       </span>
                     </button>
@@ -744,7 +743,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               )}
             </div>
 
-            <button onClick={() => setShowSettings(false)} className="chunky w-full mt-5 h-12 font-game outl text-[18px] text-white !rounded-2xl" style={{ background: C.toxic }}>
+            <button onClick={() => setShowSettings(false)} className="chunky w-full mt-5 h-12 font-game outl text-[18px] text-white !rounded-2xl" style={{ background: C.blood }}>
               Enregistrer
             </button>
           </div>
