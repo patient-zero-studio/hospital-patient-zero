@@ -70,6 +70,9 @@ export class PlayerController {
   public noSprint = false;
   /** 🩸 seconds of limping left: no sprint, slower, louder steps */
   public limp = 0;
+  /** 🔧 Atelier: stronger beam, quieter steps */
+  public beamMul = 1;
+  public noiseMul = 1;
   /** Daily mutator: left and right swapped */
   public invertStrafe = false;
 
@@ -248,7 +251,7 @@ export class PlayerController {
     }
     let intensity = 0;
     if (this.flashlightOn) {
-      intensity = 60 * (0.55 + 0.45 * Math.min(1, this.flashlightBattery / 35));
+      intensity = 60 * this.beamMul * (0.55 + 0.45 * Math.min(1, this.flashlightBattery / 35));
       if (this.flashlightBattery < 20) {
         this.flickerTimer -= delta;
         if (this.flickerTimer <= 0) {
@@ -312,9 +315,9 @@ export class PlayerController {
       if (this.footstepTimer <= 0) {
         if (!this.monsterMode) sound.playFootstep(this.isSprinting, this.isCrouching);
         this.footstepTimer = this.isSprinting ? 0.32 : this.isCrouching ? 0.7 : 0.5;
-        if (this.isSprinting) onNoise(this.position, 16);
-        else if (!this.isCrouching) onNoise(this.position, this.limp > 0 ? 8 : 5.5);
-        else if (this.limp > 0) onNoise(this.position, 3);
+        if (this.isSprinting) onNoise(this.position, 16 * this.noiseMul);
+        else if (!this.isCrouching) onNoise(this.position, (this.limp > 0 ? 8 : 5.5) * this.noiseMul);
+        else if (this.limp > 0) onNoise(this.position, 3 * this.noiseMul);
       }
     } else {
       this.footstepTimer = 0.15;

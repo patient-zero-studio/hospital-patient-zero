@@ -45,6 +45,7 @@ import { RANK_TIERS, RPASS_TIERS, RPASS_XP_PER_TIER, RPassReward, nextTier, rank
 import { CLAN_CHEST_LEVELS, CLAN_COLORS, CLAN_EMBLEMS, CLAN_MAX, CLAN_NAME_RE, CLAN_PRICE, CLAN_PRIZES, CLAN_TAG_RE, WAR_LOSS, WAR_TIE, WAR_WIN, nextWarStart, warEnds, warKey } from '../src/clans.ts';
 import { MENU_TRACKS } from '../src/music.ts';
 import { STAR_REWARD } from '../src/stars.ts';
+import { MAX_UPGRADE, UPGRADE_PRICES, isUpgradeId } from '../src/upgrades.ts';
 import { ENDING_KEYS, isEndingKey } from '../src/gallery.ts';
 import { GALLERY_DOCS, isDocId } from '../src/galleryDocs.ts';
 import { BEASTS, ITEM_ENTRIES, isBeastId, isItemEntryId } from '../src/bestiary.ts';
@@ -144,6 +145,8 @@ interface User {
   itemsSeen?: string[];
   /** ⭐ stars per chapter (bitmask: escape / unhurt / fast) */
   stars?: Record<string, number>;
+  /** 🔧 Atelier: upgrade levels */
+  upgrades?: Record<string, number>;
   /** 🏅 ranked season (month): points, best tier; past seasons */
   rank?: { season: string; points: number; best: number; wins: number; losses: number };
   rankHistory?: { season: string; tier: string; points: number }[];
@@ -502,6 +505,7 @@ const SHOP_LOCKED = 'Boutique verrouillée : échappe-toi de l\'hôpital une foi
 const walletView = (u: User) => ({
   ranked: rankView(u),
   stars: u.stars ?? {},
+  upgrades: u.upgrades ?? {},
   tracks: isAdmin(u) ? MENU_TRACKS.map((t) => t.id) : (u.tracks ?? []),
   gallery: isAdmin(u)
     ? { endings: [...ENDING_KEYS], docs: GALLERY_DOCS.map((d) => d.id), beasts: BEASTS.map((b) => b.id), items: ITEM_ENTRIES.map((b) => b.id) }
@@ -1325,6 +1329,26 @@ app.post('/api/wallet/reward', (req, res) => {
   if (diff >= 2) payReferral(user);
   saveUsers();
   res.json({ gained, xp, rankGain, ...walletView(user) });
+});
+
+// 🔧 Atelier: buy the next level of an upgrade
+app.post('/api/upgrade', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const id = req.body?.id;
+  if (!isUpgradeId(id)) return res.status(400).json({ error: 'Amélioration inconnue.' });
+  const ups = (user.upgrades ??= {});
+  const lv = Math.max(0, Math.floor(ups[id] ?? 0));
+  if (lv >= MAX_UPGRADE) return res.status(400).json({ error: 'Déjà au niveau maximum.' });
+  const price = UPGRADE_PRICES[lv];
+  const w = walletOf(user);
+  if (!isAdmin(user)) {
+    if (w.coins < price) return res.status(400).json({ error: `Il te manque ${price - w.coins} pièces.` });
+    w.coins -= price;
+  }
+  ups[id] = lv + 1;
+  saveUsers();
+  res.json(walletView(user));
 });
 
 // ⭐ Stars won on a chapter (each one is kept for good); 3 stars the first time = coins

@@ -61,6 +61,7 @@ import { VictoryModal } from './components/VictoryModal';
 import { StartScreen } from './components/StartScreen';
 import { ownedEmotes } from './components/LobbyStage';
 import { MapOverlay } from './components/MapOverlay';
+import { AtelierMenu } from './components/AtelierMenu';
 import { RunStats, starsOf, starMask } from './stars';
 
 const SETTINGS_KEY = 'hospital-pz-settings-v2';
@@ -476,7 +477,7 @@ export default function App() {
         engineRef.current?.interact();
       }
       // Hotbar 1-5 (e.code works on AZERTY too: the "&é"(-" keys)
-      const slot = /^(?:Digit|Numpad)([1-5])$/.exec(e.code);
+      const slot = /^(?:Digit|Numpad)([1-8])$/.exec(e.code);
       if (slot && !e.repeat && !u.isPaused && !u.isInventoryOpen) {
         engineRef.current?.useSlot(Number(slot[1]) - 1);
       }
@@ -562,7 +563,10 @@ export default function App() {
   const beginRun = (fresh: boolean, diff: Difficulty = difficulty, ch: Chapter = chapter, afterReset?: () => void) => {
     const engine = engineRef.current;
     if (!engine) return;
-    rankedRunRef.current = false;
+    rankedRunRef.current = nextRankedRef.current;
+    nextRankedRef.current = false;
+    // 🔧 Atelier: everything you bought, except in ranked games (fair for everyone)
+    engine.upgrades = rankedRunRef.current ? {} : upgradesRef.current;
     if (IS_TOUCH) enterMobileFullscreen();
     // Music is for the menu only
     sound.stopMenuMusic(1.2);
@@ -637,8 +641,8 @@ export default function App() {
     const ranked = rankedOn && !!sessionRef.current;
     const diff = ranked && difficulty < 2 ? (2 as Difficulty) : difficulty;
     if (diff !== difficulty) setDifficulty(diff);
+    nextRankedRef.current = ranked;
     beginRun(hasStartedOnce.current, diff, ch);
-    rankedRunRef.current = ranked;
     hasStartedOnce.current = true;
   };
 
@@ -896,6 +900,11 @@ export default function App() {
   }, [rankedOn]);
   /** the game being played was started in ranked mode */
   const rankedRunRef = useRef(false);
+  /** set just before a ranked game starts */
+  const nextRankedRef = useRef(false);
+  /** 🔧 Atelier levels of the account */
+  const upgradesRef = useRef<Record<string, number>>({});
+  upgradesRef.current = wallet?.upgrades ?? {};
   const challengeOnRef = useRef(challengeOn);
   challengeOnRef.current = challengeOn;
   /** "Nouveau record ! 3e" / "Défi réussi +150" after an escape */
@@ -1080,6 +1089,7 @@ export default function App() {
   const [musicOpen, setMusicOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [bestiaryOpen, setBestiaryOpen] = useState(false);
+  const [atelierOpen, setAtelierOpen] = useState(false);
   const [rankedOpen, setRankedOpen] = useState(false);
   /** 🖼️ Documents picked up (and the ending reached) go to the gallery */
   const reportGallery = (ending?: GameEnding) => {
@@ -1522,6 +1532,7 @@ export default function App() {
           onMusic={() => setMusicOpen(true)}
           onGallery={session ? () => setGalleryOpen(true) : undefined}
           onBestiary={session ? () => setBestiaryOpen(true) : undefined}
+          onAtelier={session ? () => setAtelierOpen(true) : () => setMpOpen(true)}
           onRanked={session ? () => setRankedOpen(true) : undefined}
           rankTier={wallet?.ranked?.tier ?? null}
           onFriends={
@@ -1708,6 +1719,19 @@ export default function App() {
       )}
       {rankedOpen && session && !isPlaying && <RankedMenu token={session.token} me={session.username} onProfile={setProfileOf} onWallet={setWallet} onClose={() => setRankedOpen(false)} />}
       {musicOpen && !isPlaying && <MusicMenu token={session?.token ?? null} wallet={wallet} onWallet={setWallet} onClose={() => setMusicOpen(false)} />}
+      {atelierOpen && session && wallet && !isPlaying && (
+        <AtelierMenu
+          levels={wallet.upgrades ?? {}}
+          coins={wallet.wallet.coins}
+          admin={!!wallet.admin}
+          onBuy={async (id) => {
+            const s = sessionRef.current;
+            if (!s) return;
+            setWallet(await api.upgrade(s.token, id));
+          }}
+          onClose={() => setAtelierOpen(false)}
+        />
+      )}
       {bestiaryOpen && session && !isPlaying && (
         <BestiaryMenu
           beasts={wallet?.gallery?.beasts ?? []}

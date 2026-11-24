@@ -18,7 +18,7 @@ const DAILY_LINES = [
 ];
 
 import { RANK_TIERS, tierOf } from '../ranked';
-import { Award, Bell, BellOff, BookOpen, Coins, Crown, Flag, GraduationCap, HelpCircle, Image as ImageIcon, ListOrdered, Lock, Medal, Star, Music, Plus, Settings, Shield, Shirt, ShoppingBag, Skull, Swords, Target, Ticket, User, Users, VolumeX, X, Zap } from 'lucide-react';
+import { Award, Bell, BellOff, BookOpen, Coins, Crown, Flag, GraduationCap, HelpCircle, Image as ImageIcon, ListOrdered, Lock, Medal, Star, Wrench, Music, Plus, Settings, Shield, Shirt, ShoppingBag, Skull, Swords, Target, Ticket, User, Users, VolumeX, X, Zap } from 'lucide-react';
 import type { ChallengeDef } from '../challenges';
 import { ACHIEVEMENTS } from '../achievements';
 import { AudioSettings, ControlSettings } from '../types';
@@ -101,6 +101,8 @@ interface StartScreenProps {
   onMusic?: () => void;
   onGallery?: () => void;
   onBestiary?: () => void;
+  /** 🔧 L'Atelier (permanent upgrades) */
+  onAtelier?: () => void;
   friendsOnline?: number | null;
   /** friend requests + invitations waiting */
   friendsAlert?: number;
@@ -229,6 +231,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onMusic,
   onGallery,
   onBestiary,
+  onAtelier,
   friendsOnline = null,
   friendsAlert = 0,
   season = null,
@@ -310,7 +313,6 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   const leftButtons = (
     <>
       <Sq
-        wide
         icon={shopLocked ? <Lock /> : <ShoppingBag />}
         label="Boutique"
         color={C.rust}
@@ -318,6 +320,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
         badge={shopBadge ? '!' : undefined}
         title={shopLocked ? 'Finis une partie en Exploration pour ouvrir la boutique' : 'Skins & boîtes mystère'}
       />
+      {onAtelier && <Sq icon={<Wrench />} label="Atelier" color={C.blood} onClick={onAtelier} title="L'Atelier : améliorations pour toujours (lampe, batterie, sac…)" />}
       {onProgression && <Sq icon={<Crown />} label="Pass" color={C.bruise} onClick={onProgression} badge={progressionAlert} title="Pass & défis" />}
       {onRanked && <Sq icon={<Medal style={{ color: tier.color }} />} label="Classé" color={C.steel} onClick={onRanked} title={`Classé — ${tier.name}`} />}
       {onFriends && <Sq icon={<Users />} label="Amis" color={C.toxic} onClick={onFriends} badge={friendsAlert} title={friendsOnline ? `Amis — ${friendsOnline} en ligne` : 'Amis'} />}

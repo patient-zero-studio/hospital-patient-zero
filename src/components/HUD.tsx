@@ -620,7 +620,7 @@ export const HUD: React.FC<HUDProps> = ({
         <div className="absolute bottom-[76px] left-1/2 -translate-x-1/2 text-[9px] font-mono tracking-widest text-zinc-500 whitespace-nowrap">
           {touch
             ? `${items.length}/${maxSlots} — TOUCHER : UTILISER · APPUI LONG : LÂCHER`
-            : `${items.length}/${maxSlots} — [1-5] UTILISER · MOLETTE + [X] LÂCHER${hasCan ? ' · CANETTE : [1-5] LANCER · MAINTENIR [B] BOTTLE FLIP' : ''}`}
+            : `${items.length}/${maxSlots} — [1-${maxSlots}] UTILISER · MOLETTE + [X] LÂCHER${hasCan ? ` · CANETTE : [1-${maxSlots}] LANCER · MAINTENIR [B] BOTTLE FLIP` : ''}`}
         </div>
       )}
 

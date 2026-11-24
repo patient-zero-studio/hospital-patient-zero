@@ -30,6 +30,7 @@ import { CanSystem, FlipResult } from './CanSystem';
 import { RemotePlayer } from './RemotePlayer';
 import { MimicBody } from './Mimic';
 import { ShadeBody } from './Shade';
+import { upgradeEffects } from '../upgrades';
 import type { RunStats } from '../stars';
 import type { CollisionBox, FlickerLight, HidingSpot } from './MapBuilder';
 import { BEASTS } from '../bestiary';
@@ -4507,7 +4508,33 @@ export class GameEngine {
     this.paused = false;
     this.player.inputEnabled = true;
     this.lastTime = performance.now();
+    this.applyUpgrades();
     this.startMic();
+  }
+
+  /** 🔧 Atelier levels for the next run (the app leaves it empty for ranked games) */
+  public upgrades: Record<string, number> = {};
+  private applyUpgrades() {
+    const fx = upgradeEffects(this.vsRole || this.imp ? {} : this.upgrades);
+    const p = this.player;
+    const ch = this.challenge;
+    p.beamMul = fx.beam;
+    p.flashlight.distance = 24 * (1 + (fx.beam - 1) * 0.6);
+    p.noiseMul = fx.noise;
+    this.baseDrain = (ch === 'dim' ? 3 : ch === 'dive' ? 2 : 1) * fx.drain;
+    p.batteryDrainMul = this.baseDrain;
+    // Team pockets live on the host: the guest's own upgrades don't change them
+    if (this.net?.role === 'guest') return;
+    this.state.maxInventorySlots = ch === 'pack3' ? 3 : fx.slots;
+    // 🩹 Starting kit
+    const kit: Omit<GameItem, 'id'>[] = [];
+    if (fx.kit >= 1) kit.push(BANDAGE_ITEM);
+    if (fx.kit >= 2) kit.push({ name: 'Pile', type: 'battery', description: 'Recharge 55 % de la batterie de la lampe torche.', icon: 'BatteryCharging' });
+    if (fx.kit >= 3) kit.push(BANDAGE_ITEM);
+    if (this.survival || this.imp || this.vsRole) return;
+    kit.forEach((d, i) => {
+      if (this.state.inventory.length < this.state.maxInventorySlots) this.state.inventory.push({ id: `kit-${i}-${Math.floor(Math.random() * 1e6)}`, ...d });
+    });
   }
 
   public stop() {

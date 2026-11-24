@@ -19,6 +19,8 @@ export interface WalletView {
   wallet: Wallet;
   /** ⭐ stars per chapter (bitmask) */
   stars?: Record<string, number>;
+  /** 🔧 Atelier levels */
+  upgrades?: Record<string, number>;
   /** ids of today's offers */
   shop: string[];
   day: string;
@@ -337,6 +339,7 @@ export const api = {
     return data;
   },
   ranked: (token: string): Promise<RankedView> => getJson('/api/ranked', token),
+  upgrade: (token: string, id: string): Promise<WalletView> => post('/api/upgrade', { id }, token),
   stars: (token: string, chapter: number, mask: number): Promise<WalletView & { before: number; after: number; bonus: number }> => post('/api/stars', { chapter, mask }, token),
   claimRankedPass: (token: string, tier: number): Promise<WalletView & { result: BoxResult }> => post('/api/rpass/claim', { tier }, token),
   reward: (token: string, difficulty: number, found: number, chapter = 1, ranked = false): Promise<WalletView & { gained: number; xp?: number; rankGain?: { gain: number; points: number; tier: string; promoted: boolean; passXp?: number } | null }> =>
