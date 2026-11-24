@@ -28,6 +28,8 @@ export interface PlayerNetState {
   uv?: boolean;
   /** 😨 fear 0..1 (the face shows it) */
   fe?: number;
+  /** 🩸 wounded: the next hit kills */
+  wd?: boolean;
 }
 
 export type InteractRequest =
@@ -90,7 +92,7 @@ export type GameMsg =
   | { k: 'toast'; msg: string }
   | { k: 'used'; item: GameItem }
   | { k: 'fx'; name: 'screamer' | 'powerUp' | 'vending' | 'flipResult'; mine?: boolean; result?: string }
-  | { k: 'caught'; m: number }
+  | { k: 'caught'; m: number; hurt?: boolean }
   | { k: 'end'; ending: GameEnding }
   | { k: 'gameover' }
   /** coins found by the guest */

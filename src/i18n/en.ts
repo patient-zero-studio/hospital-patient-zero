@@ -3,6 +3,35 @@
  * Keys are the French texts exactly as they appear on screen (spaces collapsed).
  */
 export const EN: Record<string, string> = {
+  // ---- Menu (2026 layout) ----
+  'Saint-Aurore · Alerte biologique 4': 'Saint-Aurore · Biohazard alert 4',
+  'Jouer en Solo': 'Play Solo',
+  'Autres modes': 'Other modes',
+  "Coop et Imposteur jusqu'à 8, Chasse, Course": 'Co-op and Impostor up to 8, Hunt, Race',
+  'Survie infinie': 'Endless survival',
+  "Les vagues s'enchaînent : tiens le plus longtemps": 'Wave after wave: last as long as you can',
+  "Chasse en ligne : l'un de vous est le monstre": 'Online hunt: one of you is the monster',
+  Campagne: 'Campaign',
+  "Les 5 chapitres d'affilée, sans retour au menu": 'All 5 chapters in a row, no menu in between',
+  'Finissez la forêt pour la débloquer': 'Finish the forest to unlock it',
+  'Revoir les bases en 2 minutes': 'The basics again, in 2 minutes',
+  'Skins & boîtes mystère': 'Skins & mystery boxes',
+  'Finis une partie en Exploration': 'Finish a game in Exploration',
+  Progression: 'Progression',
+  Social: 'Social',
+  Collection: 'Collection',
+  Bestiaire: 'Bestiary',
+  Options: 'Options',
+  Interagir: 'Interact',
+  Lampe: 'Torch',
+  Courir: 'Run',
+  "S'accroupir": 'Crouch',
+  Inventaire: 'Inventory',
+  'Mode photo': 'Photo mode',
+  'Les touches, les cachettes, la lampe… tout en douceur.': 'Keys, hiding spots, the torch… nice and easy.',
+  // ---- Wounds ----
+  Bandage: 'Bandage',
+  '🩹 Bandage en cours… ne bougez pas': "🩹 Applying bandage… don't move",
   // ---- Menu ----
   'HÔPITAL PSYCHIATRIQUE SAINT-AURORE — NIVEAU D\'ALERTE BIOLOGIQUE 4': 'SAINT-AURORE PSYCHIATRIC HOSPITAL — BIOHAZARD ALERT LEVEL 4',
   'SURVIE & HORREUR PSYCHOLOGIQUE 3D': '3D SURVIVAL & PSYCHOLOGICAL HORROR',

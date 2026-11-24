@@ -95,6 +95,8 @@ interface HUDProps {
   emoteWheel?: boolean;
   /** 🔮 seconds before the secret passage closes */
   secretLeft?: number | null;
+  /** 🩸 wounded */
+  wound?: HudSnapshot['wound'];
   /** ⏱️ Speedrun chrono */
   speedrun?: { time: number; best: number | null } | null;
   treatEmoji?: string | null;
@@ -169,6 +171,7 @@ export const HUD: React.FC<HUDProps> = ({
   hideCount = null,
   emoteWheel = false,
   secretLeft = null,
+  wound = null,
   pact = null,
   imp = null,
   treatEmoji = null,
@@ -361,6 +364,24 @@ export const HUD: React.FC<HUDProps> = ({
       {runCoins > 0 && (
         <div className="absolute bottom-[100px] left-1/2 -translate-x-1/2 px-2 py-0.5 bg-black/60 border border-amber-700/60 text-amber-300 font-mono text-[11px]">
           🪙 {runCoins} pièce{runCoins > 1 ? 's' : ''} trouvée{runCoins > 1 ? 's' : ''}
+        </div>
+      )}
+
+      {/* 🩸 Wound status + bandage progress */}
+      {wound && (
+        <div className="absolute bottom-[128px] left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1 pointer-events-none">
+          {wound.band != null ? (
+            <div className="w-56 px-3 py-1.5 bg-black/75 border border-rose-200/40">
+              <p className="text-[11px] font-mono text-rose-100 mb-1 text-center">🩹 Bandage en cours… ne bougez pas</p>
+              <div className="h-1.5 bg-zinc-800 overflow-hidden">
+                <div className="h-full bg-rose-200 transition-[width] duration-150" style={{ width: `${Math.round(wound.band * 100)}%` }} />
+              </div>
+            </div>
+          ) : (
+            <div className={`px-3 py-1 bg-black/70 border font-mono text-[11px] ${wound.bleed ? 'border-red-700 text-red-300 animate-pulse' : 'border-red-900/70 text-red-400/80'}`}>
+              🩸 Blessé{wound.bleed ? ' · vous saignez' : ''}{wound.limp ? ' · vous boitez' : ''} — un coup de plus sera fatal
+            </div>
+          )}
         </div>
       )}
 

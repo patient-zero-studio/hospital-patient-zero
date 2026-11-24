@@ -109,6 +109,17 @@ export const buildItemModel = (item: GameItem, track: Track): THREE.Group => {
       add(track, body, new THREE.BoxGeometry(0.012, 0.02, 0.006), mat(track, 0x8a5cff), 0, 0.02, 0.016);
       break;
     }
+    case 'bandage': {
+      // Rolled gauze bandage with a red cross clip
+      const roll = add(track, g, new THREE.CylinderGeometry(0.035, 0.035, 0.06, 18), mat(track, 0xf2eee4, { roughness: 0.95 }), 0, 0.035, 0);
+      roll.rotation.z = Math.PI / 2;
+      const core = add(track, g, new THREE.CylinderGeometry(0.012, 0.012, 0.062, 10), mat(track, 0xb8b0a0, { roughness: 0.8 }), 0, 0.035, 0);
+      core.rotation.z = Math.PI / 2;
+      add(track, g, new THREE.BoxGeometry(0.05, 0.002, 0.05), mat(track, 0xf2eee4, { roughness: 0.95 }), 0.0, 0.001, 0.06);
+      add(track, g, new THREE.BoxGeometry(0.018, 0.004, 0.006), mat(track, 0xd02020), 0, 0.071, 0);
+      add(track, g, new THREE.BoxGeometry(0.006, 0.004, 0.018), mat(track, 0xd02020), 0, 0.071, 0);
+      break;
+    }
     case 'talkie': {
       // Walkie-talkie standing up: black body, speaker grille, antenna, green screen
       const black = mat(track, 0x16171a, { roughness: 0.5 });

@@ -68,6 +68,8 @@ export class PlayerController {
   /** Daily challenge modifiers (set by the engine on every reset). */
   public batteryDrainMul = 1;
   public noSprint = false;
+  /** 🩸 seconds of limping left: no sprint, slower, louder steps */
+  public limp = 0;
   /** Daily mutator: left and right swapped */
   public invertStrafe = false;
 
@@ -272,7 +274,8 @@ export class PlayerController {
     // In the duct you stay on all fours
     const low = !this.monsterMode && this.inLow(this.position.x, this.position.z);
     if (low && !this.isHidden) this.isCrouching = true;
-    const wantsSprint = active && !low && !this.noSprint && (k['ShiftLeft'] || k['ShiftRight'] || this.touchSprint) && fwd > 0.3;
+    if (this.limp > 0) this.limp = Math.max(0, this.limp - delta);
+    const wantsSprint = active && !low && !this.noSprint && this.limp <= 0 && (k['ShiftLeft'] || k['ShiftRight'] || this.touchSprint) && fwd > 0.3;
     if (this.stamina < 1) this.exhausted = true;
     if (this.exhausted && this.stamina > 30) this.exhausted = false;
     if (this.freeSprint > 0) {
@@ -288,7 +291,7 @@ export class PlayerController {
       this.stamina = Math.min(this.maxStamina, this.stamina + delta * (moving ? 10 : 18));
     }
 
-    const speed = this.isCrouching ? this.crouchSpeed : this.isSprinting ? this.sprintSpeed * (this.freeSprint > 0 ? 1.12 : 1) : this.walkSpeed;
+    const speed = (this.isCrouching ? this.crouchSpeed : this.isSprinting ? this.sprintSpeed * (this.freeSprint > 0 ? 1.12 : 1) : this.walkSpeed) * (this.limp > 0 ? 0.72 : 1);
     const wish = new THREE.Vector3();
     if (moving) {
       const sin = Math.sin(this.yaw);
@@ -310,7 +313,8 @@ export class PlayerController {
         if (!this.monsterMode) sound.playFootstep(this.isSprinting, this.isCrouching);
         this.footstepTimer = this.isSprinting ? 0.32 : this.isCrouching ? 0.7 : 0.5;
         if (this.isSprinting) onNoise(this.position, 16);
-        else if (!this.isCrouching) onNoise(this.position, 5.5);
+        else if (!this.isCrouching) onNoise(this.position, this.limp > 0 ? 8 : 5.5);
+        else if (this.limp > 0) onNoise(this.position, 3);
       }
     } else {
       this.footstepTimer = 0.15;
@@ -337,7 +341,7 @@ export class PlayerController {
       const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
       this.camera.position.set(
         this.position.x + right.x * bobX + (Math.random() - 0.5) * sh,
-        this.eyeHeight + bobY + breathY - 0.03 + (Math.random() - 0.5) * sh,
+        this.eyeHeight + bobY + breathY - 0.03 + (Math.random() - 0.5) * sh - (this.limp > 0 ? Math.max(0, Math.sin(this.bobPhase * 0.5)) * 0.07 * this.bobAmount : 0),
         this.position.z + right.z * bobX + (Math.random() - 0.5) * sh
       );
     }
@@ -361,7 +365,7 @@ export class PlayerController {
     return false;
   }
 
-  private moveWithCollision(dx: number, dz: number, boxes: CollisionBox[]) {
+  public moveWithCollision(dx: number, dz: number, boxes: CollisionBox[]) {
     // Sub-step to avoid tunnelling through thin walls at high speed
     const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.1));
     for (let i = 0; i < steps; i++) {

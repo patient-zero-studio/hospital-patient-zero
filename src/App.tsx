@@ -140,6 +140,7 @@ const EMPTY_HUD: HudSnapshot = {
   imp: null,
   emoteWheel: false,
   secretLeft: null,
+  wound: null,
   photo: null,
   treatEmoji: null,
   selectedSlot: 0,
@@ -1798,6 +1799,7 @@ export default function App() {
           hideCount={hud.hideCount}
           emoteWheel={hud.emoteWheel}
           secretLeft={hud.secretLeft}
+          wound={hud.wound}
           pact={hud.pact}
           imp={hud.imp}
           treatEmoji={hud.treatEmoji}

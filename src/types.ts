@@ -19,6 +19,7 @@ export type ItemType =
   | 'trap'
   /** UV lamp: the flashlight shows hidden messages and marks */
   | 'uvlamp'
+  | 'bandage'
   /** walkie-talkie (co-op): hear the team anywhere, call them */
   | 'talkie'
   /** coins found during a run (banked when you get out) */

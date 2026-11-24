@@ -1,5 +1,5 @@
 import React from 'react';
-import { Key, KeyRound, CreditCard, Zap, BatteryCharging, HeartPulse, FileText, Disc, FileCheck, Flashlight, Package, CupSoda, Syringe, Hammer, Cookie, AlarmClock, Wrench, CloudFog, Cog, Radio } from 'lucide-react';
+import { Key, KeyRound, CreditCard, Zap, BatteryCharging, HeartPulse, FileText, Disc, FileCheck, Flashlight, Package, CupSoda, Syringe, Hammer, Cookie, AlarmClock, Wrench, CloudFog, Cog, Radio, Bandage } from 'lucide-react';
 
 /** Icon for an inventory item, shared by the hotbar and the inventory screen. */
 export const ItemIcon: React.FC<{ icon: string; className?: string }> = ({ icon, className = 'w-6 h-6' }) => {
@@ -34,6 +34,8 @@ export const ItemIcon: React.FC<{ icon: string; className?: string }> = ({ icon,
       return <CloudFog className={`${className} text-slate-300`} />;
     case 'FlashlightUv':
       return <Flashlight className={`${className} text-violet-400`} />;
+    case 'Bandage':
+      return <Bandage className={`${className} text-rose-200`} />;
     case 'Radio':
       return <Radio className={`${className} text-emerald-300`} />;
     case 'Cog':

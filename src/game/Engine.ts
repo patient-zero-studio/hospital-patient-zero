@@ -188,6 +188,8 @@ export interface HudSnapshot {
   emoteWheel: boolean;
   /** 🔮 secret passage countdown */
   secretLeft: number | null;
+  /** 🩸 wounded: bleeding, limping, bandage being applied (0..1) */
+  wound: { bleed: boolean; limp: boolean; band: number | null } | null;
   /** 📸 photo mode */
   photo: { filter: string; help: boolean; msg: string | null } | null;
   /** 💃 victory dance on screen: no HUD */
@@ -466,6 +468,7 @@ const rayBox2D = (ox: number, oz: number, dx: number, dz: number, b: { min: THRE
 };
 type UvMark = { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; text: string | null; found: boolean };
 
+const BANDAGE_ITEM: Omit<GameItem, 'id'> = { name: 'Bandage', type: 'bandage', description: 'Soigne une blessure : arrête le saignement et la boiterie. Restez immobile 3 s pour le poser.', icon: 'Bandage' };
 const TRAP_ITEM: Omit<GameItem, 'id'> = { name: 'Piège à mâchoires', type: 'trap', description: 'Posez-le par terre : le premier monstre qui marche dessus reste bloqué 6 s.', icon: 'Cog' };
 
 interface WorldItem {
@@ -1604,7 +1607,7 @@ export class GameEngine {
   // -----------------------------------------------------------------------
   /** Consumables and the torch battery (keys and chapter tools stay behind). */
   public campaignCarry(): CampaignCarry {
-    const keep = new Set(['battery', 'food', 'sedative', 'medkit', 'throwable', 'alarm']);
+    const keep = new Set(['battery', 'food', 'sedative', 'medkit', 'throwable', 'alarm', 'bandage']);
     return {
       inv: this.state.inventory.filter((i) => keep.has(i.type)).map((i) => ({ ...i, id: `cp-${i.type}-${Math.random().toString(36).slice(2, 8)}` })),
       battery: Math.max(25, Math.round(this.player.flashlightBattery)),
@@ -2172,6 +2175,7 @@ export class GameEngine {
     this.lightsOutTimer = 0;
     this.revT = 100 + Math.random() * 60;
     this.fogEvt = 0;
+    this.resetWounds();
     this.fearFlashText = null;
     this.pendingEnding = null;
     this.hint = null;
@@ -2601,6 +2605,7 @@ export class GameEngine {
       st: this.monsterStunTimer > 0,
       uv: this.site?.uv || undefined,
       fe: this.fear > 0.05 ? Math.round(this.fear * 10) / 10 : undefined,
+      wd: this.wounded || undefined,
     };
   }
 
@@ -3437,7 +3442,8 @@ export class GameEngine {
           { name: 'Pile', type: 'battery', description: 'Recharge 55 % de la batterie de la lampe torche.', icon: 'BatteryCharging' },
           { name: 'Adrénaline', type: 'medkit', description: 'Auto-injecteur : endurance au maximum + 6 s de sprint illimité.', icon: 'HeartPulse' },
           { name: 'Seringue de Sédatif', type: 'sedative', description: 'Immobilise un monstre 5 secondes (à moins de 3 m, face à lui).', icon: 'Syringe' },
-        ][Math.floor(r() * 3)] as Omit<GameItem, 'id'>,
+          BANDAGE_ITEM,
+        ][Math.floor(r() * 4)] as Omit<GameItem, 'id'>,
         r() < 0.5 ? SMOKE_ITEM : TRAP_ITEM,
       ];
       const tapes = GALLERY_DOCS.filter((d) => d.chapter === 9);
@@ -4080,7 +4086,8 @@ export class GameEngine {
       case 'caught': {
         const m = msg.m === -1 ? this.crawler : this.monsters[msg.m];
         // (coins / alarm messages are handled below)
-        if (m && !this.dying && !this.spectating) this.startDeath(m);
+        if (msg.hurt && !this.wounded && !this.dying && !this.spectating) this.wound(m instanceof MonsterAI ? m : null);
+        else if (m && !this.dying && !this.spectating && this.woundGrace <= 0) this.startDeath(m);
         break;
       }
       case 'end':
@@ -4197,7 +4204,7 @@ export class GameEngine {
           this.state.showToast('Trop loin : approchez-vous du monstre (moins de 3 m, face à lui).');
         }
       });
-    } else if (item.type === 'battery' || item.type === 'medkit' || item.type === 'food') {
+    } else if (item.type === 'battery' || item.type === 'medkit' || item.type === 'food' || item.type === 'bandage') {
       this.state.removeItem(item.id);
       this.net?.send({ k: 'used', item });
     } else if (item.type === 'alarm' || item.type === 'trap') {
@@ -4244,6 +4251,8 @@ export class GameEngine {
       p.stamina = Math.min(p.maxStamina, p.stamina + 40);
       sound.playPaperRustle();
       this.state.showToast('Miam. Vous reprenez votre souffle (+40 endurance).');
+    } else if (item.type === 'bandage') {
+      this.healWound();
     }
   }
 
@@ -4637,6 +4646,7 @@ export class GameEngine {
     this.updateMimic(delta);
     this.updateUv(delta);
     this.updateSecret(delta);
+    this.updateWounds(delta);
     this.trackSeen(delta);
     this.trackRun(delta);
     if (p.inDuct && !this.ductWarned && this.crawler) {
@@ -4844,8 +4854,9 @@ export class GameEngine {
         }
       }
       m.updateMulti(delta, players, listener, this.map.collisionBoxes, (idx) => {
-        if (idx === 0) this.startDeath(m);
-        else catchPeer(m, idx);
+        if (idx === 0) {
+          if (!this.tryWound(m)) this.startDeath(m);
+        } else if (!this.tryWoundPeer(m, slot[idx] ?? 0)) catchPeer(m, idx);
       });
       if (this.dying && !this.net) return;
     }
@@ -4981,6 +4992,7 @@ export class GameEngine {
       hideCount: this.hideSeek && this.hideCount > 0 ? Math.ceil(this.hideCount) : null,
       emoteWheel: this.emoteWheel,
       secretLeft: this.secret?.state === 'open' ? Math.max(0, Math.ceil(this.secret.timeLeft)) : null,
+      wound: this.wounded || this.bandT > 0 ? { bleed: this.bleedT > 0, limp: this.player.limp > 0, band: this.bandT > 0 ? Math.round((1 - this.bandT / 3) * 100) / 100 : null } : null,
       photo: this.photo ? { filter: GameEngine.PHOTO_FILTERS[this.photoFilter], help: this.photoHelp, msg: this.photoMsg } : null,
       imp: this.imp
         ? {
@@ -6043,6 +6055,8 @@ export class GameEngine {
       gs.showToast('La lampe est déjà chargée. Gardez la pile pour plus tard.');
     } else if (item.type === 'medkit' && p.stamina >= p.maxStamina - 1 && p.freeSprint > 0 && !handsFull) {
       gs.showToast('Votre souffle est intact. Gardez l\'adrénaline pour une poursuite.');
+    } else if (item.type === 'bandage') {
+      this.startBandage(item);
     } else if (
       this.net?.role === 'guest' &&
       (item.type === 'battery' || item.type === 'medkit' || item.type === 'throwable' || item.type === 'sedative' || item.type === 'smoke')
@@ -6252,6 +6266,240 @@ export class GameEngine {
   }
 
   /** Host / solo: extra gadgets hidden in the level (smoke grenade + jaw trap). */
+  // -----------------------------------------------------------------------
+  // 🩸 Wounds: the first hit wounds (bleeding + limp), the second one kills
+  // -----------------------------------------------------------------------
+  private wounded = false;
+  private bleedT = 0;
+  private woundGrace = 0;
+  private bandT = 0;
+  private bandItem: GameItem | null = null;
+  private bandPos = new THREE.Vector3();
+  private bloodDrops: { mesh: THREE.Mesh; t: number }[] = [];
+  private bloodLast = new THREE.Vector3();
+  private bloodIdle = 0;
+  private bloodScentT = 0;
+  private bloodTex: THREE.CanvasTexture | null = null;
+  private bloodGeo: THREE.PlaneGeometry | null = null;
+  private peerHurtAt = new Map<number, number>();
+  private static BLEED_TIME = 60;
+  private static LIMP_TIME = 40;
+
+  private get woundAllowed() {
+    return !this.vsRole && !this.imp && !this.watchOnly && !this.pendingEnding && !this.finished;
+  }
+
+  private resetWounds() {
+    this.wounded = false;
+    this.bleedT = 0;
+    this.woundGrace = 0;
+    this.bandT = 0;
+    this.bandItem = null;
+    if (this.player) this.player.limp = 0;
+    for (const d of this.bloodDrops) {
+      d.mesh.parent?.remove(d.mesh);
+      (d.mesh.material as THREE.Material).dispose();
+    }
+    this.bloodDrops = [];
+    this.peerHurtAt.clear();
+  }
+
+  /** Local player caught by a patrol monster: true = wounded instead of killed. */
+  private tryWound(m: MonsterAI): boolean {
+    if (this.dying || this.spectating || this.finished) return false;
+    if (this.woundGrace > 0) return true;
+    if (!this.woundAllowed || this.wounded) return false;
+    this.wound(m);
+    m.stun(4.5);
+    return true;
+  }
+
+  /** Host: a monster got a guest who was not wounded yet → wound them instead. */
+  private tryWoundPeer(m: MonsterAI, peerIdx: number): boolean {
+    if (!this.net || !this.woundAllowed) return false;
+    const q = this.peers[peerIdx];
+    const s = q?.remote?.state;
+    if (!q || !s || q.caught || s.dead) return false;
+    const now = performance.now();
+    const last = this.peerHurtAt.get(peerIdx) ?? -1e9;
+    if (now - last < 3000) return true; // grace: the message is on its way
+    if (s.wd) return false;
+    this.peerHurtAt.set(peerIdx, now);
+    m.stun(4.5);
+    const prev = this.replyTo;
+    this.replyTo = q.name ?? null;
+    this.net.send({ k: 'caught', m: this.monsters.indexOf(m), hurt: true });
+    this.replyTo = prev;
+    this.state.showToast(`🩸 ${q.name ?? 'Votre partenaire'} est blessé ! Un deuxième coup lui serait fatal.`);
+    return true;
+  }
+
+  private wound(m: MonsterAI | null) {
+    const p = this.player;
+    this.wounded = true;
+    this.bleedT = GameEngine.BLEED_TIME;
+    p.limp = GameEngine.LIMP_TIME;
+    this.woundGrace = 3;
+    this.bandT = 0;
+    this.bandItem = null;
+    if (p.isHidden) {
+      const spot = this.map.hidingSpots.find((s) => s.id === p.currentHidingSpotId);
+      if (spot) p.exitHiding(this.hideExit(spot));
+    }
+    // Thrown back, away from the claws
+    if (m) {
+      const dx = p.position.x - m.position.x;
+      const dz = p.position.z - m.position.z;
+      const d = Math.hypot(dx, dz) || 1;
+      p.moveWithCollision((dx / d) * 0.9, (dz / d) * 0.9, this.map.collisionBoxes);
+    }
+    p.shake = 1;
+    this.damage = 1;
+    this.fear = 1;
+    this.stress = 1;
+    sound.playJumpscareStinger();
+    this.bloodLast.copy(p.position);
+    this.dropBlood(p.position, 1.7);
+    this.state.showToast('🩸 Il vous a lacéré ! Vous saignez et vous boitez… Un deuxième coup sera FATAL. Trouvez un bandage !');
+    this.pushHud();
+  }
+
+  private healWound() {
+    this.wounded = false;
+    this.bleedT = 0;
+    this.player.limp = 0;
+    sound.playPaperRustle();
+    this.state.showToast('🩹 Bandage posé. Le saignement s\'arrête et vous ne boitez plus.');
+    this.pushHud();
+  }
+
+  private startBandage(item: GameItem) {
+    if (!this.wounded) {
+      this.state.showToast('Vous n\'êtes pas blessé. Gardez le bandage pour plus tard.');
+      return;
+    }
+    if (this.bandT > 0) return;
+    this.bandT = 3;
+    this.bandItem = item;
+    this.bandPos.copy(this.player.position);
+    sound.playPaperRustle();
+    this.state.showToast('🩹 Vous posez le bandage… Ne bougez pas (3 s).');
+    this.pushHud();
+  }
+
+  private finishBandage() {
+    const item = this.bandItem;
+    this.bandItem = null;
+    if (!item) return;
+    const gs = this.state;
+    const idx = gs.inventory.findIndex((i) => i.id === item.id);
+    if (idx < 0) return;
+    if (this.net?.role === 'guest') this.net.send({ k: 'slot', i: idx });
+    else {
+      gs.removeItem(item.id);
+      this.healWound();
+    }
+  }
+
+  private dropBlood(pos: THREE.Vector3, size = 1) {
+    if (!this.bloodTex) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const g = c.getContext('2d')!;
+      const blob = (x: number, y: number, r: number, a: number) => {
+        const gr = g.createRadialGradient(x, y, 0, x, y, r);
+        gr.addColorStop(0, `rgba(90,0,0,${a})`);
+        gr.addColorStop(0.7, `rgba(70,0,0,${a * 0.85})`);
+        gr.addColorStop(1, 'rgba(40,0,0,0)');
+        g.fillStyle = gr;
+        g.beginPath();
+        g.arc(x, y, r, 0, Math.PI * 2);
+        g.fill();
+      };
+      blob(32, 32, 16, 0.95);
+      for (let i = 0; i < 9; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const d = 10 + Math.random() * 16;
+        blob(32 + Math.cos(a) * d, 32 + Math.sin(a) * d, 2 + Math.random() * 5, 0.9);
+      }
+      this.bloodTex = new THREE.CanvasTexture(c);
+      this.bloodTex.colorSpace = THREE.SRGBColorSpace;
+      this.bloodGeo = new THREE.PlaneGeometry(1, 1);
+    }
+    const mat = new THREE.MeshStandardMaterial({ map: this.bloodTex, transparent: true, depthWrite: false, roughness: 0.25, metalness: 0.1, polygonOffset: true, polygonOffsetFactor: -2 });
+    const mesh = new THREE.Mesh(this.bloodGeo!, mat);
+    mesh.rotation.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2);
+    const s = (0.28 + Math.random() * 0.18) * size;
+    mesh.scale.set(s, s, 1);
+    mesh.position.set(pos.x + (Math.random() - 0.5) * 0.25, 0.012 + this.bloodDrops.length * 0.0001, pos.z + (Math.random() - 0.5) * 0.25);
+    mesh.renderOrder = 2;
+    this.scene.add(mesh);
+    this.bloodDrops.push({ mesh, t: 0 });
+    if (this.bloodDrops.length > 70) {
+      const old = this.bloodDrops.shift()!;
+      old.mesh.parent?.remove(old.mesh);
+      (old.mesh.material as THREE.Material).dispose();
+    }
+  }
+
+  private updateWounds(delta: number) {
+    const p = this.player;
+    if (this.woundGrace > 0) this.woundGrace -= delta;
+    // Old drops dry and fade after 45 s
+    for (let i = this.bloodDrops.length - 1; i >= 0; i--) {
+      const d = this.bloodDrops[i];
+      d.t += delta;
+      if (d.t > 45) {
+        const m = d.mesh.material as THREE.MeshStandardMaterial;
+        m.opacity = Math.max(0, 1 - (d.t - 45) / 10);
+        if (m.opacity <= 0) {
+          d.mesh.parent?.remove(d.mesh);
+          m.dispose();
+          this.bloodDrops.splice(i, 1);
+        }
+      }
+    }
+    // Bandage: 3 s standing still
+    if (this.bandT > 0) {
+      if (this.dying || Math.hypot(p.position.x - this.bandPos.x, p.position.z - this.bandPos.z) > 0.35) {
+        this.bandT = 0;
+        this.bandItem = null;
+        this.state.showToast('Bandage interrompu ! Restez immobile pour le poser.');
+      } else {
+        this.bandT -= delta;
+        if (this.bandT <= 0) {
+          this.bandT = 0;
+          this.finishBandage();
+        }
+      }
+    }
+    if (!this.wounded || this.dying) return;
+    // A red pulse at the edges while bleeding
+    if (this.bleedT > 0) this.damage = Math.max(this.damage, 0.1 + Math.max(0, Math.sin(performance.now() / 380)) * 0.08);
+    if (this.bleedT <= 0) return;
+    this.bleedT -= delta;
+    if (this.bleedT <= 0) {
+      this.state.showToast('Le saignement s\'est arrêté… mais vous êtes toujours blessé. Un bandage vous soignerait.');
+      this.pushHud();
+      return;
+    }
+    // Drops every 1.3 m, or a growing pool when you stand still
+    const moved = Math.hypot(p.position.x - this.bloodLast.x, p.position.z - this.bloodLast.z);
+    this.bloodIdle += delta;
+    if (!p.isHidden && (moved > 1.3 || this.bloodIdle > 4)) {
+      this.dropBlood(p.position, moved > 1.3 ? 1 : 0.7);
+      this.bloodLast.copy(p.position);
+      this.bloodIdle = 0;
+    }
+    // The creatures smell the trail: the drop you left a few seconds ago draws them in
+    this.bloodScentT -= delta;
+    if (this.bloodScentT <= 0 && this.net?.role !== 'guest' && this.bloodDrops.length > 2) {
+      this.bloodScentT = 3;
+      const trail = this.bloodDrops[Math.max(0, this.bloodDrops.length - 4)].mesh.position;
+      this.alertAll(new THREE.Vector3(trail.x, 1.2, trail.z), 11);
+    }
+  }
+
   private spawnGadgets() {
     if (this.net?.role === 'guest' || this.vsRole === 'monster' || this.xmasNight) return;
     const lv = this.maze ?? this.forest ?? this.site;
@@ -6264,6 +6512,9 @@ export class GameEngine {
     // 🔦 UV lamp in the hospital levels, 📻 a walkie-talkie in co-op
     const extra: Omit<GameItem, 'id'>[] = [];
     if (!lv && !this.imp) extra.push(UV_ITEM);
+    // 🩹 Bandages: 2 in the hospital, 1 in the other levels
+    if (!this.imp) extra.push(BANDAGE_ITEM);
+    if (!lv && !this.imp) extra.push(BANDAGE_ITEM);
     if (this.net?.mode === 'coop') extra.push(TALKIE_ITEM);
     if (!extra.length) return;
     const xs = lv ? lv.freeSpots(extra.length) : treatSpots(this.map, extra.length).map((p) => p.setY(p.y - 0.45));
@@ -6536,6 +6787,7 @@ export class GameEngine {
       alarm: { name: 'Réveil', type: 'alarm', description: 'Posez-le : il sonne au bout de 3 s et attire les monstres.', icon: 'AlarmClock' },
       smoke: SMOKE_ITEM,
       trap: TRAP_ITEM,
+      bandage: BANDAGE_ITEM,
     };
     const item: GameItem = kind === 'can' ? this.makeCan() : { id: `shop-${kind}-${this.supplyCounter}-${Date.now() % 100000}`, ...defs[kind] };
     if (this.net?.role === 'guest') this.net.send({ k: 'act', req: { kind: 'give', item } });

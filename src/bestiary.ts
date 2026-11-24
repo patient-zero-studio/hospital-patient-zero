@@ -127,6 +127,7 @@ export const ITEM_ENTRIES: ItemEntry[] = [
   { id: 'alarm', name: 'Réveil', emoji: '⏰', desc: 'Posé, il sonne au bout de 3 secondes et attire les monstres.' },
   { id: 'smoke', name: 'Fumigène', emoji: '💨', desc: 'Un épais nuage pendant 12 secondes : les monstres ne vous voient plus à travers.' },
   { id: 'trap', name: 'Piège à mâchoires', emoji: '🪤', desc: 'Le premier monstre qui marche dessus reste bloqué 6 secondes.' },
+  { id: 'bandage', name: 'Bandage', emoji: '🩹', desc: 'Soigne une blessure : plus de saignement, plus de boiterie. 3 secondes immobile pour le poser.' },
   { id: 'uvlamp', name: 'Lampe UV', emoji: '🟣', desc: 'Révèle les messages cachés, les traces du Mimic… et les passages secrets.' },
   { id: 'talkie', name: 'Talkie-walkie', emoji: '📻', desc: 'Coop : entendez l\'équipe partout et appelez-la. Le grésillement peut attirer les monstres.' },
   { id: 'key', name: 'Clés', emoji: '🔑', desc: 'Ouvrent les portes verrouillées. Fouillez les meubles !' },
