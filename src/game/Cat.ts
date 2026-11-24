@@ -72,6 +72,15 @@ export class CatBody {
     }
   }
 
+  /** ✨ The rare golden cat */
+  setGolden(on: boolean) {
+    this.fur.color.setHex(on ? 0xd4a017 : 0x0c0c0e);
+    this.fur.emissive.setHex(on ? 0x5a3c00 : 0x000000);
+    this.fur.emissiveIntensity = on ? 0.7 : 0;
+    this.fur.metalness = on ? 0.6 : 0;
+    this.fur.roughness = on ? 0.35 : 0.85;
+  }
+
   update(delta: number, pose: CatPose, speed: number) {
     this.t += delta;
     const t = this.t;

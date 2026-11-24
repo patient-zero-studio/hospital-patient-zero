@@ -2729,7 +2729,7 @@ export class GameEngine {
     }
     if (this.cat) {
       const c = this.cat;
-      w.cat = [r(c.pos.x), r(c.pos.z), r(c.yaw), CAT_POSES.indexOf(c.pose), c.state === 'away' ? 0 : 1];
+      w.cat = [r(c.pos.x), r(c.pos.z), r(c.yaw), CAT_POSES.indexOf(c.pose), c.state === 'away' ? 0 : 1, c.golden ? 1 : 0];
     }
     const notes = this.raceKit ? this.raceKit.notes : this.state.notesCollected;
     if (notes.length !== this.lastNotesSent) {
@@ -2763,6 +2763,10 @@ export class GameEngine {
       c.yaw = w.cat[2];
       c.netPose = CAT_POSES[w.cat[3]] ?? 'sit';
       c.state = w.cat[4] ? 'follow' : 'away';
+      if (!!w.cat[5] !== c.golden) {
+        c.golden = !!w.cat[5];
+        c.body.setGolden(c.golden);
+      }
     }
     w.monsters.forEach((v, i) => this.monsters[i]?.netApply(v[0], v[1], v[2], MONSTER_STATES[v[3]] ?? 'PATROL', v[4]));
     for (const [id, open, locked] of w.doors) {
@@ -2859,7 +2863,16 @@ export class GameEngine {
     if (p.isSprinting) r.sprinted = true;
     // 🐈‍⬛ the cat walking with you
     const cat = this.cat;
-    if (cat && cat.state !== 'away' && Math.hypot(cat.pos.x - p.position.x, cat.pos.z - p.position.z) < 6) r.catT += delta;
+    if (cat && cat.state !== 'away' && Math.hypot(cat.pos.x - p.position.x, cat.pos.z - p.position.z) < 6) {
+      r.catT += delta;
+      // ✨ The golden cat (1 game in 50) brings luck once it has walked with you for 30 s
+      if (cat.golden && !this.goldenDone && r.catT >= 30) {
+        this.goldenDone = true;
+        this.ach('golden_cat');
+        sound.playMeow(1, 0, false);
+        this.state.showToast('✨ Le chat doré se frotte contre ta jambe et ronronne… Ça porte chance ! (succès secret)', 7000);
+      }
+    }
     r.wasHid = p.isHidden;
     const chasing = this.monsters.some((m) => m.state === 'CHASE' && Math.hypot(m.position.x - p.position.x, m.position.z - p.position.z) < 18);
     if (chasing) {
@@ -3858,7 +3871,10 @@ export class GameEngine {
     /** pose drawn this frame (sent to the guests) / received from the host */
     pose: CatPose;
     netPose: CatPose;
+    /** ✨ 1 game in 50: a golden cat */
+    golden: boolean;
   } | null = null;
+  private goldenDone = false;
   private catScratched = new Set<string>();
   private catWarn = { seen: false, hiss: false, scratch: false, flee: false };
 
@@ -3871,7 +3887,12 @@ export class GameEngine {
     const body = new CatBody();
     body.group.visible = false;
     this.scene.add(body.group);
-    this.cat = { body, pos: new THREE.Vector3(), yaw: 0, state: 'away', t: 35 + Math.random() * 40, stay: 0, stuck: 0, hissCd: 0, scratchCd: 4, goal: null, speed: 0, fleeDir: new THREE.Vector3(), pose: 'sit', netPose: 'sit' };
+    this.cat = { body, pos: new THREE.Vector3(), yaw: 0, state: 'away', t: 35 + Math.random() * 40, stay: 0, stuck: 0, hissCd: 0, scratchCd: 4, goal: null, speed: 0, fleeDir: new THREE.Vector3(), pose: 'sit', netPose: 'sit', golden: false };
+    this.goldenDone = false;
+    if (this.net?.role !== 'guest' && Math.random() < 0.02) {
+      this.cat.golden = true;
+      body.setGolden(true);
+    }
   }
 
   private catBlocked(x: number, z: number) {
@@ -3992,7 +4013,8 @@ export class GameEngine {
           c.body.group.visible = true;
           sound.playMeow(Math.hypot(pp.x - c.pos.x, pp.z - c.pos.z), 0, false);
           this.markSeen('chat');
-          if (!this.catWarn.seen) {
+          if (c.golden) this.state.showToast('✨ Un chat… DORÉ ?! Il brille dans le noir. Laisse-le te suivre un moment, on dit qu\'il porte chance.', 7000);
+          else if (!this.catWarn.seen) {
             this.catWarn.seen = true;
             this.state.showToast('🐈‍⬛ Un chat noir te fixe de ses yeux jaunes… Il a l\'air de vouloir te suivre. Ne cours pas, tu lui ferais peur.');
           }
