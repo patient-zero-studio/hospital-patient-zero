@@ -45,6 +45,14 @@ export const BEASTS: BeastEntry[] = [
     tips: ['Un bruit qui revient toujours du même casier ? Méfiance.', 'La lampe UV révèle ses traces de mains sur la porte de son casier.', 'Ne vous cachez jamais dans son casier, et ne restez pas planté devant.'],
   },
   {
+    id: 'eteigneur',
+    name: 'L\'Éteigneur',
+    emoji: '🕯️',
+    where: 'Chapitre 1 — difficulté Difficile et plus',
+    desc: 'Une ombre trop grande qui traverse les murs. Elle éteint les lumières des pièces où elle passe et boit la batterie de ta lampe. Sa caresse glacée ne tue pas… mais le Patient Zéro l\'entend.',
+    tips: ['Lampe allumée, on ne voit que ses deux yeux blancs. Éteins-la pour la voir en entier.', 'Reste sous une lampe allumée : elle n\'ose pas approcher.', 'La lampe UV la brûle, et remettre le courant la fait fuir.'],
+  },
+  {
     id: 'aveugle',
     name: 'L\'Aveugle',
     emoji: '🦇',

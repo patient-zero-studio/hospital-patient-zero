@@ -29,6 +29,8 @@ import { Difficulty, difficultyInfo } from './Difficulty';
 import { CanSystem, FlipResult } from './CanSystem';
 import { RemotePlayer } from './RemotePlayer';
 import { MimicBody } from './Mimic';
+import { ShadeBody } from './Shade';
+import type { RunStats } from '../stars';
 import type { CollisionBox, FlickerLight, HidingSpot } from './MapBuilder';
 import { BEASTS } from '../bestiary';
 import { GALLERY_DOCS } from '../galleryDocs';
@@ -1863,6 +1865,7 @@ export class GameEngine {
     this.setupUv();
     this.setupSecret();
     this.setupMimic();
+    this.setupShade();
 
     // Cans live inside the level group so interactions can raycast them
     this.cans = new CanSystem(this.map.sceneGroup, {
@@ -2117,7 +2120,7 @@ export class GameEngine {
   public reset() {
     this.destroyWorld();
     this.buildWorld();
-    this.run = { time: 0, light: 0, hid: false, chased: false, voiced: false, crawler: 'LURK' };
+    this.run = { time: 0, light: 0, hid: false, chased: false, voiced: false, crawler: 'LURK', dist: 0, lx: NaN, lz: NaN, hides: 0, wasHid: false, hits: 0, chases: 0, inChase: false };
     this.waterWarned = false;
     // Online, the guest wakes up a little further in room 104 (not inside the host)
     const sewers = this.chapter === 2;
@@ -2732,7 +2735,12 @@ export class GameEngine {
   // Achievements
   // -----------------------------------------------------------------------
   /** What happened during this run (for the escape achievements). */
-  private run = { time: 0, light: 0, hid: false, chased: false, voiced: false, crawler: 'LURK' as string };
+  private run = { time: 0, light: 0, hid: false, chased: false, voiced: false, crawler: 'LURK' as string, dist: 0, lx: NaN, lz: NaN, hides: 0, wasHid: false, hits: 0, chases: 0, inChase: false };
+  /** ⭐ End-of-run numbers (stars + the victory screen) */
+  public runStats(): RunStats {
+    const r = this.run;
+    return { time: r.time, distance: Math.round(r.dist), hides: r.hides, hits: r.hits, chases: r.chases, docs: this.state.notesCollected.length };
+  }
 
   private ach(id: string) {
     this.cb.onAchievement?.(id);
@@ -2754,6 +2762,23 @@ export class GameEngine {
     r.time += delta;
     if (p.flashlightOn) r.light += delta;
     if (p.isHidden) r.hid = true;
+    // ⭐ Stats: distance walked (teleports ignored), hiding spots used, chases you got away from
+    if (!isNaN(r.lx)) {
+      const d = Math.hypot(p.position.x - r.lx, p.position.z - r.lz);
+      if (d < 3) r.dist += d;
+    }
+    r.lx = p.position.x;
+    r.lz = p.position.z;
+    if (p.isHidden && !r.wasHid) r.hides++;
+    r.wasHid = p.isHidden;
+    const chasing = this.monsters.some((m) => m.state === 'CHASE' && Math.hypot(m.position.x - p.position.x, m.position.z - p.position.z) < 18);
+    if (chasing) {
+      if (!r.inChase) this.buzz(70);
+      r.inChase = true;
+    } else if (r.inChase) {
+      r.inChase = false;
+      r.chases++;
+    }
     if (!r.chased) {
       const near = (v: THREE.Vector3) => Math.hypot(v.x - p.position.x, v.z - p.position.z) < 18;
       if (this.monsters.some((m) => m.state === 'CHASE' && near(m.position))) r.chased = true;
@@ -3637,6 +3662,172 @@ export class GameEngine {
   } | null = null;
   private mimicMark: UvMark | null = null;
   private mimicMet = false;
+  // -----------------------------------------------------------------------
+  // 🕯️ L'Éteigneur (chapter 1, Difficile and up, solo): snuffs out the lights,
+  // drinks your torch, and when it touches you the Patient Zero hears it.
+  // The UV lamp and the power coming back make it flee.
+  // -----------------------------------------------------------------------
+  private shade: {
+    body: ShadeBody;
+    pos: THREE.Vector3;
+    state: 'gone' | 'feed' | 'stalk';
+    t: number;
+    body01: number;
+    eyes01: number;
+    power: boolean;
+  } | null = null;
+  private shadeOff = new Map<FlickerLight, number>();
+  private shadeWarn = { lights: false, drink: false, seen: false };
+
+  private setupShade() {
+    this.shade?.body.dispose();
+    this.shade = null;
+    this.shadeOff.clear();
+    this.shadeWarn = { lights: false, drink: false, seen: false };
+    if (this.chapter !== 1 || this.difficulty < 3 || this.maze || this.forest || this.site) return;
+    if (this.imp || this.vsRole || this.watchOnly || this.survival || this.xmasNight || this.net) return;
+    const body = new ShadeBody();
+    body.update(0, 0, 0);
+    this.scene.add(body.group);
+    this.shade = { body, pos: new THREE.Vector3(), state: 'gone', t: 50 + Math.random() * 30, body01: 0, eyes01: 0, power: this.state.powerRestored };
+  }
+
+  /** A lit fixture the creature can reach, not too close to you */
+  private shadePickLight() {
+    const pp = this.player.position;
+    const ok = this.map.lights.filter((l) => {
+      if (this.shadeOff.has(l) || (l.needsPower && !this.state.powerRestored)) return false;
+      const d = Math.hypot(l.position.x - pp.x, l.position.z - pp.z);
+      return d > 7 && d < 28;
+    });
+    return ok.length ? ok[Math.floor(Math.random() * ok.length)] : null;
+  }
+
+  private shadeGone(seconds: number) {
+    const s = this.shade;
+    if (!s) return;
+    s.state = 'gone';
+    s.t = seconds;
+  }
+
+  private updateShade(delta: number) {
+    for (const [l, t] of this.shadeOff) {
+      if (t - delta <= 0) this.shadeOff.delete(l);
+      else this.shadeOff.set(l, t - delta);
+    }
+    const s = this.shade;
+    if (!s) return;
+    const p = this.player;
+    const pp = p.position;
+    const fade = (cur: number, want: number) => cur + (want - cur) * (1 - Math.exp(-5 * delta));
+    if (this.dying || this.finished || this.pendingEnding || this.photo) {
+      s.body.update(delta, (s.body01 = fade(s.body01, 0)), (s.eyes01 = fade(s.eyes01, 0)));
+      return;
+    }
+    // The power is back: every light comes on again and it melts away
+    if (this.state.powerRestored && !s.power) {
+      s.power = true;
+      this.shadeOff.clear();
+      if (s.state !== 'gone') this.state.showToast('Le courant revient… une ombre maigre se dissout dans la lumière.');
+      this.shadeGone(40);
+    }
+    s.t -= delta;
+    const dx = pp.x - s.pos.x;
+    const dz = pp.z - s.pos.z;
+    const d = Math.hypot(dx, dz);
+    let wantBody = 0;
+    let wantEyes = 0;
+    if (s.state === 'gone') {
+      if (s.t <= 0) {
+        const l = this.shadePickLight();
+        if (!l) s.t = 8;
+        else {
+          s.pos.set(l.position.x, 0, l.position.z);
+          s.state = 'feed';
+          s.t = 2.2;
+        }
+      }
+    } else if (s.state === 'feed') {
+      // Under the lamp, the light stutters… then the whole room goes dark
+      for (const l of this.map.lights) if (Math.hypot(l.position.x - s.pos.x, l.position.z - s.pos.z) < 3) l.k = Math.random() < 0.5 ? 0.1 : 1;
+      wantEyes = d < 18 ? 1 : 0;
+      if (s.t <= 0) {
+        let n = 0;
+        for (const l of this.map.lights) {
+          if (Math.hypot(l.position.x - s.pos.x, l.position.z - s.pos.z) < 7.5) {
+            this.shadeOff.set(l, 45);
+            n++;
+          }
+        }
+        if (n && d < 26) {
+          sound.playFlickerHum();
+          if (!this.shadeWarn.lights) {
+            this.shadeWarn.lights = true;
+            this.state.showToast('Les lumières s\'éteignent une à une, tout près… Quelque chose aime le noir.');
+          }
+        }
+        s.state = 'stalk';
+        s.t = 35;
+      }
+    } else {
+      // Stalking: drifts through the walls towards you, unless you stand in the light
+      const inLight = this.map.lights.some((l) => l.current > 0.5 && !this.shadeOff.has(l) && Math.hypot(l.position.x - pp.x, l.position.z - pp.z) < 4.5);
+      if (d < 16 && !inLight && !p.isHidden) {
+        const step = Math.min(d, 1.35 * delta);
+        s.pos.x += (dx / (d || 1)) * step;
+        s.pos.z += (dz / (d || 1)) * step;
+      }
+      wantEyes = d < 16 ? 1 : 0;
+      // 🟣 The UV lamp burns it
+      if (this.uvOn && p.flashlightOn && d < 10) {
+        const fx = -Math.sin(p.yaw);
+        const fz = -Math.cos(p.yaw);
+        if ((-dx * fx + -dz * fz) / (d || 1) > 0.8) {
+          sound.playHiss(1.2);
+          this.state.showToast('La lumière violette la brûle : l\'ombre se déchire et disparaît en sifflant.');
+          this.ach('uv_shade');
+          this.shadeGone(35);
+        }
+      }
+      // It drinks your torch
+      if (s.state === 'stalk' && d < 8 && p.flashlightOn) {
+        p.flashlightBattery = Math.max(0, p.flashlightBattery - delta * 3);
+        if (!this.shadeWarn.drink) {
+          this.shadeWarn.drink = true;
+          this.state.showToast('Ta lampe faiblit à vue d\'œil… quelque chose la boit. Éteins-la, ou trouve de la lumière.');
+        }
+      }
+      // Its touch: your light dies, and the Patient Zero heard it
+      if (s.state === 'stalk' && d < 1.1) {
+        p.flashlightBattery = Math.max(0, p.flashlightBattery - 40);
+        this.lightsOutTimer = Math.max(this.lightsOutTimer, 3);
+        this.fear = 1;
+        this.damage = Math.max(this.damage, 0.5);
+        p.shake = Math.max(p.shake, 0.7);
+        sound.playStatic(1.2, 0.3);
+        this.buzz([90, 40, 90]);
+        this.alertAll(pp.clone().setY(1.2), 40);
+        this.state.showToast('Une main glacée te traverse… ta lampe meurt. Au loin, quelque chose t\'a entendu. Cache-toi !');
+        this.shadeGone(25);
+      }
+      if (s.state === 'stalk' && s.t <= 0) this.shadeGone(15 + Math.random() * 12);
+    }
+    // You only see it whole in the dark; with the torch on, just two eyes
+    if (s.state !== 'gone' && d < 18) wantBody = p.flashlightOn ? 0 : 1;
+    s.body01 = fade(s.body01, wantBody);
+    s.eyes01 = fade(s.eyes01, s.state === 'gone' ? 0 : wantEyes);
+    s.body.group.position.copy(s.pos);
+    s.body.group.rotation.y = Math.atan2(dx, dz);
+    s.body.update(delta, s.body01, s.eyes01);
+    if ((s.body01 > 0.5 || s.eyes01 > 0.5) && d < 10) {
+      this.markSeen('eteigneur');
+      if (!this.shadeWarn.seen) {
+        this.shadeWarn.seen = true;
+        this.fear = Math.max(this.fear, 0.8);
+      }
+    }
+  }
+
   private setupMimic() {
     this.mimic?.body?.dispose();
     this.mimic = null;
@@ -4689,6 +4880,7 @@ export class GameEngine {
     this.checkScares();
     this.updateRandomEvents(delta);
     this.updateMimic(delta);
+    this.updateShade(delta);
     this.updateUv(delta);
     this.updateSecret(delta);
     this.updateWounds(delta);
@@ -5100,6 +5292,7 @@ export class GameEngine {
     }
     this.player.shake = 1;
     this.fear = 1;
+    this.buzz([250, 80, 400]);
     sound.setHeartbeat(60, false);
     sound.playMonsterChaseRoar();
     sound.playJumpscareStinger();
@@ -5216,6 +5409,8 @@ export class GameEngine {
         }
       }
       let k = !powered ? 0 : l.flicker ? l.k : 1;
+      // 🕯️ snuffed out by l'Éteigneur
+      if (this.shadeOff.has(l)) k = Math.random() < 0.01 ? 0.15 : 0;
       if (out) k = Math.random() < 0.04 ? 0.3 : 0;
       l.fixtureMat.emissiveIntensity = l.baseEmissive * k;
       l.current = l.baseIntensity * k;
@@ -6336,6 +6531,16 @@ export class GameEngine {
     return !this.vsRole && !this.imp && !this.watchOnly && !this.pendingEnding && !this.finished;
   }
 
+  /** 📳 Phones: short buzz (hit, spotted, caught) unless turned off */
+  private buzz(pattern: number | number[]) {
+    if (this.settings.vibration === false || this.watchOnly) return;
+    try {
+      navigator.vibrate?.(pattern);
+    } catch {
+      /* not supported */
+    }
+  }
+
   private resetWounds() {
     this.wounded = false;
     this.bleedT = 0;
@@ -6384,6 +6589,7 @@ export class GameEngine {
   private wound(m: MonsterAI | null) {
     const p = this.player;
     this.wounded = true;
+    this.run.hits++;
     this.bleedT = GameEngine.BLEED_TIME;
     p.limp = GameEngine.LIMP_TIME;
     this.woundGrace = 3;
@@ -6405,6 +6611,7 @@ export class GameEngine {
     this.fear = 1;
     this.stress = 1;
     sound.playJumpscareStinger();
+    this.buzz([140, 60, 220]);
     this.bloodLast.copy(p.position);
     this.dropBlood(p.position, 1.7);
     this.state.showToast('🩸 Il vous a lacéré ! Vous saignez et vous boitez… Un deuxième coup sera FATAL. Trouvez un bandage !');

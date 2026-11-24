@@ -80,6 +80,10 @@ export interface ControlSettings {
   speedrun?: boolean;
   /** 🧭 a hint shows up when you stop making progress (on by default) */
   hints?: boolean;
+  /** 📳 phone vibrates when hit / spotted / caught (on by default) */
+  vibration?: boolean;
+  /** 📱 size of the on-screen buttons and joystick (1, 1.25, 1.5) */
+  touchScale?: number;
 }
 
 export type GraphicsQuality = 'auto' | 'low' | 'medium' | 'high' | 'ultra';

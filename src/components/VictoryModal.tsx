@@ -1,6 +1,7 @@
 import React from 'react';
 import { GameEnding } from '../types';
-import { Award, RotateCcw, Home, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Award, RotateCcw, Home, Sparkles, CheckCircle2, Star } from 'lucide-react';
+import { RunStats, STAR_LABELS, STAR_REWARD, fmtClock } from '../stars';
 
 interface VictoryModalProps {
   ending: GameEnding;
@@ -12,6 +13,9 @@ interface VictoryModalProps {
   /** Undefined = waiting for the host (online guest). */
   onPlayAgain?: () => void;
   onMainMenu: () => void;
+  /** ⭐ numbers of the run + stars */
+  result?: { stats: RunStats; stars: [boolean, boolean, boolean] | null; chapter: number; before: number; bonus: number } | null;
+  loggedIn?: boolean;
 }
 
 export const VictoryModal: React.FC<VictoryModalProps> = ({
@@ -23,6 +27,8 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
   difficultyLabel,
   onPlayAgain,
   onMainMenu,
+  result = null,
+  loggedIn = false,
 }) => {
   return (
     <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4">
@@ -37,6 +43,51 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
         <h2 className="text-xl font-mono uppercase tracking-widest text-zinc-100 font-extrabold mb-4">
           {title}
         </h2>
+
+        {/* ⭐ Stars of this chapter */}
+        {result?.stars && (
+          <div className="w-full mb-4">
+            <div className="flex justify-center gap-3 mb-2">
+              {result.stars.map((ok, i) => {
+                const isNew = ok && !((result.before >> i) & 1);
+                return (
+                  <div key={i} className="flex flex-col items-center w-[110px]">
+                    <Star
+                      className={`w-10 h-10 transition-transform ${ok ? 'text-amber-400 fill-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.7)]' : 'text-zinc-700'} ${isNew ? 'animate-bounce' : ''}`}
+                      style={{ animationDelay: `${i * 0.15}s` }}
+                    />
+                    <span className={`text-[10px] font-mono mt-1 leading-tight ${ok ? 'text-amber-200' : 'text-zinc-600'}`}>{STAR_LABELS(result.chapter)[i]}</span>
+                    {isNew && <span className="text-[9px] font-mono text-emerald-400">NOUVELLE !</span>}
+                  </div>
+                );
+              })}
+            </div>
+            {result.bonus > 0 && (
+              <div className="text-xs font-mono text-amber-300 animate-pulse">⭐⭐⭐ 3 étoiles sur ce chapitre : +{STAR_REWARD} pièces !</div>
+            )}
+            {!loggedIn && <div className="text-[10px] font-mono text-zinc-500">Connecte-toi pour garder tes étoiles.</div>}
+          </div>
+        )}
+
+        {/* 📊 Numbers of the run */}
+        {result && (
+          <div className="w-full grid grid-cols-3 sm:grid-cols-6 gap-1.5 mb-5">
+            {[
+              ['⏱️', fmtClock(result.stats.time), 'Temps'],
+              ['👣', `${result.stats.distance} m`, 'Distance'],
+              ['🚪', String(result.stats.hides), 'Cachettes'],
+              ['🩸', String(result.stats.hits), 'Coups reçus'],
+              ['🏃', String(result.stats.chases), 'Poursuites semées'],
+              ['📄', String(result.stats.docs), 'Documents'],
+            ].map(([ic, v, l]) => (
+              <div key={l} className="bg-zinc-900/60 border border-zinc-800 py-2 px-1 flex flex-col items-center">
+                <span className="text-base leading-none">{ic}</span>
+                <span className="text-sm font-mono font-bold text-zinc-100 mt-1">{v}</span>
+                <span className="text-[9px] font-mono uppercase text-zinc-500 leading-tight text-center">{l}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Narrative Box */}
         <div className="bg-zinc-900/50 border border-zinc-800 p-5 mb-6 text-left w-full">

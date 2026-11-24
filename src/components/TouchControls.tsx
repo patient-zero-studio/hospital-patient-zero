@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Backpack, Eye, Flashlight, Hand, Mic, MicOff, Pause, PersonStanding, Trash2, Zap } from 'lucide-react';
+import { Backpack, Eye, Flashlight, Hand, Map as MapIcon, Mic, MicOff, Pause, PersonStanding, Trash2, Zap } from 'lucide-react';
 import type { GameEngine, HudSnapshot } from '../game/Engine';
 
 /** True on phones / tablets (finger, no mouse). */
@@ -30,6 +30,10 @@ interface Props {
   hud: HudSnapshot;
   onInventory: () => void;
   onPause: () => void;
+  /** 🗺️ open the map */
+  onMap?: () => void;
+  /** 📱 bigger buttons / joystick (1, 1.25, 1.5) */
+  scale?: number;
 }
 
 /** A round button that reacts on touch-down (no 300 ms click delay). */
@@ -67,7 +71,10 @@ const Btn: React.FC<{
  * On-screen controls for phones: a virtual joystick on the left, drag on the
  * right to look around, and big buttons for the actions.
  */
-export const TouchControls: React.FC<Props> = ({ engine, hud, onInventory, onPause }) => {
+export const TouchControls: React.FC<Props> = ({ engine, hud, onInventory, onPause, onMap, scale: wanted = 1 }) => {
+  // Never so big that the action buttons climb onto the top bar (short phones)
+  const scale = Math.min(wanted, Math.max(1, (window.innerHeight - 60) / 250));
+  const R = Math.round(STICK_R * scale);
   const stickRef = useRef<{ id: number; ox: number; oy: number } | null>(null);
   const lookRef = useRef<{ id: number; x: number; y: number } | null>(null);
   const [knob, setKnob] = useState<{ ox: number; oy: number; dx: number; dy: number } | null>(null);
@@ -113,11 +120,11 @@ export const TouchControls: React.FC<Props> = ({ engine, hud, onInventory, onPau
     let dx = e.clientX - s.ox;
     let dy = e.clientY - s.oy;
     const len = Math.hypot(dx, dy);
-    if (len > STICK_R) {
-      dx = (dx / len) * STICK_R;
-      dy = (dy / len) * STICK_R;
+    if (len > R) {
+      dx = (dx / len) * R;
+      dy = (dy / len) * R;
     }
-    p.touchMove = { x: dx / STICK_R, y: -dy / STICK_R };
+    p.touchMove = { x: dx / R, y: -dy / R };
     setKnob({ ox: s.ox, oy: s.oy, dx, dy });
   };
   const stickUp = (e: React.PointerEvent) => {
@@ -175,16 +182,16 @@ export const TouchControls: React.FC<Props> = ({ engine, hud, onInventory, onPau
 
       {/* Joystick */}
       {knob ? (
-        <div className="absolute pointer-events-none" style={{ left: knob.ox - STICK_R, top: knob.oy - STICK_R }}>
-          <div className="rounded-full border-2 border-white/25 bg-white/5" style={{ width: STICK_R * 2, height: STICK_R * 2 }} />
+        <div className="absolute pointer-events-none" style={{ left: knob.ox - R, top: knob.oy - R }}>
+          <div className="rounded-full border-2 border-white/25 bg-white/5" style={{ width: R * 2, height: R * 2 }} />
           <div
             className="absolute rounded-full bg-white/35 border border-white/60"
-            style={{ width: 50, height: 50, left: STICK_R - 25 + knob.dx, top: STICK_R - 25 + knob.dy }}
+            style={{ width: 50 * scale, height: 50 * scale, left: R - 25 * scale + knob.dx, top: R - 25 * scale + knob.dy }}
           />
         </div>
       ) : (
         <div className="absolute left-10 bottom-24 pointer-events-none opacity-40">
-          <div className="rounded-full border-2 border-dashed border-white/30 flex items-center justify-center text-[9px] font-mono text-white/70" style={{ width: STICK_R * 2, height: STICK_R * 2 }}>
+          <div className="rounded-full border-2 border-dashed border-white/30 flex items-center justify-center text-[9px] font-mono text-white/70" style={{ width: R * 2, height: R * 2 }}>
             BOUGER
           </div>
         </div>
@@ -199,17 +206,23 @@ export const TouchControls: React.FC<Props> = ({ engine, hud, onInventory, onPau
           <Backpack className="w-5 h-5" />
         </Btn>
       )}
+      {!monster && onMap && (
+        <Btn onDown={onMap} className="top-3 right-[116px] w-11 h-11">
+          <MapIcon className="w-5 h-5" />
+        </Btn>
+      )}
       {hud.voice && (
         <Btn
           onDown={() => engine.toggleVoiceMute()}
           active={hud.voice.on && !hud.voice.muted}
-          className={`top-3 ${monster ? 'right-16' : 'right-[116px]'} w-11 h-11 ${hud.voice.self ? 'ring-2 ring-emerald-400' : ''}`}
+          className={`top-3 ${monster ? 'right-16' : onMap ? 'right-[168px]' : 'right-[116px]'} w-11 h-11 ${hud.voice.self ? 'ring-2 ring-emerald-400' : ''}`}
         >
           {hud.voice.on && !hud.voice.muted ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5 text-red-400" />}
         </Btn>
       )}
 
-      {/* Action cluster (bottom-right) */}
+      {/* Action cluster (bottom-right), scaled from that corner */}
+      <div className="absolute right-0 bottom-0 w-[300px] h-[320px] pointer-events-none" style={{ transform: `scale(${scale})`, transformOrigin: '100% 100%' }}>
       <Btn onDown={() => engine.interact()} className={`right-6 bottom-24 w-20 h-20 ${hint ? 'ring-2 ring-red-500/80' : ''}`} label={monster ? 'Attraper' : 'Action'}>
         <Hand className="w-8 h-8" />
       </Btn>
@@ -244,6 +257,7 @@ export const TouchControls: React.FC<Props> = ({ engine, hud, onInventory, onPau
           <Eye className="w-6 h-6" />
         </Btn>
       )}
+      </div>
 
       {/* Hotbar overlay (same place as the HUD hotbar): tap = use, hold = drop */}
       {!monster && !hud.hidden && (

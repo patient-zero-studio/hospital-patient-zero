@@ -18,7 +18,7 @@ const DAILY_LINES = [
 ];
 
 import { RANK_TIERS, tierOf } from '../ranked';
-import { Award, Bell, BellOff, BookOpen, Coins, Crown, Flag, GraduationCap, HelpCircle, Image as ImageIcon, ListOrdered, Lock, Medal, Music, Plus, Settings, Shield, Shirt, ShoppingBag, Skull, Swords, Target, Ticket, User, Users, VolumeX, X, Zap } from 'lucide-react';
+import { Award, Bell, BellOff, BookOpen, Coins, Crown, Flag, GraduationCap, HelpCircle, Image as ImageIcon, ListOrdered, Lock, Medal, Star, Music, Plus, Settings, Shield, Shirt, ShoppingBag, Skull, Swords, Target, Ticket, User, Users, VolumeX, X, Zap } from 'lucide-react';
 import type { ChallengeDef } from '../challenges';
 import { ACHIEVEMENTS } from '../achievements';
 import { AudioSettings, ControlSettings } from '../types';
@@ -33,6 +33,7 @@ import { LevelInfo, levelColor } from '../levels';
 import type { Boost } from '../net/api';
 import type { Appearance } from '../appearance';
 import { MenuStage } from './MenuStage';
+import { STAR_LABELS } from '../stars';
 
 export const BOOST_LABEL: Record<string, string> = {
   coins2: '🪙 PIÈCES DOUBLÉES',
@@ -129,6 +130,8 @@ interface StartScreenProps {
   ch8Unlocked?: boolean;
   /** secret chapter: documents found so far / needed */
   docsProgress?: [number, number];
+  /** ⭐ stars per chapter (bitmask) */
+  chapterStars?: Record<string, number>;
   challenge?: ChallengeDef;
   challengeOn?: boolean;
   challengeDone?: boolean;
@@ -178,6 +181,15 @@ const Sq: React.FC<{ icon: React.ReactNode; label: string; color: string; onClic
       </span>
     )}
   </button>
+);
+
+/** ⭐⭐⭐ earned on a chapter */
+const StarRow: React.FC<{ mask: number; size?: number; chapter: number }> = ({ mask, size = 12, chapter }) => (
+  <span className="inline-flex gap-0.5" title={STAR_LABELS(chapter).map((l, i) => `${(mask >> i) & 1 ? '★' : '☆'} ${l}`).join('\n')}>
+    {[0, 1, 2].map((i) => (
+      <Star key={i} style={{ width: size, height: size }} className={(mask >> i) & 1 ? 'text-amber-400 fill-amber-400' : 'text-zinc-600'} />
+    ))}
+  </span>
 );
 
 /** Small square button of the top bar */
@@ -236,6 +248,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   ch7Unlocked = false,
   ch8Unlocked = false,
   docsProgress,
+  chapterStars = {},
   onChangeChapter,
   challenge,
   challengeOn = false,
@@ -433,7 +446,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
       style={{ background: cur.color }}
       title="Changer de chapitre et de difficulté"
     >
-      <span className="block font-game outl text-[11px] text-red-400">CHAPITRE {cur.n} ▸ CHANGER</span>
+      <span className="flex items-center gap-2 font-game outl text-[11px] text-red-400">CHAPITRE {cur.n} ▸ CHANGER <StarRow mask={chapterStars[cur.n] ?? 0} chapter={cur.n} /></span>
       <span className="block font-game outl text-[23px] short:text-[18px] leading-tight pr-12">{cur.name}</span>
       <span className="block short:hidden text-[11px] font-bold text-white/85 pr-12 truncate">{cur.sub}</span>
       <span className="absolute right-2 -bottom-3 font-game text-[72px] short:text-[52px] leading-none text-red-700/50 pointer-events-none">{String(cur.n).padStart(2, '0')}</span>
@@ -627,7 +640,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                       >
                         <span className="block font-game outl text-[11px] text-white/80">CHAPITRE {c.n}</span>
                         <span className="block font-game outl text-[16px] leading-tight pr-6">{locked ? '???' : c.name}</span>
-                        {locked && <span className="block text-[10px] font-bold text-zinc-400 leading-tight pr-6">{lockText(c.n)}</span>}
+                        {locked ? <span className="block text-[10px] font-bold text-zinc-400 leading-tight pr-6">{lockText(c.n)}</span> : <StarRow mask={chapterStars[c.n] ?? 0} chapter={c.n} size={13} />}
                         <span className="absolute right-1.5 bottom-0 font-game text-[40px] leading-none text-red-700/45">{locked ? <Lock className="w-6 h-6 mb-2 text-zinc-600" /> : String(c.n).padStart(2, '0')}</span>
                         {active && <span className="absolute top-1 right-1.5 font-game text-red-400 text-[14px]">✔</span>}
                       </button>
@@ -760,6 +773,43 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                   );
                 })}
               </div>
+              {touch && (
+                <div className="space-y-2">
+                  <button
+                    onClick={() => onUpdateControls({ vibration: controlSettings.vibration === false })}
+                    className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border-2 border-black text-left"
+                    style={{ background: '#1d1d25' }}
+                  >
+                    <span>
+                      <span className="block">Vibrations</span>
+                      <span className="block text-[11px] text-zinc-500 font-normal">Quand le monstre te repère, te frappe ou t'attrape</span>
+                    </span>
+                    <span className={`relative shrink-0 w-11 h-6 rounded-full border-2 border-black ${controlSettings.vibration !== false ? 'bg-red-600' : 'bg-zinc-700'}`}>
+                      <span className={`absolute top-[1px] w-[18px] h-[18px] rounded-full bg-white border border-black transition-all ${controlSettings.vibration !== false ? 'left-[21px]' : 'left-[1px]'}`} />
+                    </span>
+                  </button>
+                  <div className="px-3 py-2.5 rounded-xl border-2 border-black" style={{ background: '#1d1d25' }}>
+                    <span className="block mb-2">Taille des boutons et du joystick</span>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(
+                        [
+                          [1, 'Normale'],
+                          [1.25, 'Grande'],
+                          [1.5, 'Très grande'],
+                        ] as const
+                      ).map(([v, l]) => (
+                        <button
+                          key={v}
+                          onClick={() => onUpdateControls({ touchScale: v })}
+                          className={`h-9 rounded-lg border-2 font-game text-[12px] ${(controlSettings.touchScale ?? 1) === v ? 'border-red-500 bg-red-950/60 text-red-200' : 'border-black bg-zinc-800 text-zinc-300'}`}
+                        >
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
               {!touch && (
                 <div className="flex flex-wrap gap-x-3 gap-y-1.5 pt-1 text-[11px] text-zinc-400 font-normal">
                   {[

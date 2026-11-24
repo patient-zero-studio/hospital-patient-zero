@@ -44,6 +44,7 @@ import { censorText, isBadName } from '../src/moderation.ts';
 import { RANK_TIERS, RPASS_TIERS, RPASS_XP_PER_TIER, RPassReward, nextTier, rankLoss, rankWin, rpassReward, rpassWinXp, tierOf } from '../src/ranked.ts';
 import { CLAN_CHEST_LEVELS, CLAN_COLORS, CLAN_EMBLEMS, CLAN_MAX, CLAN_NAME_RE, CLAN_PRICE, CLAN_PRIZES, CLAN_TAG_RE, WAR_LOSS, WAR_TIE, WAR_WIN, nextWarStart, warEnds, warKey } from '../src/clans.ts';
 import { MENU_TRACKS } from '../src/music.ts';
+import { STAR_REWARD } from '../src/stars.ts';
 import { ENDING_KEYS, isEndingKey } from '../src/gallery.ts';
 import { GALLERY_DOCS, isDocId } from '../src/galleryDocs.ts';
 import { BEASTS, ITEM_ENTRIES, isBeastId, isItemEntryId } from '../src/bestiary.ts';
@@ -141,6 +142,8 @@ interface User {
   /** 📖 bestiary: creatures met, item kinds found */
   beasts?: string[];
   itemsSeen?: string[];
+  /** ⭐ stars per chapter (bitmask: escape / unhurt / fast) */
+  stars?: Record<string, number>;
   /** 🏅 ranked season (month): points, best tier; past seasons */
   rank?: { season: string; points: number; best: number; wins: number; losses: number };
   rankHistory?: { season: string; tier: string; points: number }[];
@@ -498,6 +501,7 @@ const SHOP_LOCKED = 'Boutique verrouillée : échappe-toi de l\'hôpital une foi
 
 const walletView = (u: User) => ({
   ranked: rankView(u),
+  stars: u.stars ?? {},
   tracks: isAdmin(u) ? MENU_TRACKS.map((t) => t.id) : (u.tracks ?? []),
   gallery: isAdmin(u)
     ? { endings: [...ENDING_KEYS], docs: GALLERY_DOCS.map((d) => d.id), beasts: BEASTS.map((b) => b.id), items: ITEM_ENTRIES.map((b) => b.id) }
@@ -1321,6 +1325,26 @@ app.post('/api/wallet/reward', (req, res) => {
   if (diff >= 2) payReferral(user);
   saveUsers();
   res.json({ gained, xp, rankGain, ...walletView(user) });
+});
+
+// ⭐ Stars won on a chapter (each one is kept for good); 3 stars the first time = coins
+app.post('/api/stars', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const ch = Math.floor(Number(req.body?.chapter));
+  const mask = Math.floor(Number(req.body?.mask)) & 7;
+  if (!(ch >= 1 && ch <= 8) || !mask) return res.status(400).json({ error: 'Étoiles inconnues.' });
+  const stars = (user.stars ??= {});
+  const before = stars[ch] ?? 0;
+  const after = before | mask;
+  stars[ch] = after;
+  let bonus = 0;
+  if (after === 7 && before !== 7) {
+    bonus = STAR_REWARD;
+    walletOf(user).coins += bonus;
+  }
+  saveUsers();
+  res.json({ before, after, bonus, ...walletView(user) });
 });
 
 // A lost run still gives a little XP

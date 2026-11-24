@@ -85,6 +85,7 @@ export const ACHIEVEMENTS: AchDef[] = [
   { id: 'boxes10', name: 'Collectionneur', desc: 'Ouvrir 10 boîtes mystère ou cadeaux.', icon: '🎁', tier: 'or', reward: 100, stat: 'boxes', goal: 10 },
   // --- Gadgets, speedrun, social ---
   { id: 'smoke', name: 'Écran de fumée', desc: 'Lancer un fumigène.', icon: '💨', tier: 'bronze', reward: 20 },
+  { id: 'uv_shade', name: 'Que la lumière soit', desc: "Brûler l'Éteigneur avec la lampe UV.", icon: '🕯️', tier: 'argent', reward: 75 },
   { id: 'trap', name: 'Pris au piège', desc: 'Bloquer un monstre avec un piège à mâchoires.', icon: '🪤', tier: 'argent', reward: 75 },
   { id: 'speedrun', name: 'Speedrunner', desc: 'Sortir d\'un chapitre en moins de 5 minutes (Normal ou plus).', icon: '⏱️', tier: 'or', reward: 150, server: true },
   { id: 'referral', name: 'Recruteur', desc: 'Parrainer un ami qui s\'échappe une fois.', icon: '📣', tier: 'argent', reward: 100, server: true },

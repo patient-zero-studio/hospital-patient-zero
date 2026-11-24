@@ -61,6 +61,7 @@ import { VictoryModal } from './components/VictoryModal';
 import { StartScreen } from './components/StartScreen';
 import { ownedEmotes } from './components/LobbyStage';
 import { MapOverlay } from './components/MapOverlay';
+import { RunStats, starsOf, starMask } from './stars';
 
 const SETTINGS_KEY = 'hospital-pz-settings-v2';
 
@@ -160,6 +161,8 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
+  /** ⭐ last finished run: numbers + stars (null stars = mode without stars) */
+  const [runResult, setRunResult] = useState<{ stats: RunStats; stars: [boolean, boolean, boolean] | null; chapter: number; before: number; bonus: number } | null>(null);
   /** 🗺️ [M] map */
   const [mapOpen, setMapOpen] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
@@ -492,6 +495,7 @@ export default function App() {
     if (onlineRef.current?.watching) return stopWatchingRef.current('👀 Ils s\'en sont sortis ! La partie est terminée.');
     reportGalleryRef.current(ending);
     const e = engineRef.current!;
+    starsRef.current();
     grantRewardRef.current(e.builtDifficulty ?? 2);
     bankTreatsRef.current();
     if (e.xmasNight) xmasRewardRef.current(e.runPresents);
@@ -921,6 +925,29 @@ export default function App() {
       /* offline */
     }
   };
+  /** ⭐ Stars of the run that just ended (Normal or harder, story chapters, not versus / race / survival) */
+  const awardStars = async () => {
+    const e = engineRef.current;
+    if (!e) return;
+    const stats = e.runStats();
+    const ch = e.builtChapter;
+    const on = onlineRef.current;
+    const eligible = e.builtDifficulty >= 2 && ch >= 1 && ch <= 8 && !e.survival && !e.xmasNight && on?.mode !== 'versus' && on?.mode !== 'race' && !on?.watching;
+    const stars = eligible ? starsOf(ch, stats) : null;
+    const before = wallet?.stars?.[ch] ?? 0;
+    setRunResult({ stats, stars, chapter: ch, before, bonus: 0 });
+    const s = sessionRef.current;
+    if (!stars || !s) return;
+    try {
+      const r = await api.stars(s.token, ch, starMask(stars));
+      setWallet(r);
+      setRunResult({ stats, stars, chapter: ch, before: r.before, bonus: r.bonus });
+    } catch {
+      /* offline */
+    }
+  };
+  const starsRef = useRef(awardStars);
+  starsRef.current = awardStars;
   const submitRunRef = useRef(submitRun);
   submitRunRef.current = submitRun;
 
@@ -1526,6 +1553,7 @@ export default function App() {
           ch7Unlocked={ch7Unlocked}
           ch8Unlocked={ch8Unlocked}
           docsProgress={[docsFound, STORY_DOC_IDS.length]}
+          chapterStars={wallet?.stars ?? {}}
           onCampaign={startCampaign}
           onTutorial={startTutorial}
           onSurvival={startSurvival}
@@ -1878,6 +1906,8 @@ export default function App() {
             ui.current.pausedAt = performance.now();
             setIsPaused(true);
           }}
+          onMap={() => setMapOpen(true)}
+          scale={controlSettings.touchScale ?? 1}
         />
       )}
       {IS_TOUCH && isPlaying && <RotateHint />}
@@ -1998,6 +2028,8 @@ export default function App() {
           }
           onPlayAgain={online?.role === 'guest' ? undefined : handleRestart}
           onMainMenu={handleMainMenu}
+          result={runResult}
+          loggedIn={!!session}
         />
       )}
     </div>
