@@ -100,7 +100,7 @@ export const EN: Record<string, string> = {
   "Deux créatures au rez-de-chaussée, une autre rôde à l'étage.": 'Two creatures downstairs, another one prowls upstairs.',
   "Trois créatures en bas, une à l'étage. Chaque bruit compte.": 'Three creatures downstairs, one upstairs. Every sound counts.',
   "Quatre créatures en bas, une à l'étage. Bonne chance.": 'Four creatures downstairs, one upstairs. Good luck.',
-  'Le Patient Zéro rôde dans les couloirs.': 'Patient Zero prowls the corridors.',
+  'Le Patient Zéro rôde dans les couloirs. Au chapitre 1, il est lent et voit mal : idéal pour débuter.': 'Patient Zero prowls the corridors. In chapter 1 he is slow and half-blind: perfect to start.',
   'Un monstre de plus vous traque.': 'One more monster is hunting you.',
   '🎯 Défi du jour': '🎯 Daily challenge',
   'Solo, difficulté 2+.': 'Solo, difficulty 2+.',

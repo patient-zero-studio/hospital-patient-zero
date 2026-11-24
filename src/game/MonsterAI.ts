@@ -104,6 +104,10 @@ export class MonsterAI {
 
   /** Daily mutator: faster monsters */
   public speedMul = 1;
+  /** 👂👁 how far it sees and hears (chapter 1 is gentler) */
+  public senseMul = 1;
+  /** seconds without seeing you before it gives up the chase */
+  public chaseGiveUp = 5;
   private patrolSpeed = 1.5;
   private investigateSpeed = 2.4;
   private chaseSpeed = 4.5;
@@ -694,7 +698,7 @@ export class MonsterAI {
     const dist = this.position.distanceTo(origin);
     // Walls muffle sound
     const occluded = !this.lineOfSight(this.eye(), new THREE.Vector3(origin.x, 1.2, origin.z), boxes);
-    const range = loudness * (occluded ? 0.55 : 1) * (this.blind ? 1.5 : 1);
+    const range = loudness * (occluded ? 0.55 : 1) * (this.blind ? 1.5 : this.senseMul);
     if (this.blind && dist < range) {
       // The Blind One hunts by ear: every sound steers it, a loud one close by makes it lunge
       this.noiseFromHiding = fromHiding;
@@ -749,7 +753,7 @@ export class MonsterAI {
     // Blind: it only "sees" what it brushes against
     if (this.blind) return dist < 1.6;
     // Mostly blind: it sees light and close movement
-    const range = 3.5 + 13 * s.playerVisibility;
+    const range = (3.5 + 13 * s.playerVisibility) * this.senseMul;
     if (dist > range) return false;
     if (dist > 2.5) {
       const fwd = new THREE.Vector3(Math.sin(this.mesh.rotation.y), 0, Math.cos(this.mesh.rotation.y));
@@ -927,7 +931,7 @@ export class MonsterAI {
           this.lastKnown.copy(s.playerPos);
         } else {
           this.lostSightTimer += delta;
-          if (this.lostSightTimer > 5) {
+          if (this.lostSightTimer > this.chaseGiveUp) {
             this.state = 'SEARCH';
             this.stateTimer = 5;
             this.setGoal(this.lastKnown, boxes);

@@ -10,7 +10,7 @@ export interface DifficultyInfo {
 /** Level N has N - 1 creatures roaming the hospital. */
 export const DIFFICULTIES: DifficultyInfo[] = [
   { level: 1, name: 'Exploration', monsters: 0, description: 'Aucun monstre. Explorez l\'hôpital et découvrez l\'histoire.' },
-  { level: 2, name: 'Normal', monsters: 1, description: 'Le Patient Zéro rôde dans les couloirs.' },
+  { level: 2, name: 'Normal', monsters: 1, description: 'Le Patient Zéro rôde dans les couloirs. Au chapitre 1, il est lent et voit mal : idéal pour débuter.' },
   { level: 3, name: 'Difficile', monsters: 2, description: 'Deux créatures au rez-de-chaussée, une autre rôde à l\'étage.' },
   { level: 4, name: 'Cauchemar', monsters: 3, description: 'Trois créatures en bas, une à l\'étage. Chaque bruit compte.' },
   { level: 5, name: 'Enfer', monsters: 4, description: 'Quatre créatures en bas, une à l\'étage. Bonne chance.' },

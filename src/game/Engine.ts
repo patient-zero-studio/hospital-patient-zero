@@ -1402,6 +1402,22 @@ export class GameEngine {
       this.scene.add(m.mesh);
     }
     this.finishWorld();
+    this.tuneMonsters();
+  }
+
+  /**
+   * Daily challenge speed/size, and 🐢 a gentler chapter 1: in Normal the creature
+   * is slow, half-blind and gives up quickly (a bit less so in Difficile).
+   */
+  private tuneMonsters() {
+    const ch = this.challenge;
+    const gentle = this.chapter === 1 && !this.survival && !this.vsRole && !this.imp && this.net?.mode !== 'versus' ? (this.difficulty <= 2 ? 2 : this.difficulty === 3 ? 1 : 0) : 0;
+    for (const m of this.monsters) {
+      m.speedMul = (ch === 'fast' ? 1.4 : 1) * (gentle === 2 ? 0.7 : gentle === 1 ? 0.85 : 1);
+      m.senseMul = gentle === 2 ? 0.75 : gentle === 1 ? 0.9 : 1;
+      m.chaseGiveUp = gentle === 2 ? 3 : gentle === 1 ? 4 : 5;
+      m.mesh.scale.setScalar(ch === 'giant' ? 1.35 : 1);
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -2155,10 +2171,7 @@ export class GameEngine {
     this.player.invertStrafe = ch === 'inverted';
     if (ch === 'nolamp') this.player.flashlightBattery = 15;
     (this.scene.fog as THREE.FogExp2).density = ch === 'fog' ? 0.22 : 0.07;
-    for (const m of this.monsters) {
-      m.speedMul = ch === 'fast' ? 1.4 : 1;
-      m.mesh.scale.setScalar(ch === 'giant' ? 1.35 : 1);
-    }
+    this.tuneMonsters();
     this.precompile();
     this.stress = 0;
     this.micHeardTimer = 0;
