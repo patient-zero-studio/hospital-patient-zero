@@ -17,7 +17,7 @@ const DAILY_LINES = [
   "Il y a 25 documents. Et un chapitre que personne ne voit.",
 ];
 
-import { RANK_TIERS } from '../ranked';
+import { RANK_TIERS, tierOf } from '../ranked';
 import { Award, Bell, BellOff, BookOpen, Coins, Crown, Flag, GraduationCap, HelpCircle, Image as ImageIcon, ListOrdered, Lock, Medal, Music, Plus, Settings, Shield, Shirt, ShoppingBag, Skull, Swords, Target, Ticket, User, Users, VolumeX, X, Zap } from 'lucide-react';
 import type { ChallengeDef } from '../challenges';
 import { ACHIEVEMENTS } from '../achievements';
@@ -116,6 +116,8 @@ interface StartScreenProps {
   onShop: () => void;
   /** 🎭 your character, shown in the middle of the menu */
   look?: Appearance | null;
+  /** emotes owned (played when you click your character) */
+  emotes?: string[];
   onCustomize?: () => void;
   chapter?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   ch2Unlocked?: boolean;
@@ -131,6 +133,10 @@ interface StartScreenProps {
   challengeOn?: boolean;
   challengeDone?: boolean;
   onToggleChallenge?: () => void;
+  /** 🏅 ranked mode (only these games win / lose ranked points) */
+  rankedOn?: boolean;
+  onToggleRanked?: () => void;
+  rankPoints?: number | null;
   onLeaderboard?: () => void;
   onChangeChapter?: (c: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9) => void;
   /** achievements unlocked (null = not logged in) */
@@ -217,6 +223,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   adventReady = false,
   onShop,
   look = null,
+  emotes,
   onCustomize,
   achCount = null,
   onAchievements,
@@ -234,6 +241,9 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   challengeOn = false,
   challengeDone = false,
   onToggleChallenge,
+  rankedOn = false,
+  onToggleRanked,
+  rankPoints = null,
   onLeaderboard,
   touch = false,
   menuMusic = true,
@@ -356,11 +366,39 @@ export const StartScreen: React.FC<StartScreenProps> = ({
         </button>
       ),
   ];
-  const eventCards = eventList.filter(Boolean).slice(0, 2).map((el, i) => <React.Fragment key={i}>{el}</React.Fragment>);
+  const eventCards = eventList
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((el, i) => (
+      <div key={i} className={i > 0 ? '[@media(max-height:720px)]:hidden' : ''}>
+        {el}
+      </div>
+    ));
 
   const chip = 'chunky flex items-center justify-center gap-1.5 h-10 short:h-8 px-2 text-zinc-100 font-game outl text-[13px] short:text-[11px] whitespace-nowrap [&>svg]:w-4 [&>svg]:h-4 [&>svg]:text-red-500';
+  const myTier = rankPoints != null ? tierOf(rankPoints) : null;
+  const rankedSwitch = onToggleRanked && (
+    <button
+      onClick={onToggleRanked}
+      className={`chunky col-span-2 flex items-center gap-2 h-11 short:h-9 px-3 text-left ${rankedOn ? '!border-amber-500' : ''}`}
+      style={{ background: rankedOn ? '#2a1a04' : C.night }}
+      title={rankedOn ? 'Partie classée : une victoire donne des points, une mort en fait perdre' : 'Activer la partie classée (Normal ou plus)'}
+    >
+      <Medal className={`w-5 h-5 shrink-0 ${rankedOn ? 'text-amber-400' : 'text-zinc-500'}`} style={rankedOn && myTier ? { color: myTier.color } : undefined} />
+      <span className="flex-1 min-w-0">
+        <span className={`block font-game outl text-[13px] short:text-[11px] leading-tight ${rankedOn ? 'text-amber-300' : 'text-zinc-300'}`}>PARTIE CLASSÉE</span>
+        <span className="block short:hidden text-[10px] text-zinc-400 leading-tight truncate">
+          {rankPoints == null ? 'Connecte-toi pour jouer en classé' : rankedOn ? `${myTier?.name} · ${rankPoints} pts — gagne pour monter` : 'Désactivée : aucune perte de points'}
+        </span>
+      </span>
+      <span className={`relative shrink-0 w-10 h-5 rounded-full border-2 border-black ${rankedOn ? 'bg-amber-500' : 'bg-zinc-700'}`}>
+        <span className={`absolute top-[1px] w-3.5 h-3.5 rounded-full bg-white border border-black transition-all ${rankedOn ? 'left-[21px]' : 'left-[1px]'}`} />
+      </span>
+    </button>
+  );
   const modeChips = (
     <>
+      {rankedSwitch}
       <button onClick={onMultiplayer} className={chip} style={{ background: C.teal }} title="Coop et Imposteur jusqu'à 8, Chasse, Course">
         <Users /> Multijoueur
       </button>
@@ -420,8 +458,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
       style={{ background: 'linear-gradient(#8f0c0c, #3d0303)', borderColor: '#d11a1a' }}
     >
       <span className="font-game outl-lg text-[42px] short:text-[30px] leading-none tracking-[0.18em] text-red-50">JOUER</span>
-      <span className="font-game outl text-[11px] text-red-200/70 mt-1 short:hidden">
-        SOLO · {cur.name} · {diff.name}
+      <span className={`font-game outl text-[11px] mt-1 short:hidden ${rankedOn && rankPoints != null ? 'text-amber-300' : 'text-red-200/70'}`}>
+        {rankedOn && rankPoints != null ? `🏅 CLASSÉ · ${cur.name} · ${difficulty < 2 ? 'Normal' : diff.name}` : `SOLO · ${cur.name} · ${diff.name}`}
       </span>
     </button>
   );
@@ -524,7 +562,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             </h1>
             <span className="inline-block mt-1.5 px-3 py-0.5 border border-red-800 bg-black/70 font-game text-[12px] short:text-[10px] text-red-500 tracking-[0.4em]">PATIENT ZÉRO</span>
           </div>
-          <MenuStage look={look} />
+          <MenuStage look={look} emotes={emotes} />
           {onCustomize && (
             <button onClick={onCustomize} className="chunky absolute left-1/2 -translate-x-1/2 bottom-1 z-10 h-9 px-3 font-game outl text-[13px] text-white !rounded-xl whitespace-nowrap" style={{ background: C.night }}>
               <Shirt className="inline w-4 h-4 -mt-0.5 mr-1 text-red-500" />Personnaliser
@@ -533,7 +571,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
         </section>
 
         {/* ── Big JOUER (first thing under the character on phones) ── */}
-        <div className="wide:absolute wide:right-4 wide:bottom-4 short:bottom-2 wide:w-[250px] short:w-[200px] z-10">{playBtn}</div>
+        <div className="wide:absolute wide:right-4 wide:bottom-4 short:bottom-2 wide:w-[250px] short:w-[220px] z-10">{playBtn}</div>
 
         {/* ── Chapter + difficulty ── */}
         <div className="grid grid-cols-[1fr_110px] gap-2 wide:flex wide:absolute wide:left-4 wide:bottom-4 short:bottom-2 z-10">
@@ -542,7 +580,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
         </div>
 
         {/* ── Other modes (above JOUER) ── */}
-        <div className="grid grid-cols-2 gap-2 wide:absolute wide:right-4 wide:bottom-[124px] short:bottom-[78px] wide:w-[250px] short:w-[200px] z-10">{modeChips}</div>
+        <div className="grid grid-cols-2 gap-2 wide:absolute wide:right-4 wide:bottom-[124px] short:bottom-[78px] wide:w-[250px] short:w-[220px] z-10">{modeChips}</div>
 
         {/* ── Left column ── */}
         <nav className="grid grid-cols-4 gap-2 wide:grid-cols-2 wide:absolute wide:left-4 wide:top-[92px] short:top-[74px] wide:w-[140px] short:w-[120px] z-10">{leftButtons}</nav>
@@ -700,9 +738,10 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                     ['micEnabled', 'Micro : le monstre entend votre voix', 'Le navigateur vous demandera l\'autorisation'],
                     ['shadowsEnabled', 'Ombres Dynamiques (Lampe)', null],
                     ['performanceMode', 'Mode Performance 60+ FPS', 'Recommandé pour PC portables'],
+                    ['hints', 'Indices quand je suis bloqué', 'Un conseil s\'affiche si tu n\'avances plus pendant 2 min'],
                   ] as const
                 ).map(([key, label, sub]) => {
-                  const on = !!controlSettings[key];
+                  const on = key === 'hints' ? controlSettings.hints !== false : !!controlSettings[key];
                   return (
                     <button
                       key={key}
@@ -730,6 +769,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                     ['Shift', 'Courir'],
                     ['C', 'S\'accroupir'],
                     ['Tab', 'Inventaire'],
+                    ['M', 'Carte'],
                     ['P', 'Mode photo'],
                   ].map(([k, v]) => (
                     <span key={k} className="flex items-center gap-1">

@@ -105,6 +105,9 @@ export type GameMsg =
   | { k: 'rev'; e: string; x: number; z: number }
   /** 📻 radio call (walkie-talkie) */
   | { k: 'radio'; x: number; z: number }
+  /** 🗺️ a mark on the shared map (unmark: removes the one at x/z) */
+  | { k: 'mark'; x: number; z: number; m: 'danger' | 'item' | 'hide' }
+  | { k: 'unmark'; x: number; z: number }
   /** a smoke grenade goes off at (x, z) */
   | { k: 'smoke'; x: number; z: number }
   /** a jaw trap snaps shut at (x, z) */

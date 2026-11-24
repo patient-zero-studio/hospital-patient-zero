@@ -127,10 +127,10 @@ export const RankedMenu: React.FC<{ token: string; me: string; onProfile?: (name
 
                 <div className="text-[11px] text-zinc-400 space-y-1">
                   <p>
-                    <b className="text-zinc-200">Gagner des points :</b> sors d'un chapitre en Normal ou plus. Normal +{RANK_WIN[2]}, Difficile +{RANK_WIN[3]}, Cauchemar +{RANK_WIN[4]}, Enfer +{RANK_WIN[5]}, et +3 par chapitre après le premier.
+                    <b className="text-zinc-200">Gagner des points :</b> active <b className="text-amber-300">« Partie classée »</b> au-dessus du bouton JOUER, puis sors d'un chapitre en Normal ou plus. Normal +{RANK_WIN[2]}, Difficile +{RANK_WIN[3]}, Cauchemar +{RANK_WIN[4]}, Enfer +{RANK_WIN[5]}, et +3 par chapitre après le premier.
                   </p>
                   <p>
-                    <b className="text-zinc-200">Perdre des points :</b> te faire attraper (à partir de Bronze). Tu ne redescends jamais sous ton rang.
+                    <b className="text-zinc-200">Perdre des points :</b> te faire attraper pendant une partie classée (à partir de Bronze). Les parties normales ne comptent pas. Tu ne redescends jamais sous ton rang.
                   </p>
                 </div>
 

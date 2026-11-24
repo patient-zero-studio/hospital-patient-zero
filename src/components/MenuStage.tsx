@@ -6,11 +6,14 @@ import { MonsterAI } from '../game/MonsterAI';
 
 /**
  * 🎭 Main menu centre: your character on a podium, under a flickering lamp.
- * Now and then the Patient Zero leans out of the dark behind you.
+ * Now and then the Patient Zero leans out of the dark behind you, and your
+ * character jumps and turns round. Click it: it plays one of your emotes.
  */
-export const MenuStage: React.FC<{ look: Appearance | null }> = ({ look }) => {
+export const MenuStage: React.FC<{ look: Appearance | null; emotes?: string[] }> = ({ look, emotes = ['wave'] }) => {
   const mount = useRef<HTMLDivElement>(null);
   const models = useRef<{ human: RemotePlayer; monster: MonsterAI } | null>(null);
+  const emotesRef = useRef(emotes);
+  emotesRef.current = emotes;
 
   useEffect(() => {
     const el = mount.current;
@@ -86,14 +89,50 @@ export const MenuStage: React.FC<{ look: Appearance | null }> = ({ look }) => {
     // The creature shows up every ~12 s for ~3.5 s
     let lurkT = 6;
     let lurk = 0;
+    // Character: looks around, jumps when the creature shows up, emotes on click
+    let yaw = 0;
+    let yawTarget = 0;
+    let lookT = 2;
+    let startleIn = -1;
+    let startle = 0;
+    let startleYaw = 0;
+    let emoteT = 0;
+    let emoteId = '';
+    const onClick = () => {
+      const list = emotesRef.current.length ? emotesRef.current : ['wave'];
+      emoteId = list[Math.floor(Math.random() * list.length)];
+      emoteT = 4;
+    };
+    el.addEventListener('pointerdown', onClick);
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       t += dt;
-      // Slow sway so the character looks alive
-      human.group.rotation.y = Math.sin(t * 0.45) * 0.35;
-      human.idle(dt);
+      // Looks around now and then
+      lookT -= dt;
+      if (lookT <= 0) {
+        lookT = 2.5 + Math.random() * 3;
+        yawTarget = (Math.random() - 0.5) * 1.1;
+      }
+      // Startled: a small jump, then stares over its shoulder while the thing is there
+      if (startleIn > 0) {
+        startleIn -= dt;
+        if (startleIn <= 0) startle = 0.45;
+      }
+      let target = yawTarget;
+      if (emoteT > 0) target = 0;
+      else if (lurk > 0 && startleIn <= 0) target = startleYaw;
+      yaw += (target - yaw) * (1 - Math.exp(-(startle > 0 ? 14 : 3) * dt));
+      human.group.rotation.y = yaw;
+      if (startle > 0) {
+        startle -= dt;
+        human.group.position.y = Math.sin(Math.max(0, startle / 0.45) * Math.PI) * 0.14;
+      } else human.group.position.y = 0;
+      if (emoteT > 0) {
+        emoteT -= dt;
+        human.dance(dt, emoteId === 'wave' ? '' : emoteId);
+      } else human.idle(dt);
       // Lamp flicker
       flick -= dt;
       if (flick <= 0) flick = Math.random() < 0.08 ? 0.12 : 0.5 + Math.random() * 1.5;
@@ -105,6 +144,8 @@ export const MenuStage: React.FC<{ look: Appearance | null }> = ({ look }) => {
         lurkT = 10 + Math.random() * 6;
         monster.mesh.position.x = Math.random() < 0.5 ? -1.3 : 1.3;
         monster.mesh.rotation.y = monster.mesh.position.x > 0 ? -0.5 : 0.5;
+        startleIn = 0.7;
+        startleYaw = Math.sign(monster.mesh.position.x) * 1.5;
       }
       if (lurk > 0) {
         lurk -= dt;
@@ -129,6 +170,7 @@ export const MenuStage: React.FC<{ look: Appearance | null }> = ({ look }) => {
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      el.removeEventListener('pointerdown', onClick);
       human.dispose();
       monster.dispose();
       renderer.dispose();
@@ -144,5 +186,5 @@ export const MenuStage: React.FC<{ look: Appearance | null }> = ({ look }) => {
     }
   }, [look]);
 
-  return <div ref={mount} className="absolute inset-0" />;
+  return <div ref={mount} className="absolute inset-0 cursor-pointer" title="Clique sur ton personnage : il fait une emote !" />;
 };

@@ -78,6 +78,8 @@ export interface ControlSettings {
   quality?: GraphicsQuality;
   /** ⏱️ Speedrun: chrono + personal best on screen */
   speedrun?: boolean;
+  /** 🧭 a hint shows up when you stop making progress (on by default) */
+  hints?: boolean;
 }
 
 export type GraphicsQuality = 'auto' | 'low' | 'medium' | 'high' | 'ultra';

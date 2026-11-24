@@ -155,6 +155,24 @@ function segHitsRect(ax: number, az: number, bx: number, bz: number, x0: number,
   return clip(-dx, ax - x0) && clip(dx, x1 - ax) && clip(-dz, az - z0) && clip(dz, z1 - az) && t0 <= t1;
 }
 
+export type MapMarkKind = 'danger' | 'item' | 'hide';
+/** 🗺️ What the [M] map draws */
+export interface MapSnapshot {
+  minX: number;
+  minZ: number;
+  cell: number;
+  w: number;
+  h: number;
+  /** 1 = explored */
+  grid: Uint8Array;
+  /** minX, minZ, maxX, maxZ, 1 = wall / 0 = furniture */
+  walls: Float32Array;
+  doors: { x: number; z: number; open: boolean; locked: boolean }[];
+  marks: { x: number; z: number; kind: MapMarkKind }[];
+  me: { x: number; z: number; yaw: number };
+  peers: { x: number; z: number; name: string }[];
+}
+
 export interface HudSnapshot {
   /** 🎪 the Ringmaster's deal is for me: seconds left to answer */
   pact: number | null;
@@ -1403,6 +1421,7 @@ export class GameEngine {
     }
     this.finishWorld();
     this.tuneMonsters();
+    this.setupMap();
   }
 
   /**
@@ -2189,6 +2208,10 @@ export class GameEngine {
     this.revT = 100 + Math.random() * 60;
     this.fogEvt = 0;
     this.resetWounds();
+    this.setupMap();
+    this.hintT = 0;
+    this.hintLevel = 0;
+    this.hintSig = '';
     this.fearFlashText = null;
     this.pendingEnding = null;
     this.hint = null;
@@ -4064,6 +4087,15 @@ export class GameEngine {
       case 'radio':
         if (typeof msg.x === 'number' && typeof msg.z === 'number') this.hearRadio(this.peerName, msg.x, msg.z);
         break;
+      case 'mark':
+        if (typeof msg.x === 'number' && typeof msg.z === 'number' && ['danger', 'item', 'hide'].includes(msg.m)) {
+          this.addMapMark(msg.x, msg.z, msg.m, false);
+          this.state.showToast(`🗺️ ${this.peerName} a marqué ${msg.m === 'danger' ? 'un danger' : msg.m === 'item' ? 'un objet' : 'une cachette'} sur la carte [M].`);
+        }
+        break;
+      case 'unmark':
+        if (typeof msg.x === 'number' && typeof msg.z === 'number') this.removeMapMark(msg.x, msg.z, false);
+        break;
       case 'alarm': {
         const d = Math.hypot(msg.x - this.player.position.x, msg.z - this.player.position.z);
         sound.playAlarmRing(d);
@@ -4660,6 +4692,8 @@ export class GameEngine {
     this.updateUv(delta);
     this.updateSecret(delta);
     this.updateWounds(delta);
+    this.updateHints(delta);
+    this.updateMapExplore(delta);
     this.trackSeen(delta);
     this.trackRun(delta);
     if (p.inDuct && !this.ductWarned && this.crawler) {
@@ -6511,6 +6545,202 @@ export class GameEngine {
       const trail = this.bloodDrops[Math.max(0, this.bloodDrops.length - 4)].mesh.position;
       this.alertAll(new THREE.Vector3(trail.x, 1.2, trail.z), 11);
     }
+  }
+
+  // -----------------------------------------------------------------------
+  // 🧭 Stuck? After ~1 min 40 without progress a hint, after ~3 min 20 a precise one
+  // -----------------------------------------------------------------------
+  private hintT = 0;
+  private hintLevel = 0;
+  private hintSig = '';
+  private static HINTS: Record<string, [string, string]> = {
+    'obj-room-104': [
+      'La clé de la chambre 104 est cachée dans un meuble de la pièce. Approche-toi des meubles et appuie sur [E].',
+      'Regarde dans la TABLE DE CHEVET, à côté du lit de la chambre 104.',
+    ],
+    'obj-pharmacy': [
+      'Le code de la Pharmacie est écrit dans le journal d\'une infirmière, quelque part dans l\'Aile A (à l\'ouest).',
+      'Dans l\'Aile A, fouille le CORPS SOUS UN DRAP couché sur un lit : le journal y est. Lis-le avec [TAB] pour avoir le code.',
+    ],
+    'obj-fuses': [
+      'Un fusible est dans la Pharmacie, l\'autre à la Morgue (au nord-est).',
+      'Fusible 1 : l\'ÉTAGÈRE À MÉDICAMENTS de la Pharmacie. Fusible 2 : sur le CORPS DU DR MOREAU, à la Morgue.',
+    ],
+    'obj-power': [
+      'Le disjoncteur est dans le Bloc Opératoire. Va le voir avec les 2 fusibles.',
+      'Devant le disjoncteur du Bloc Opératoire, appuie sur [E] : les fusibles se mettent tout seuls.',
+    ],
+    'obj-lab-or-escape': [
+      'Deux sorties : la carte du Laboratoire est à la Morgue, la clé de l\'issue de secours dans le coffre des Archives.',
+      'Carte : TIROIR MORTUAIRE N°04 (Morgue). Le code du coffre des Archives est dans le bureau du directeur, à l\'étage.',
+    ],
+    'obj-s-key': [
+      'La clé du local technique est dans le Vestiaire des égoutiers.',
+      'Dans le Vestiaire, ouvre l\'ARMOIRE DU CONTREMAÎTRE.',
+    ],
+    'obj-s-crank': [
+      'La manivelle est dans le Local technique : ouvre sa porte avec la clé.',
+      'Dans le Local technique, fouille la CAISSE À OUTILS.',
+    ],
+    'obj-s-sluice': [
+      'L\'écluse est tout au fond du tunnel.',
+      'Devant l\'écluse, appuie sur [E] avec la manivelle en main. Ne cours pas dans l\'eau : il t\'entendrait.',
+    ],
+    'obj-s-exit': [
+      'La sortie est une plaque d\'égout, après l\'écluse.',
+      'Cherche l\'échelle sous la plaque d\'égout. Avance accroupi [C] : il entend tout.',
+    ],
+  };
+  private get hintsOn() {
+    return this.settings.hints !== false && !this.imp && !this.vsRole && !this.survival && !this.watchOnly && !this.intro && !this.photo;
+  }
+  private updateHints(delta: number) {
+    if (!this.hintsOn || this.dying || this.finished || this.pendingEnding) return;
+    const gs = this.state;
+    const cur = gs.objectives.find((o) => o.isCurrent && !o.completed);
+    // Progress = a new objective, an item or a document
+    const sig = `${cur?.id ?? ''}|${gs.inventory.length}|${gs.notesCollected.length}|${gs.powerRestored}`;
+    if (sig !== this.hintSig) {
+      this.hintSig = sig;
+      this.hintT = 0;
+      this.hintLevel = 0;
+      return;
+    }
+    // Hiding from a creature is not being stuck
+    if (this.monsters.some((m) => m.state === 'CHASE')) return;
+    this.hintT += delta;
+    const want = this.hintT > 200 ? 2 : this.hintT > 100 ? 1 : 0;
+    if (want <= this.hintLevel) return;
+    this.hintLevel = want;
+    const pair = cur ? GameEngine.HINTS[cur.id] : null;
+    const text = pair
+      ? pair[want - 1]
+      : want === 1
+        ? `Objectif : ${gs.getCurrentObjectiveText()}`
+        : 'Fouille chaque meuble avec [E] et lis les documents [TAB] : ils disent souvent où aller.';
+    gs.showToast(`💡 Indice : ${text}`, 10000);
+    sound.playPaperRustle();
+    this.pushHud();
+  }
+
+  // -----------------------------------------------------------------------
+  // 🗺️ [M] The map draws itself where you (and your team) have been
+  // -----------------------------------------------------------------------
+  private mapGrid = new Uint8Array(0);
+  private mapW = 0;
+  private mapH = 0;
+  private mapMinX = 0;
+  private mapMinZ = 0;
+  private mapCell = 1.5;
+  private mapWalls = new Float32Array(0);
+  private mapMarks: { x: number; z: number; kind: MapMarkKind }[] = [];
+  private mapT = 0;
+
+  private setupMap() {
+    const boxes = this.map.collisionBoxes.filter((b) => !b.doorId && b.max.y > 0.4 && b.min.y < 2 && b.max.x - b.min.x < 80 && b.max.z - b.min.z < 80);
+    let minX = Infinity;
+    let minZ = Infinity;
+    let maxX = -Infinity;
+    let maxZ = -Infinity;
+    for (const b of boxes) {
+      minX = Math.min(minX, b.min.x);
+      minZ = Math.min(minZ, b.min.z);
+      maxX = Math.max(maxX, b.max.x);
+      maxZ = Math.max(maxZ, b.max.z);
+    }
+    const p = this.player?.position;
+    if (p) {
+      minX = Math.min(minX, p.x - 20);
+      minZ = Math.min(minZ, p.z - 20);
+      maxX = Math.max(maxX, p.x + 20);
+      maxZ = Math.max(maxZ, p.z + 20);
+    }
+    if (!isFinite(minX)) {
+      minX = -50;
+      minZ = -50;
+      maxX = 50;
+      maxZ = 50;
+    }
+    let cell = 1.5;
+    while (((maxX - minX) / cell) * ((maxZ - minZ) / cell) > 300000) cell *= 1.5;
+    this.mapCell = cell;
+    this.mapMinX = minX - 5;
+    this.mapMinZ = minZ - 5;
+    this.mapW = Math.ceil((maxX - minX + 10) / cell);
+    this.mapH = Math.ceil((maxZ - minZ + 10) / cell);
+    this.mapGrid = new Uint8Array(this.mapW * this.mapH);
+    const walls = new Float32Array(boxes.length * 5);
+    boxes.forEach((b, i) => {
+      walls.set([b.min.x, b.min.z, b.max.x, b.max.z, b.max.y - Math.max(0, b.min.y) >= 1.5 ? 1 : 0], i * 5);
+    });
+    this.mapWalls = walls;
+    this.mapMarks = [];
+    this.mapT = 0;
+  }
+
+  private exploreAround(x: number, z: number, r: number) {
+    const c = this.mapCell;
+    const n = Math.ceil(r / c);
+    const cx = Math.floor((x - this.mapMinX) / c);
+    const cz = Math.floor((z - this.mapMinZ) / c);
+    for (let dz = -n; dz <= n; dz++) {
+      for (let dx = -n; dx <= n; dx++) {
+        if (dx * dx + dz * dz > n * n) continue;
+        const xi = cx + dx;
+        const zi = cz + dz;
+        if (xi >= 0 && zi >= 0 && xi < this.mapW && zi < this.mapH) this.mapGrid[zi * this.mapW + xi] = 1;
+      }
+    }
+  }
+
+  private updateMapExplore(delta: number) {
+    this.mapT -= delta;
+    if (this.mapT > 0 || !this.mapGrid.length) return;
+    this.mapT = 0.3;
+    const p = this.player.position;
+    this.exploreAround(p.x, p.z, 4.5);
+    // Co-op: what your team mates explore appears on your map too
+    for (const { s } of this.livePeers()) this.exploreAround(s.x, s.z, 4.5);
+  }
+
+  private addMapMark(x: number, z: number, kind: MapMarkKind, send: boolean) {
+    if (this.mapMarks.some((m) => Math.hypot(m.x - x, m.z - z) < 0.5)) return;
+    this.mapMarks.push({ x, z, kind });
+    if (this.mapMarks.length > 60) this.mapMarks.shift();
+    if (send && this.net) this.net.send({ k: 'mark', x, z, m: kind } as GameMsg);
+  }
+
+  private removeMapMark(x: number, z: number, send: boolean) {
+    const i = this.mapMarks.findIndex((m) => Math.hypot(m.x - x, m.z - z) < 0.6);
+    if (i < 0) return;
+    this.mapMarks.splice(i, 1);
+    if (send && this.net) this.net.send({ k: 'unmark', x, z } as GameMsg);
+  }
+
+  /** [M] map: place / remove a mark (shared with the team) */
+  public mapMark(x: number, z: number, kind: MapMarkKind) {
+    this.addMapMark(x, z, kind, true);
+  }
+  public mapUnmark(x: number, z: number) {
+    this.removeMapMark(x, z, true);
+  }
+
+  public mapSnapshot(): MapSnapshot | null {
+    if (!this.mapGrid.length || !this.player) return null;
+    const p = this.player.position;
+    return {
+      minX: this.mapMinX,
+      minZ: this.mapMinZ,
+      cell: this.mapCell,
+      w: this.mapW,
+      h: this.mapH,
+      grid: this.mapGrid,
+      walls: this.mapWalls,
+      doors: [...this.map.doors.values()].map((d) => ({ x: d.center.x, z: d.center.z, open: d.isOpen, locked: d.isLocked })),
+      marks: this.mapMarks.map((m) => ({ ...m })),
+      me: { x: p.x, z: p.z, yaw: this.player.yaw },
+      peers: this.livePeers().map(({ s, i }) => ({ x: s.x, z: s.z, name: this.peers[i]?.name ?? '' })),
+    };
   }
 
   private spawnGadgets() {

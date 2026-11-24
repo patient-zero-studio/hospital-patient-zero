@@ -44,9 +44,9 @@ import { censorText, isBadName } from '../src/moderation.ts';
 import { RANK_TIERS, RPASS_TIERS, RPASS_XP_PER_TIER, RPassReward, nextTier, rankLoss, rankWin, rpassReward, rpassWinXp, tierOf } from '../src/ranked.ts';
 import { CLAN_CHEST_LEVELS, CLAN_COLORS, CLAN_EMBLEMS, CLAN_MAX, CLAN_NAME_RE, CLAN_PRICE, CLAN_PRIZES, CLAN_TAG_RE, WAR_LOSS, WAR_TIE, WAR_WIN, nextWarStart, warEnds, warKey } from '../src/clans.ts';
 import { MENU_TRACKS } from '../src/music.ts';
-import { isEndingKey } from '../src/gallery.ts';
-import { isDocId } from '../src/galleryDocs.ts';
-import { isBeastId, isItemEntryId } from '../src/bestiary.ts';
+import { ENDING_KEYS, isEndingKey } from '../src/gallery.ts';
+import { GALLERY_DOCS, isDocId } from '../src/galleryDocs.ts';
+import { BEASTS, ITEM_ENTRIES, isBeastId, isItemEntryId } from '../src/bestiary.ts';
 import { grantServerAch } from '../src/achievements.ts';
 import { PushSub, isPushSub, pushPublicKey, pushTo, setupPush } from './push.ts';
 import { LEVEL_SKINS, PASS_TIERS, PASS_XP_PER_TIER, nextWeek, passEnds, passKey, passName, passReward, weekKey, weeklyChallenges } from '../src/progression.ts';
@@ -303,6 +303,11 @@ const walletOf = (u: User) => {
   if (isAdmin(u)) u.wallet.coins = INFINITE_COINS;
   // …and never run out of event treats either (to try the event boxes)
   if (isAdmin(u)) for (const k of SEASONS) u.wallet.treats[k] = INFINITE_COINS;
+  // …and own every skin, emote and effect, so that each one can be tested
+  if (isAdmin(u)) {
+    const have = new Set(u.wallet.owned);
+    for (const c of CATALOG) if (!have.has(c.id)) u.wallet.owned.push(c.id);
+  }
   return u.wallet;
 };
 const authUser = (req: express.Request) => {
@@ -478,6 +483,8 @@ const weeklyView = (u: User) => {
 const passOf = (u: User) => {
   const k = passKey();
   if (!u.pass || u.pass.key !== k) u.pass = { key: k, xp: 0, claimed: [] };
+  // Admins can open every tier of the pass (to test the rewards)
+  if (isAdmin(u)) u.pass.xp = Math.max(u.pass.xp, PASS_TIERS * PASS_XP_PER_TIER);
   return u.pass;
 };
 const passView = (u: User) => {
@@ -491,8 +498,10 @@ const SHOP_LOCKED = 'Boutique verrouillée : échappe-toi de l\'hôpital une foi
 
 const walletView = (u: User) => ({
   ranked: rankView(u),
-  tracks: u.tracks ?? [],
-  gallery: { endings: u.endings ?? [], docs: u.docs ?? [], beasts: u.beasts ?? [], items: u.itemsSeen ?? [] },
+  tracks: isAdmin(u) ? MENU_TRACKS.map((t) => t.id) : (u.tracks ?? []),
+  gallery: isAdmin(u)
+    ? { endings: [...ENDING_KEYS], docs: GALLERY_DOCS.map((d) => d.id), beasts: BEASTS.map((b) => b.id), items: ITEM_ENTRIES.map((b) => b.id) }
+    : { endings: u.endings ?? [], docs: u.docs ?? [], beasts: u.beasts ?? [], items: u.itemsSeen ?? [] },
   clanTag: u.clan ? (clans.get(u.clan)?.tag ?? null) : null,
   bests: bestsOf(u),
   referrals: u.referrals ?? 0,
@@ -1298,7 +1307,8 @@ app.post('/api/wallet/reward', (req, res) => {
   const now = Date.now();
   if (user.lastReward && now - user.lastReward < 20000) return res.json({ gained: 0, xp: 0, ...walletView(user) });
   const diff = Math.min(5, Math.max(1, Math.floor(Number(req.body?.difficulty)) || 1));
-  const rankGain = rankEscape(user, diff, Math.floor(Number(req.body?.chapter)) || 1);
+  // 🏅 Only a game started in ranked mode counts (like any ranked queue)
+  const rankGain = req.body?.ranked === true ? rankEscape(user, diff, Math.floor(Number(req.body?.chapter)) || 1) : null;
   const base = rewardFor(diff);
   const found = base > 0 ? Math.min(MAX_FOUND_COINS, Math.max(0, Math.floor(Number(req.body?.found) || 0))) : 0;
   const gained = (base + found) * boostMul('coins');
@@ -1323,7 +1333,7 @@ app.post('/api/xp/death', (req, res) => {
   addXp(user, DEATH_XP);
   bumpStat('deaths');
   const diff = Math.floor(Number(req.body?.difficulty)) || 1;
-  const rankLost = diff >= 2 ? rankDeath(user) : 0;
+  const rankLost = diff >= 2 && req.body?.ranked === true ? rankDeath(user) : 0;
   saveUsers();
   res.json({ xp: DEATH_XP * boostMul('xp'), rankLost, ...walletView(user) });
 });
@@ -1694,7 +1704,7 @@ server.on('upgrade', (req, socket, head) => {
           if (!room) break;
           const k = (msg.d as { k?: string } | null)?.k;
           // 🗣 Imposteur morning talk goes to everyone too
-          const personal = k === 'p' || k === 'look' || k === 'emote' || k === 'isay' || k === 'radio';
+          const personal = k === 'p' || k === 'look' || k === 'emote' || k === 'isay' || k === 'radio' || k === 'mark' || k === 'unmark';
           const out = { t: 'relay', d: msg.d, from: client.username };
           for (const c of membersOf(room)) if (c !== client && (room.host === client || c === room.host || personal)) send(c, out);
           // 👀 …and to the spectators: the world comes from the host, the view from the player they follow
@@ -1937,6 +1947,7 @@ function rankView(u: User) {
 function rpassOf(u: User) {
   const season = rankSeason();
   if (!u.rpass || u.rpass.season !== season) u.rpass = { season, xp: 0, claimed: [] };
+  if (isAdmin(u)) u.rpass.xp = Math.max(u.rpass.xp, RPASS_TIERS * RPASS_XP_PER_TIER);
   return u.rpass;
 }
 /** Escape in Normal or harder: points (and maybe a promotion) */

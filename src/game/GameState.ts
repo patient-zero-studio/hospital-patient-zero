@@ -131,12 +131,12 @@ export class GameState {
     return this.inventory.find((it) => it.id === itemId);
   }
 
-  public showToast(msg: string) {
+  public showToast(msg: string, ms = 4000) {
     this.toastMessage = msg;
     if (this.toastTimeout) window.clearTimeout(this.toastTimeout);
     this.toastTimeout = window.setTimeout(() => {
       this.toastMessage = null;
-    }, 4000);
+    }, ms);
   }
 
   public completeObjective(id: string) {

@@ -336,8 +336,8 @@ export const api = {
   },
   ranked: (token: string): Promise<RankedView> => getJson('/api/ranked', token),
   claimRankedPass: (token: string, tier: number): Promise<WalletView & { result: BoxResult }> => post('/api/rpass/claim', { tier }, token),
-  reward: (token: string, difficulty: number, found: number, chapter = 1): Promise<WalletView & { gained: number; xp?: number; rankGain?: { gain: number; points: number; tier: string; promoted: boolean; passXp?: number } | null }> =>
-    post('/api/wallet/reward', { difficulty, found, chapter }, token),
+  reward: (token: string, difficulty: number, found: number, chapter = 1, ranked = false): Promise<WalletView & { gained: number; xp?: number; rankGain?: { gain: number; points: number; tier: string; promoted: boolean; passXp?: number } | null }> =>
+    post('/api/wallet/reward', { difficulty, found, chapter, ranked }, token),
   claimWeekly: (token: string, id: string): Promise<WalletView & { result: BoxResult }> => post('/api/weekly/claim', { id }, token),
   claimPass: (token: string, tier: number): Promise<WalletView & { result: BoxResult }> => post('/api/pass/claim', { tier }, token),
   xmasReward: (token: string, presents: number): Promise<WalletView & { message: string }> => post('/api/event/xmas', { presents }, token),
@@ -359,7 +359,7 @@ export const api = {
   },
   submitSurvival: (token: string, time: number, wave: number): Promise<WalletView & { record: boolean; rank: number | null; coins: number; xp: number }> =>
     post('/api/survival', { time, wave }, token),
-  xpDeath: (token: string, difficulty = 1): Promise<WalletView & { xp: number; rankLost?: number }> => post('/api/xp/death', { difficulty }, token),
+  xpDeath: (token: string, difficulty = 1, ranked = false): Promise<WalletView & { xp: number; rankLost?: number }> => post('/api/xp/death', { difficulty, ranked }, token),
   adminBoost: (token: string, kind: BoostKind | null, hours: number): Promise<WalletView> => post('/api/admin/boost', { kind, hours }, token),
   /** Event on for everyone (null = none, undefined = server unreachable). */
   async season(): Promise<Season | null | undefined> {

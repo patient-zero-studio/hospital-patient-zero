@@ -59,6 +59,8 @@ import { PauseSettingsModal } from './components/PauseSettingsModal';
 import { GameOverModal } from './components/GameOverModal';
 import { VictoryModal } from './components/VictoryModal';
 import { StartScreen } from './components/StartScreen';
+import { ownedEmotes } from './components/LobbyStage';
+import { MapOverlay } from './components/MapOverlay';
 
 const SETTINGS_KEY = 'hospital-pz-settings-v2';
 
@@ -72,6 +74,7 @@ const DEFAULT_CONTROLS: ControlSettings = {
   micEnabled: true,
   micSensitivity: 1,
   voiceChat: true,
+  hints: true,
 };
 
 const loadSettings = (): { audio: AudioSettings; controls: ControlSettings; difficulty: Difficulty } => {
@@ -157,6 +160,8 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
+  /** 🗺️ [M] map */
+  const [mapOpen, setMapOpen] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const [victory, setVictory] = useState<{ ending: GameEnding; title: string; narrative: string } | null>(null);
   /** Campaign: the black screen between two chapters */
@@ -298,8 +303,8 @@ export default function App() {
   onlineRef.current = online;
 
   // Latest UI state, readable from engine callbacks / listeners without stale closures
-  const ui = useRef({ isPlaying, isPaused, isInventoryOpen, isGameOver, victory: !!victory, pausedAt: 0, overlay: false });
-  ui.current = { ...ui.current, isPlaying, isPaused, isInventoryOpen, isGameOver, victory: !!victory || !!versusResult || !!campaignCard, overlay: hoboOpen || shopOpen || filmOpen };
+  const ui = useRef({ isPlaying, isPaused, isInventoryOpen, isGameOver, victory: !!victory, pausedAt: 0, overlay: false, mapOpen: false });
+  ui.current = { ...ui.current, isPlaying, isPaused, isInventoryOpen, isGameOver, victory: !!victory || !!versusResult || !!campaignCard, overlay: hoboOpen || shopOpen || filmOpen, mapOpen };
 
   // --- Engine lifecycle (created once) ---------------------------------
   useEffect(() => {
@@ -378,8 +383,12 @@ export default function App() {
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine || !isPlaying) return;
-    engine.setPaused(isPaused || isInventoryOpen || hoboOpen || shopOpen || filmOpen, isPaused);
-  }, [isPaused, isInventoryOpen, isPlaying, hoboOpen, shopOpen, filmOpen]);
+    engine.setPaused(isPaused || isInventoryOpen || hoboOpen || shopOpen || filmOpen || mapOpen, isPaused);
+  }, [isPaused, isInventoryOpen, isPlaying, hoboOpen, shopOpen, filmOpen, mapOpen]);
+  // The map closes with the game
+  useEffect(() => {
+    if (!isPlaying || isGameOver || victory) setMapOpen(false);
+  }, [isPlaying, isGameOver, victory]);
 
   // Persist settings
   useEffect(() => {
@@ -391,6 +400,7 @@ export default function App() {
   }, [audioSettings, controlSettings, difficulty]);
 
   const lock = () => engineRef.current?.requestLock();
+  const readMap = useCallback(() => engineRef.current?.mapSnapshot() ?? null, []);
 
   const resume = useCallback(() => {
     setIsPaused(false);
@@ -424,6 +434,21 @@ export default function App() {
         return;
       }
 
+      // 🗺️ [M] map (Esc closes it too)
+      if (u.mapOpen) {
+        if (e.code === 'KeyM' || e.code === 'Escape') {
+          e.preventDefault();
+          setMapOpen(false);
+          lock();
+        }
+        return;
+      }
+      const typing = /^(INPUT|TEXTAREA)$/.test((e.target as HTMLElement | null)?.tagName ?? '');
+      if (e.code === 'KeyM' && !e.repeat && !typing && !u.isPaused && !u.isInventoryOpen) {
+        setMapOpen(true);
+        document.exitPointerLock?.();
+        return;
+      }
       if (e.code === 'Tab') {
         e.preventDefault();
         if (!u.isPaused) toggleInventory();
@@ -533,6 +558,7 @@ export default function App() {
   const beginRun = (fresh: boolean, diff: Difficulty = difficulty, ch: Chapter = chapter, afterReset?: () => void) => {
     const engine = engineRef.current;
     if (!engine) return;
+    rankedRunRef.current = false;
     if (IS_TOUCH) enterMobileFullscreen();
     // Music is for the menu only
     sound.stopMenuMusic(1.2);
@@ -603,7 +629,12 @@ export default function App() {
     const open = [true, ch2Unlocked, ch3Unlocked, ch4Unlocked, ch5Unlocked, ch6Unlocked, ch7Unlocked, ch8Unlocked];
     let ch: Chapter = chapter;
     while (ch > 1 && !open[ch - 1]) ch = (ch - 1) as Chapter;
-    beginRun(hasStartedOnce.current, difficulty, ch);
+    // 🏅 Ranked: logged in, Normal or harder
+    const ranked = rankedOn && !!sessionRef.current;
+    const diff = ranked && difficulty < 2 ? (2 as Difficulty) : difficulty;
+    if (diff !== difficulty) setDifficulty(diff);
+    beginRun(hasStartedOnce.current, diff, ch);
+    rankedRunRef.current = ranked;
     hasStartedOnce.current = true;
   };
 
@@ -757,10 +788,10 @@ export default function App() {
     try {
       // Exploration gives no coins, but getting out unlocks the shop
       const wasLocked = wallet ? !wallet.shopUnlocked : false;
-      const r = await api.reward(s.token, diff, diff <= 1 ? 0 : (engineRef.current?.state.runCoins ?? 0), engineRef.current?.builtChapter ?? 1);
+      const r = await api.reward(s.token, diff, diff <= 1 ? 0 : (engineRef.current?.state.runCoins ?? 0), engineRef.current?.builtChapter ?? 1, rankedRunRef.current && !onlineRef.current);
       const rg = r.rankGain;
       const rt = rg ? tierOf(rg.points) : null;
-      const rank = rg && rt ? `  ·  ${rt.emoji} +${rg.gain} pts${rg.promoted ? ` — PROMU ${rt.name.toUpperCase()} !` : ` (${rt.name} ${rg.points})`}${rg.passXp ? `  ·  🎁 +${rg.passXp} XP de pass classé` : ''}` : '';
+      const rank = rg && rt ? `  ·  🏅 CLASSÉ ${rt.emoji} +${rg.gain} pts${rg.promoted ? ` — PROMU ${rt.name.toUpperCase()} !` : ` (${rt.name} ${rg.points})`}${rg.passXp ? `  ·  🎁 +${rg.passXp} XP de pass classé` : ''}` : '';
       setWallet(r);
       if (wasLocked && r.shopUnlocked) setRewardMsg('🛒 BOUTIQUE DÉBLOQUÉE ! Skins, boîtes mystère et cadeau du jour t\'attendent au menu.');
       else {
@@ -795,7 +826,7 @@ export default function App() {
     if (!s || onlineRef.current?.mode === 'versus') return;
     try {
       await new Promise((r) => setTimeout(r, 1500));
-      setWallet(await api.xpDeath(s.token, engineRef.current?.builtDifficulty ?? 1));
+      setWallet(await api.xpDeath(s.token, engineRef.current?.builtDifficulty ?? 1, rankedRunRef.current && !onlineRef.current));
     } catch {
       /* offline */
     }
@@ -844,6 +875,23 @@ export default function App() {
   // ---- Leaderboard & daily challenge ----------------------------------------
   const [boardOpen, setBoardOpen] = useState(false);
   const [challengeOn, setChallengeOn] = useState(false);
+  // 🏅 Ranked mode: picked in the menu, only these games win / lose ranked points
+  const [rankedOn, setRankedOn] = useState(() => {
+    try {
+      return localStorage.getItem('pz-ranked') === 'on';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('pz-ranked', rankedOn ? 'on' : 'off');
+    } catch {
+      /* private mode */
+    }
+  }, [rankedOn]);
+  /** the game being played was started in ranked mode */
+  const rankedRunRef = useRef(false);
   const challengeOnRef = useRef(challengeOn);
   challengeOnRef.current = challengeOn;
   /** "Nouveau record ! 3e" / "Défi réussi +150" after an escape */
@@ -1403,7 +1451,7 @@ export default function App() {
   };
 
   const engine = engineRef.current;
-  const showHud = isPlaying && !isPaused && !isGameOver && !victory && !versusResult && !isInventoryOpen && !hud.dying && !hud.dancing;
+  const showHud = isPlaying && !isPaused && !isGameOver && !victory && !versusResult && !isInventoryOpen && !mapOpen && !hud.dying && !hud.dancing;
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-black font-sans">
@@ -1467,6 +1515,7 @@ export default function App() {
             setShopOpen(true);
           }}
           look={look}
+          emotes={ownedEmotes(wallet?.wallet.owned ?? []).map((e) => e.id)}
           onCustomize={session ? () => setCustomize('edit') : undefined}
           chapter={chapter}
           ch2Unlocked={ch2Unlocked}
@@ -1490,6 +1539,15 @@ export default function App() {
           challengeOn={challengeOn}
           challengeDone={!!wallet?.challenge?.done}
           onToggleChallenge={() => setChallengeOn((v) => !v)}
+          rankedOn={rankedOn}
+          onToggleRanked={() => {
+            if (!session) {
+              setMpOpen(true);
+              return;
+            }
+            setRankedOn((v) => !v);
+          }}
+          rankPoints={wallet?.ranked?.points ?? null}
           onLeaderboard={() => setBoardOpen(true)}
           onChangeChapter={setChapter}
           achCount={wallet?.ach ? Object.keys(wallet.ach.done).length : null}
@@ -1824,6 +1882,17 @@ export default function App() {
       )}
       {IS_TOUCH && isPlaying && <RotateHint />}
 
+      {mapOpen && engine && isPlaying && (
+        <MapOverlay
+          read={readMap}
+          onMark={(x, z, k) => engineRef.current?.mapMark(x, z, k)}
+          onUnmark={(x, z) => engineRef.current?.mapUnmark(x, z)}
+          onClose={() => {
+            setMapOpen(false);
+            lock();
+          }}
+        />
+      )}
       {isInventoryOpen && engine && (
         <InventoryModal
           key={inventoryVersion}
