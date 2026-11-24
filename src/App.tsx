@@ -51,6 +51,7 @@ import { AchievementToast, AchievementsMenu } from './components/Achievements';
 import { NetClient, LobbyEvent } from './net/NetClient';
 import type { GameLink, GameMsg } from './net/protocol';
 
+import { PhotoOverlay } from './components/PhotoOverlay';
 import { HUD } from './components/HUD';
 import { InventoryModal } from './components/InventoryModal';
 import { PauseSettingsModal } from './components/PauseSettingsModal';
@@ -137,6 +138,7 @@ const EMPTY_HUD: HudSnapshot = {
   pact: null,
   imp: null,
   emoteWheel: false,
+  photo: null,
   treatEmoji: null,
   selectedSlot: 0,
   voice: null,
@@ -1733,7 +1735,8 @@ export default function App() {
         </div>
       )}
 
-      {showHud && (
+      {showHud && hud.photo && <PhotoOverlay {...hud.photo} />}
+      {showHud && !hud.photo && (
         <HUD
           versusRole={hud.versusRole}
           timeLeft={hud.timeLeft}

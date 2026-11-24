@@ -99,6 +99,8 @@ export type GameMsg =
   | { k: 'ach'; id: string }
   /** an alarm clock rings at (x, z) */
   | { k: 'alarm'; x: number; z: number }
+  /** 🌩️ random event picked by the host */
+  | { k: 'rev'; e: string; x: number; z: number }
   /** a smoke grenade goes off at (x, z) */
   | { k: 'smoke'; x: number; z: number }
   /** a jaw trap snaps shut at (x, z) */

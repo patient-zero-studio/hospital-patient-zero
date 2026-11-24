@@ -757,7 +757,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           ))}
         </div>
       ) : (
-      <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 border-t border-zinc-900 pt-4 font-mono text-[11px] text-zinc-400 [@media(max-height:520px)]:hidden">
+      <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-2 border-t border-zinc-900 pt-4 font-mono text-[11px] text-zinc-400 [@media(max-height:520px)]:hidden">
         <div className="bg-zinc-950/60 border border-zinc-900 p-2">
           <span className="text-zinc-200 font-bold block">ZQSD / WASD</span>
           <span>Se déplacer</span>
@@ -781,6 +781,10 @@ export const StartScreen: React.FC<StartScreenProps> = ({
         <div className="bg-zinc-950/60 border border-zinc-900 p-2">
           <span className="text-zinc-200 font-bold block">[C] / [TAB]</span>
           <span>S'accroupir / Inventaire</span>
+        </div>
+        <div className="bg-zinc-950/60 border border-zinc-900 p-2">
+          <span className="text-zinc-200 font-bold block">[P]</span>
+          <span>Mode photo</span>
         </div>
       </div>
       )}

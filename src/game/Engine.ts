@@ -182,6 +182,8 @@ export interface HudSnapshot {
   hideCount: number | null;
   /** 🎡 the emote wheel is open */
   emoteWheel: boolean;
+  /** 📸 photo mode */
+  photo: { filter: string; help: boolean; msg: string | null } | null;
   /** 💃 victory dance on screen: no HUD */
   dancing: boolean;
   /** 👀 watching a friend's game */
@@ -280,6 +282,7 @@ const HorrorShader = {
     resolution: { value: new THREE.Vector2(1, 1) },
     exposure: { value: 1.05 },
     monster: { value: 0 },
+    pzFilter: { value: 0 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -298,6 +301,7 @@ const HorrorShader = {
     varying vec2 vUv;
 
     uniform float exposure;
+    uniform float pzFilter;
     uniform float monster;
 
     // Same ACES fit as three.js, done here so we save a full-screen pass
@@ -350,6 +354,24 @@ const HorrorShader = {
       // Creature's eyes: blood-red, near-monochrome vision
       float ml = dot(col, vec3(0.299, 0.587, 0.114));
       col = mix(col, vec3(ml * 1.35 + 0.03, ml * 0.32, ml * 0.26), monster * 0.88);
+
+      // 📸 Photo mode filters: 1 black & white, 2 sepia, 3 VHS, 4 night vision
+      if (pzFilter > 0.5) {
+        float fl = dot(col, vec3(0.299, 0.587, 0.114));
+        if (pzFilter < 1.5) col = vec3(clamp((fl - 0.5) * 1.3 + 0.5, 0.0, 1.0));
+        else if (pzFilter < 2.5) col = vec3(fl * 1.07 + 0.05, fl * 0.86 + 0.03, fl * 0.62);
+        else if (pzFilter < 3.5) {
+          float wob = sin(vUv.y * 140.0 + time * 9.0) * 0.0015 + step(0.985, fract(vUv.y * 3.0 - time * 0.4)) * 0.006;
+          vec2 vu = uv + vec2(wob, 0.0);
+          vec3 v = vec3(texture2D(tDiffuse, vu + vec2(0.004, 0.0)).r, texture2D(tDiffuse, vu).g, texture2D(tDiffuse, vu - vec2(0.004, 0.0)).b);
+          v = pzToSRGB(pzAcesTonemap(v));
+          col = mix(col, v, 0.85) * vec3(1.05, 0.98, 1.1);
+          col *= 0.9 + 0.1 * sin(vUv.y * resolution.y * 0.8);
+          col = (col - 0.5) * 0.9 + 0.52;
+        } else {
+          col = vec3(0.12, 1.0, 0.3) * (pow(max(fl, 0.0), 0.6) * 1.5 + 0.04);
+        }
+      }
 
       // Vignette, tightening with fear
       float vig = smoothstep(0.82 - fear * 0.18, 0.2, d);
@@ -1154,6 +1176,24 @@ export class GameEngine {
     this.listen(window, 'resize', () => this.onResize());
     // Bottle flip: hold B to charge, release to flip
     this.listen(window, 'keydown', ((e: KeyboardEvent) => {
+      if (e.code === 'KeyP' && !e.repeat) {
+        this.togglePhoto();
+        return;
+      }
+      if (this.photo) {
+        this.photoKeys.add(e.code);
+        if (e.code === 'KeyF' && !e.repeat) {
+          this.photoFilter = (this.photoFilter + 1) % GameEngine.PHOTO_FILTERS.length;
+          this.pushHud();
+        }
+        if ((e.code === 'Enter' || e.code === 'NumpadEnter') && !e.repeat) this.photoShot = true;
+        if (e.code === 'KeyH' && !e.repeat) {
+          this.photoHelp = !this.photoHelp;
+          this.pushHud();
+        }
+        e.preventDefault();
+        return;
+      }
       if (e.code === 'KeyB' && !e.repeat) this.startFlipCharge();
       if (e.code === 'KeyG' && !e.repeat) this.tryBlind();
       if (e.code === 'KeyX' && !e.repeat) this.dropSlot(this.selectedSlot);
@@ -1180,18 +1220,32 @@ export class GameEngine {
       if (this.intro && this.running) this.skipIntro();
     }) as EventListener);
     this.listen(window, 'keyup', ((e: KeyboardEvent) => {
+      this.photoKeys.delete(e.code);
       if (e.code === 'KeyB') this.releaseFlip();
     }) as EventListener);
     // Mouse wheel: pick the hotbar slot that [X] drops
     this.listen(window, 'wheel', ((e: WheelEvent) => {
+      if (this.photo) {
+        this.photoCam.fov = THREE.MathUtils.clamp(this.photoCam.fov + (e.deltaY > 0 ? 4 : -4), 20, 100);
+        return;
+      }
       if (!this.running || this.vsRole === 'monster') return;
       this.selectedSlot = (this.selectedSlot + (e.deltaY > 0 ? 1 : 4)) % 5;
       this.pushHud();
     }) as EventListener);
     this.resizeObserver = new ResizeObserver(() => this.onResize());
     this.resizeObserver.observe(container);
+    // 📸 Photo mode: the mouse moves the free camera
+    this.listen(window, 'mousemove', ((e: MouseEvent) => {
+      if (!this.photo || document.pointerLockElement !== this.renderer.domElement) return;
+      const c = this.photoCam;
+      const sens = 0.0022 * (c.fov / 72);
+      c.yaw -= e.movementX * sens;
+      c.pitch = THREE.MathUtils.clamp(c.pitch - e.movementY * sens, -1.5, 1.5);
+    }) as EventListener);
     this.listen(document, 'pointerlockchange', () => {
       const locked = document.pointerLockElement === this.renderer.domElement;
+      if (!locked && this.photo) this.togglePhoto(false);
       this.player.isLocked = locked;
       if (locked) this.player.freeLook = false;
       // The emote wheel and the Imposteur morning vote free the mouse on purpose: no pause menu over them
@@ -2061,6 +2115,8 @@ export class GameEngine {
     this.fear = 0;
     this.blackout = 0;
     this.lightsOutTimer = 0;
+    this.revT = 100 + Math.random() * 60;
+    this.fogEvt = 0;
     this.fearFlashText = null;
     this.pendingEnding = null;
     this.hint = null;
@@ -2764,6 +2820,218 @@ export class GameEngine {
     this.cb.onGameOver();
   }
 
+  // -----------------------------------------------------------------------
+  // 🌩️ Random events (solo, and the host in co-op): power cut, alarm, fog, a door that slams
+  // -----------------------------------------------------------------------
+  private revT = 100;
+  private fogEvt = 0;
+  private fogBase = 0.07;
+  private get revAllowed() {
+    return !this.imp && !this.vsRole && !this.watchOnly && !this.survival && !this.intro && !this.pendingEnding && !this.photo && (!this.net || (this.net.mode === 'coop' && this.net.role === 'host'));
+  }
+  private updateRandomEvents(delta: number) {
+    // The fog comes in over 3 s, stays, then fades out
+    if (this.fogEvt > 0) {
+      this.fogEvt -= delta;
+      const f = this.scene.fog;
+      if (f instanceof THREE.FogExp2) {
+        const k = Math.max(0, Math.min(1, (30 - this.fogEvt) / 3, this.fogEvt / 3));
+        f.density = this.fogBase + (Math.max(this.fogBase * 2.6, 0.17) - this.fogBase) * k;
+        if (this.fogEvt <= 0) f.density = this.fogBase;
+      }
+    }
+    if (!this.revAllowed) return;
+    this.revT -= delta;
+    if (this.revT > 0) return;
+    this.revT = 90 + Math.random() * 80;
+    const p = this.player.position;
+    const opts = ['alarm'];
+    if (this.map.lights.length > 4) opts.push('power');
+    if (this.challenge !== 'fog' && this.fogEvt <= 0 && this.scene.fog instanceof THREE.FogExp2) opts.push('fog');
+    const near = [...this.map.doors.values()].filter((d) => !d.isLocked && d.center.distanceTo(p) > 3 && d.center.distanceTo(p) < 16);
+    if (near.length) opts.push('door');
+    const e = opts[Math.floor(Math.random() * opts.length)];
+    let x = p.x;
+    let z = p.z;
+    if (e === 'door') {
+      const d = near[Math.floor(Math.random() * near.length)];
+      this.setDoorOpen(d, !d.isOpen, true);
+      x = d.center.x;
+      z = d.center.z;
+    } else if (e === 'alarm') {
+      // Somewhere in a room nearby (a light fixture), else just around
+      const spots = this.map.lights.filter((l) => {
+        const dd = Math.hypot(l.position.x - p.x, l.position.z - p.z);
+        return dd > 12 && dd < 30;
+      });
+      if (spots.length) {
+        const l = spots[Math.floor(Math.random() * spots.length)];
+        x = l.position.x;
+        z = l.position.z;
+      } else {
+        const a = Math.random() * Math.PI * 2;
+        x = p.x + Math.cos(a) * 16;
+        z = p.z + Math.sin(a) * 16;
+      }
+      const at = new THREE.Vector3(x, 1.2, z);
+      this.alertAll(at, 30);
+      setTimeout(() => this.running && this.alertAll(at, 25), 1500);
+    }
+    this.applyRandomEvent(e, x, z);
+    this.net?.send({ k: 'rev', e, x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10 });
+  }
+  private applyRandomEvent(e: string, x: number, z: number) {
+    const d = Math.hypot(x - this.player.position.x, z - this.player.position.z);
+    switch (e) {
+      case 'power':
+        this.lightsOutTimer = Math.max(this.lightsOutTimer, 7);
+        sound.playBreakerClunk();
+        sound.playFlickerHum();
+        this.state.showToast('⚡ Panne de courant ! Les lumières vont revenir… normalement.');
+        break;
+      case 'alarm':
+        sound.playAlarmRing(d);
+        setTimeout(() => this.running && sound.playAlarmRing(d), 1500);
+        this.state.showToast('🚨 Une alarme se déclenche quelque part… Ça va attirer du monde.');
+        break;
+      case 'fog': {
+        const f = this.scene.fog;
+        if (f instanceof THREE.FogExp2) {
+          if (this.fogEvt <= 0) this.fogBase = f.density;
+          this.fogEvt = 30;
+        }
+        this.state.showToast('🌫️ Un brouillard épais envahit les lieux… On n\'y voit plus rien.');
+        break;
+      }
+      case 'door':
+        // (the host already heard the slam when the door moved)
+        if (this.net?.role === 'guest' && d < 25) sound.playDoorSlam();
+        if (d < 8) this.player.shake = Math.max(this.player.shake, 0.3);
+        this.state.showToast('🚪 Une porte a claqué toute seule… Il n\'y avait personne.');
+        break;
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // 📸 Photo mode [P]: free camera, filters, screenshot
+  // -----------------------------------------------------------------------
+  public photo = false;
+  private photoFilter = 0;
+  private photoHelp = true;
+  private photoMsg: string | null = null;
+  private photoShot = false;
+  private photoPrevInput = false;
+  private photoFov0 = 72;
+  private photoCam = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, fov: 72 };
+  private photoKeys = new Set<string>();
+  private photoModel: RemotePlayer | null = null;
+  static PHOTO_FILTERS = ['Normal', 'Noir et blanc', 'Sépia', 'VHS', 'Vision nocturne'];
+  private get photoAllowed() {
+    return (
+      this.running && !this.paused && !this.dying && !this.finished && !this.intro && !this.pendingEnding && this.danceT < 0 &&
+      !this.imp && !this.vsRole && this.net?.mode !== 'race' && !this.watchOnly && !this.spectating && !this.emoteWheel
+    );
+  }
+  private togglePhoto(on = !this.photo) {
+    if (on === this.photo || (on && !this.photoAllowed)) return;
+    this.photo = on;
+    const p = this.player;
+    const c = this.camera;
+    if (on) {
+      this.photoPrevInput = p.inputEnabled;
+      p.inputEnabled = false;
+      this.photoFov0 = c.fov;
+      // A step back, so you see yourself
+      this.photoCam = { x: c.position.x + Math.sin(p.yaw) * 1.8, y: c.position.y + 0.15, z: c.position.z + Math.cos(p.yaw) * 1.8, yaw: p.yaw, pitch: -0.12, fov: c.fov };
+      const m = new RemotePlayer('', new THREE.SpotLight(0xffffff, 0), new THREE.Object3D());
+      m.showName = false;
+      m.applyLook(this.localLook.human);
+      m.apply(this.localNetState());
+      m.update(0.016);
+      this.scene.add(m.group);
+      this.photoModel = m;
+      this.photoMsg = null;
+    } else {
+      p.inputEnabled = this.photoPrevInput;
+      c.fov = this.photoFov0;
+      c.updateProjectionMatrix();
+      if (this.photoModel) {
+        this.scene.remove(this.photoModel.group);
+        this.photoModel.dispose();
+      }
+      this.photoModel = null;
+      this.photoKeys.clear();
+      this.photoShot = false;
+    }
+    this.pushHud();
+  }
+  private updatePhoto(dt: number) {
+    const c = this.photoCam;
+    const k = this.photoKeys;
+    const sp = (k.has('ShiftLeft') || k.has('ShiftRight') ? 0.9 : 2.6) * dt;
+    const fx = -Math.sin(c.yaw);
+    const fz = -Math.cos(c.yaw);
+    let mx = 0;
+    let mz = 0;
+    let my = 0;
+    if (k.has('KeyW') || k.has('ArrowUp')) (mx += fx), (mz += fz);
+    if (k.has('KeyS') || k.has('ArrowDown')) (mx -= fx), (mz -= fz);
+    if (k.has('KeyA') || k.has('ArrowLeft')) (mx += fz), (mz -= fx);
+    if (k.has('KeyD') || k.has('ArrowRight')) (mx -= fz), (mz += fx);
+    if (k.has('Space')) my += 1;
+    if (k.has('KeyC') || k.has('ControlLeft')) my -= 1;
+    c.x += mx * sp;
+    c.z += mz * sp;
+    c.y += my * sp;
+    // Stays close to you: no scouting the map from afar
+    const pp = this.player.position;
+    const dx = c.x - pp.x;
+    const dz = c.z - pp.z;
+    const dd = Math.hypot(dx, dz);
+    if (dd > 6) {
+      c.x = pp.x + (dx / dd) * 6;
+      c.z = pp.z + (dz / dd) * 6;
+    }
+    c.y = THREE.MathUtils.clamp(c.y, 0.2, 3.2);
+    const cam = this.camera;
+    cam.position.set(c.x, c.y, c.z);
+    cam.rotation.set(c.pitch, c.yaw, 0, 'YXZ');
+    if (cam.fov !== c.fov) {
+      cam.fov = c.fov;
+      cam.updateProjectionMatrix();
+    }
+    const m = this.photoModel;
+    if (m) {
+      if (this.net) m.apply(this.localNetState());
+      m.update(dt);
+    }
+  }
+  private savePhoto() {
+    try {
+      const url = this.renderer.domElement.toDataURL('image/png');
+      const d = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const a = document.createElement('a');
+      a.download = `patient-zero-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.png`;
+      a.href = url;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      sound.playFlashlightToggle(true);
+      this.photoMsg = '📸 Photo enregistrée dans vos téléchargements !';
+    } catch {
+      this.photoMsg = 'Impossible d\'enregistrer la photo.';
+    }
+    this.pushHud();
+    const msg = this.photoMsg;
+    setTimeout(() => {
+      if (this.photoMsg === msg) {
+        this.photoMsg = null;
+        this.pushHud();
+      }
+    }, 2200);
+  }
+
   /** 🎡 Emote wheel [T]: the 8 emotes, picked with the mouse */
   public emoteWheel = false;
   private toggleEmoteWheel(open = !this.emoteWheel) {
@@ -2913,6 +3181,9 @@ export class GameEngine {
         }
         break;
       }
+      case 'rev':
+        if (this.net?.role === 'guest' && typeof msg.e === 'string') this.applyRandomEvent(msg.e, msg.x, msg.z);
+        break;
       case 'alarm': {
         const d = Math.hypot(msg.x - this.player.position.x, msg.z - this.player.position.z);
         sound.playAlarmRing(d);
@@ -3382,7 +3653,9 @@ export class GameEngine {
       this.pad.poll(realDelta);
     }
 
-    const simulate = this.running && !this.paused && !this.finished;
+    // 📸 Photo mode: leaves by itself if the game moves on; solo freezes the world
+    if (this.photo && (!this.running || this.dying || this.finished || this.spectating || this.pendingEnding)) this.togglePhoto(false);
+    const simulate = this.running && !this.paused && !this.finished && !(this.photo && !this.net);
     if (simulate) {
       this.elapsed += delta;
       if (this.dying) {
@@ -3409,7 +3682,13 @@ export class GameEngine {
     u.damage.value = this.damage;
     u.blackout.value = this.blackout;
     u.monster.value = this.vsRole === 'monster' ? 1 : 0;
+    u.pzFilter.value = this.photo ? this.photoFilter : 0;
+    if (this.photo) this.updatePhoto(Math.min(realDelta, 0.1));
     this.composer.render(delta);
+    if (this.photoShot) {
+      this.photoShot = false;
+      this.savePhoto();
+    }
   };
 
   private update(delta: number) {
@@ -3493,6 +3772,7 @@ export class GameEngine {
     }
 
     this.checkScares();
+    this.updateRandomEvents(delta);
     this.trackRun(delta);
     if (p.inDuct && !this.ductWarned && this.crawler) {
       this.ductWarned = true;
@@ -3835,6 +4115,7 @@ export class GameEngine {
       timeLeft: this.vsRole ? this.timeLeft : null,
       hideCount: this.hideSeek && this.hideCount > 0 ? Math.ceil(this.hideCount) : null,
       emoteWheel: this.emoteWheel,
+      photo: this.photo ? { filter: GameEngine.PHOTO_FILTERS[this.photoFilter], help: this.photoHelp, msg: this.photoMsg } : null,
       imp: this.imp
         ? {
             me: this.impRole,
