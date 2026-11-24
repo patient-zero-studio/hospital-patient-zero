@@ -41,6 +41,7 @@ export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
   santa: { gown: '#c8102e', hair: '#f4f4f4', accs: ['santahat', 'beard'], extras: ['belt'] },
   elf: { gown: '#15803d', accs: ['elfhat'], extras: ['belt'] },
   sweater: { gown: '#b91c1c', accs: [], extras: ['xmasbands'] },
+  fouettard: { gown: '#1a120c', hair: '#0a0a0a', accs: ['hood', 'bellcollar'], extras: ['belt', 'cape'] },
   // 🎃 Halloween
   witch: { gown: '#1e1430', hair: '#7c3aed', accs: ['witchhat'] },
   vampire: { gown: '#0c0c0e', hair: '#0a0a0a', accs: ['fangs'], extras: ['cape'] },
@@ -453,6 +454,19 @@ const buildFestive = (id: string, h: HeadSpec, track: Track, g: THREE.Group): bo
       for (let i = 0; i < 5; i++) add(track, g, new THREE.SphereGeometry(0.004 * s, 6, 4), brass, -0.02 * s + i * 0.01 * s, h.cy - 0.012 * s, h.rz * 1.06 + 0.02 * s);
       return true;
     }
+    case 'bellcollar': {
+      // Red leather collar with golden sleigh bells, under the chin
+      const leather = std(track, 0x7a0c0c, { roughness: 0.7 });
+      const collar = add(track, g, new THREE.TorusGeometry(h.rx * 0.85, 0.012 * s, 8, 26), leather, 0, h.cy - 0.12 * s, 0);
+      collar.rotation.x = Math.PI / 2;
+      collar.scale.set(1, h.rz / h.rx, 1);
+      const gold = std(track, 0xd4a017, { metalness: 0.9, roughness: 0.25, emissive: 0x3a2a00, emissiveIntensity: 0.4 });
+      for (let i = 0; i < 5; i++) {
+        const a = Math.PI / 2 + (i - 2) * 0.45;
+        add(track, g, new THREE.SphereGeometry(0.016 * s, 10, 8), gold, Math.cos(a) * h.rx * 0.88, h.cy - 0.14 * s, Math.sin(a) * h.rz * 0.88);
+      }
+      return true;
+    }
     case 'clownnose':
       add(track, g, new THREE.SphereGeometry(0.024 * s, 16, 12), std(track, 0xff1a1a, { roughness: 0.25, emissive: 0x500000, emissiveIntensity: 0.5 }), 0, h.cy - 0.01 * s, h.rz + 0.016 * s);
       return true;
@@ -661,6 +675,7 @@ export const MONSTER_OUTFITS: Record<string, MonsterOutfit> = {
   yeti: { skin: '#eef4ff', eyes: '#38bdf8', gown: '#c8d8ee', accs: [], skinFx: 'frost' },
   gingerbread: { skin: '#a0522d', eyes: '#ffffff', gown: '#f4f0e8', accs: [] },
   krampus: { skin: '#3b2a1e', eyes: '#ff2010', gown: '#1a120c', accs: ['horns', 'chains'] },
+  fouettard: { skin: '#2a1e18', eyes: '#ff2a1a', gown: '#100a07', accs: ['hood', 'chains', 'bellcollar'] },
   // 🎃 Halloween
   mummy: { skin: '#d6cba8', eyes: '#ffd21a', gown: '#c8bc98', accs: ['bandages'] },
   pumpking: { skin: '#1a1208', eyes: '#ff9a00', gown: '#2a1a0a', accs: ['pumpkinhead'], skinFx: 'inferno' },

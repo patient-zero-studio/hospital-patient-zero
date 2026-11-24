@@ -22,7 +22,7 @@ export interface Cosmetic {
   /** Only in the advent calendar (never sold) */
   calendarOnly?: boolean;
   /** Earned, never sold: season pass tier or player level */
-  unlock?: 'pass' | 'level' | 'xmas' | 'ranked' | 'clan' | 'story';
+  unlock?: 'pass' | 'level' | 'xmas' | 'ranked' | 'clan' | 'story' | 'gifts';
 }
 
 export const TIER_PRICE: Record<Tier, number> = { petit: 100, moyen: 500, style: 1000, exclusif: 2000 };
@@ -99,6 +99,10 @@ export const CATALOG: Cosmetic[] = [
   ev('noel', 'm-noel-krampus', 'Krampus', 'monster', 'outfit', 'krampus', 'exclusif', true),
   ev('noel', 'h-noel-santa', 'Père Noël', 'human', 'outfit', 'santa', 'exclusif', true),
   { ...ev('noel', 'm-noel-evilsanta', 'Père Noël maléfique', 'monster', 'outfit', 'evilsanta', 'exclusif', true), unlock: 'xmas' },
+  // 🎁 Golden gifts hidden in every December game (5 / 15 / 30 found)
+  { ...ev('noel', 'h-noel-bells', 'Collier de clochettes', 'human', 'acc', 'bellcollar', 'style', true), unlock: 'gifts' },
+  { ...ev('noel', 'm-noel-fouettard', 'Père Fouettard', 'monster', 'outfit', 'fouettard', 'exclusif', true), unlock: 'gifts' },
+  { ...ev('noel', 'h-noel-fouettard', 'Manteau du Père Fouettard', 'human', 'outfit', 'fouettard', 'exclusif', true), unlock: 'gifts' },
 
   // ---- 🎃 Halloween (1er octobre → 5 novembre) ----
   ev('halloween', 'h-hw-gown-pumpkin', 'Blouse citrouille', 'human', 'gown', '#f97316', 'petit'),
@@ -462,6 +466,8 @@ export const buyCosmetic = (w: Wallet, id: string, key = todayKey(), season: Sea
       ? 'Ce skin se gagne dans le pass de saison.'
       : item.unlock === 'xmas'
         ? 'Ce skin se gagne dans la Nuit de Noël (les 12 cadeaux).'
+        : item.unlock === 'gifts'
+          ? 'Ce skin se gagne en trouvant des cadeaux dorés en décembre (5, 15 et 30).'
         : item.unlock === 'story'
           ? 'Ce skin se gagne avec un succès (voir le menu Succès).'
           : item.unlock === 'ranked'
@@ -648,4 +654,11 @@ export const STORY_SKINS: { ach: string; skins: string[] }[] = [
   { ach: 'ch7_end', skins: ['m-story-moreau', 'h-story-moreau'] },
   { ach: 'ch8_end', skins: ['m-story-ombre', 'h-story-lucas'] },
   { ach: 'imp_10', skins: ['h-imp-mask'] },
+];
+
+/** 🎁 Golden gifts found in December → exclusive skins */
+export const GIFT_SKINS: [number, string][] = [
+  [5, 'h-noel-bells'],
+  [15, 'm-noel-fouettard'],
+  [30, 'h-noel-fouettard'],
 ];

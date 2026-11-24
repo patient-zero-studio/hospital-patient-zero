@@ -134,6 +134,8 @@ interface StartScreenProps {
   docsProgress?: [number, number];
   /** ⭐ stars per chapter (bitmask) */
   chapterStars?: Record<string, number>;
+  /** 🎁 golden gifts found this Christmas */
+  xgifts?: number;
   challenge?: ChallengeDef;
   challengeOn?: boolean;
   challengeDone?: boolean;
@@ -252,6 +254,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   ch8Unlocked = false,
   docsProgress,
   chapterStars = {},
+  xgifts = 0,
   onChangeChapter,
   challenge,
   challengeOn = false,
@@ -359,6 +362,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             {SEASON_INFO[season].emoji} {SEASON_INFO[season].name}
           </span>
           <span className="block text-[11px] font-bold">Skins limités{season === 'noel' ? ' & calendrier' : ''}</span>
+          {season === 'noel' && <span className="block text-[11px] text-amber-300">🎁 Cadeaux dorés : {xgifts} — skins à 5, 15 et 30</span>}
         </button>
       ),
     onXmasNight && (

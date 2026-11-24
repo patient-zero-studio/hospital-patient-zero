@@ -2020,6 +2020,66 @@ class SoundSystem {
     src.stop(t + seconds + 0.05);
   }
 
+  /** 🔔 Sleigh bells (the Père Fouettard): a little jingle, quieter far away */
+  public playBells(distance = 8, pan = 0) {
+    if (!this.ctx || !this.sfxGain) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const vol = Math.min(0.22, 0.9 / (1 + distance * 0.35));
+    if (vol < 0.01) return;
+    const out = this.pannedOut(pan);
+    for (let i = 0; i < 4; i++) {
+      const at = t + i * 0.045 + Math.random() * 0.02;
+      const f = 2300 + Math.random() * 900;
+      for (const [mul, v] of [[1, 1], [2.76, 0.45], [5.4, 0.2]] as const) {
+        const o = ctx.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(f * mul, at);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.exponentialRampToValueAtTime(vol * v, at + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.35);
+        o.connect(g);
+        g.connect(out);
+        o.start(at);
+        o.stop(at + 0.4);
+      }
+    }
+  }
+
+  /** 🐈‍⬛ A cat's meow (loud = startled, it carries far) */
+  public playMeow(distance = 4, pan = 0, loud = false) {
+    if (!this.ctx || !this.sfxGain) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const vol = Math.min(loud ? 0.35 : 0.16, (loud ? 1.6 : 0.8) / (1 + distance * 0.3));
+    if (vol < 0.01) return;
+    const dur = loud ? 0.75 : 0.5;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    const base = loud ? 620 : 520;
+    o.frequency.setValueAtTime(base * 0.8, t);
+    o.frequency.linearRampToValueAtTime(base * 1.35, t + dur * 0.35);
+    o.frequency.linearRampToValueAtTime(base * 0.7, t + dur);
+    // "mi-a-ou": a formant that opens then closes
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 4;
+    bp.frequency.setValueAtTime(900, t);
+    bp.frequency.linearRampToValueAtTime(1900, t + dur * 0.4);
+    bp.frequency.linearRampToValueAtTime(700, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.06);
+    g.gain.setValueAtTime(vol, t + dur * 0.7);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(bp);
+    bp.connect(g);
+    g.connect(this.pannedOut(pan));
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  }
+
   /** Jaw trap snapping shut (quieter far away). */
   public playTrapSnap(dist = 0) {
     if (!this.ctx || !this.sfxGain) return;

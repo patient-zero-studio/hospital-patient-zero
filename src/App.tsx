@@ -593,7 +593,7 @@ export default function App() {
     if (engine.challenge !== wantChallenge) fresh = true;
     engine.challenge = wantChallenge;
     setRunMsg(null);
-    if (fresh || engine.builtDifficulty !== diff || engine.builtChapter !== ch) engine.reset();
+    if (fresh || engine.builtDifficulty !== diff || engine.builtChapter !== ch || engine.builtSeason !== getActiveSeason()) engine.reset();
     afterReset?.();
     engine.start();
     engine.maybeIntro();
@@ -818,7 +818,19 @@ export default function App() {
     const e = engineRef.current;
     const n = e?.runTreats ?? 0;
     const chests = e?.runChests ?? 0;
-    if (!e || (n <= 0 && chests <= 0) || !s) return;
+    const gold = e?.runGold ?? 0;
+    if (!e || !s) return;
+    e.runGold = 0;
+    if (gold > 0) {
+      try {
+        const r = await api.xmasGifts(s.token, gold);
+        setWallet(r);
+        if (r.newSkins.length) setRunMsg(`🎁 ${r.total} cadeaux dorés : nouveau skin débloqué !`);
+      } catch {
+        /* offline */
+      }
+    }
+    if (n <= 0 && chests <= 0) return;
     e.runTreats = 0;
     e.runChests = 0;
     try {
@@ -1565,6 +1577,7 @@ export default function App() {
           ch8Unlocked={ch8Unlocked}
           docsProgress={[docsFound, STORY_DOC_IDS.length]}
           chapterStars={wallet?.stars ?? {}}
+          xgifts={wallet?.xgifts ?? 0}
           onCampaign={startCampaign}
           onTutorial={startTutorial}
           onSurvival={startSurvival}

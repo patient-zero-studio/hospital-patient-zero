@@ -30,9 +30,10 @@ import { CanSystem, FlipResult } from './CanSystem';
 import { RemotePlayer } from './RemotePlayer';
 import { MimicBody } from './Mimic';
 import { ShadeBody } from './Shade';
+import { CatBody, CatPose } from './Cat';
 import { upgradeEffects } from '../upgrades';
 import type { RunStats } from '../stars';
-import type { CollisionBox, FlickerLight, HidingSpot } from './MapBuilder';
+import type { CollisionBox, ContainerObject, FlickerLight, HidingSpot } from './MapBuilder';
 import { BEASTS } from '../bestiary';
 import { GALLERY_DOCS } from '../galleryDocs';
 import { NoiseMarkers } from './NoiseMarkers';
@@ -299,6 +300,30 @@ export interface EngineCallbacks {
   /** Progress counter for counter achievements. */
   onStat?: (key: StatKey, n: number) => void;
 }
+
+/** 2D: does the segment (ax,az)→(bx,bz) cross the box footprint? */
+const segBox = (ax: number, az: number, bx: number, bz: number, b: { min: THREE.Vector3; max: THREE.Vector3 }) => {
+  let t0 = 0;
+  let t1 = 1;
+  const dx = bx - ax;
+  const dz = bz - az;
+  for (const [p, d, lo, hi] of [
+    [ax, dx, b.min.x, b.max.x],
+    [az, dz, b.min.z, b.max.z],
+  ]) {
+    if (Math.abs(d) < 1e-9) {
+      if (p < lo || p > hi) return false;
+    } else {
+      let a = (lo - p) / d;
+      let c = (hi - p) / d;
+      if (a > c) [a, c] = [c, a];
+      t0 = Math.max(t0, a);
+      t1 = Math.min(t1, c);
+      if (t0 > t1) return false;
+    }
+  }
+  return true;
+};
 
 /** Final full-screen pass: chromatic aberration, vignette, grain, colour grade, damage flash. */
 const HorrorShader = {
@@ -1404,6 +1429,7 @@ export class GameEngine {
 
     this.builtDifficulty = this.difficulty;
     this.builtChapter = this.chapter;
+    this.builtSeason = getActiveSeason();
     this.monsters = [];
     this.crawler = null;
     if (this.chapter >= 5) this.spawnSite();
@@ -1422,9 +1448,28 @@ export class GameEngine {
       this.monsters.push(m);
       this.scene.add(m.mesh);
     }
+    this.spawnFouettard();
     this.finishWorld();
     this.tuneMonsters();
     this.setupMap();
+  }
+
+  /** 🔔 December: the Père Fouettard roams the hospital (chapter 1, Normal and up, solo) */
+  /** event that was on when the world was built (Père Fouettard, golden gifts…) */
+  public builtSeason: string | null = null;
+  private spawnFouettard() {
+    if (getActiveSeason() !== 'noel' || this.chapter !== 1 || this.difficulty < 2) return;
+    if (this.survival || this.xmasNight || this.imp || this.vsRole || this.net || this.watchOnly) return;
+    const spawns = this.map.monsterSpawns;
+    const s = spawns[(this.monsters.length + 1) % spawns.length];
+    if (!s) return;
+    const m = new MonsterAI(s.pos.clone().add(new THREE.Vector3(-0.8, 0, 0.8)), this.map.navNodes, this.map.patrolRoute, this.map.doors, (door) => this.setDoorOpen(door, true, true), s.routeIdx);
+    m.setFixedLook({ skin: '#2a1e18', eyes: '#ff2a1a', gown: '#100a07', outfit: 'fouettard' }, 1.04);
+    m.bells = true;
+    if (this.lowEndGpu) m.mesh.traverse((o) => (o.castShadow = false));
+    this.monsters.push(m);
+    this.scene.add(m.mesh);
+    this.queueChapterToast('🔔 Des clochettes tintent au loin… Cette nuit, le Père Fouettard rôde dans l\'hôpital. Quand tu les entends, cache-toi.');
   }
 
   /**
@@ -1435,7 +1480,7 @@ export class GameEngine {
     const ch = this.challenge;
     const gentle = this.chapter === 1 && !this.survival && !this.vsRole && !this.imp && this.net?.mode !== 'versus' ? (this.difficulty <= 2 ? 2 : this.difficulty === 3 ? 1 : 0) : 0;
     for (const m of this.monsters) {
-      m.speedMul = (ch === 'fast' ? 1.4 : 1) * (gentle === 2 ? 0.7 : gentle === 1 ? 0.85 : 1);
+      m.speedMul = (ch === 'fast' ? 1.4 : 1) * (gentle === 2 ? 0.7 : gentle === 1 ? 0.85 : 1) * (m.bells ? 0.9 : 1);
       m.senseMul = gentle === 2 ? 0.75 : gentle === 1 ? 0.9 : 1;
       m.chaseGiveUp = gentle === 2 ? 3 : gentle === 1 ? 4 : 5;
       m.mesh.scale.setScalar(ch === 'giant' ? 1.35 : 1);
@@ -1867,6 +1912,7 @@ export class GameEngine {
     this.setupSecret();
     this.setupMimic();
     this.setupShade();
+    this.setupCat();
 
     // Cans live inside the level group so interactions can raycast them
     this.cans = new CanSystem(this.map.sceneGroup, {
@@ -3251,6 +3297,7 @@ export class GameEngine {
     if (b) setTimeout(() => this.running && this.state.showToast(`📖 Nouvelle créature dans le Bestiaire : ${b.emoji} ${b.name}`), 2500);
   }
   private beastId(m: MonsterAI) {
+    if (m.bells) return 'fouettard';
     if (m.nurse) return 'infirmiere';
     if (m.blind) return 'aveugle';
     if (this.maze) return 'traqueur';
@@ -3679,6 +3726,242 @@ export class GameEngine {
   } | null = null;
   private shadeOff = new Map<FlickerLight, number>();
   private shadeWarn = { lights: false, drink: false, seen: false };
+
+  // -----------------------------------------------------------------------
+  // 🐈‍⬛ The hospital's black cat: follows you for a while, hisses when a
+  // creature comes, scratches the furniture that hides something… and if you
+  // run, it bolts with a yowl the creatures hear.
+  // -----------------------------------------------------------------------
+  private cat: {
+    body: CatBody;
+    pos: THREE.Vector3;
+    yaw: number;
+    state: 'away' | 'follow' | 'hiss' | 'scratch' | 'flee';
+    t: number;
+    stay: number;
+    stuck: number;
+    hissCd: number;
+    scratchCd: number;
+    goal: ContainerObject | null;
+    speed: number;
+    fleeDir: THREE.Vector3;
+  } | null = null;
+  private catScratched = new Set<string>();
+  private catWarn = { seen: false, hiss: false, scratch: false, flee: false };
+
+  private setupCat() {
+    this.cat?.body.dispose();
+    this.cat = null;
+    this.catScratched.clear();
+    this.catWarn = { seen: false, hiss: false, scratch: false, flee: false };
+    if (this.chapter > 2 || this.maze || this.forest || this.site || this.imp || this.vsRole || this.watchOnly || this.survival) return;
+    const body = new CatBody();
+    body.group.visible = false;
+    this.scene.add(body.group);
+    this.cat = { body, pos: new THREE.Vector3(), yaw: 0, state: 'away', t: 35 + Math.random() * 40, stay: 0, stuck: 0, hissCd: 0, scratchCd: 4, goal: null, speed: 0, fleeDir: new THREE.Vector3() };
+  }
+
+  private catBlocked(x: number, z: number) {
+    const r = 0.12;
+    return this.map.collisionBoxes.some((b) => !b.disabled && b.min.y < 0.45 && b.max.y > 0.08 && x > b.min.x - r && x < b.max.x + r && z > b.min.z - r && z < b.max.z + r);
+  }
+
+  /** Moves the cat towards (tx, tz), sliding along obstacles. Returns false when stuck. */
+  private catStep(tx: number, tz: number, speed: number, delta: number) {
+    const c = this.cat!;
+    const dx = tx - c.pos.x;
+    const dz = tz - c.pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 0.05) return true;
+    const step = Math.min(d, speed * delta);
+    const nx = c.pos.x + (dx / d) * step;
+    const nz = c.pos.z + (dz / d) * step;
+    c.yaw = Math.atan2(dx, dz);
+    if (!this.catBlocked(nx, nz)) c.pos.set(nx, 0, nz);
+    else if (!this.catBlocked(nx, c.pos.z)) c.pos.x = nx;
+    else if (!this.catBlocked(c.pos.x, nz)) c.pos.z = nz;
+    else return false;
+    return true;
+  }
+
+  /** Pops the cat up somewhere near you (cats do that) */
+  private catAppear(near: THREE.Vector3, minD: number, maxD: number) {
+    const c = this.cat!;
+    for (let i = 0; i < 30; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = minD + Math.random() * (maxD - minD);
+      const x = near.x + Math.cos(a) * d;
+      const z = near.z + Math.sin(a) * d;
+      if (this.catBlocked(x, z)) continue;
+      // Same room / corridor: nothing tall between you and it
+      if (this.map.collisionBoxes.some((b) => !b.disabled && b.max.y > 1.3 && b.min.y < 1 && segBox(near.x, near.z, x, z, b))) continue;
+      c.pos.set(x, 0, z);
+      return true;
+    }
+    return false;
+  }
+
+  private updateCat(delta: number) {
+    const c = this.cat;
+    if (!c) return;
+    const p = this.player;
+    const pp = p.position;
+    c.t -= delta;
+    c.hissCd -= delta;
+    c.scratchCd -= delta;
+    let pose: CatPose = 'sit';
+    const dx = pp.x - c.pos.x;
+    const dz = pp.z - c.pos.z;
+    const d = Math.hypot(dx, dz);
+    const pan = () => {
+      const right = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
+      return Math.max(-1, Math.min(1, (-dx * right.x + -dz * right.z) / (d || 1)));
+    };
+    if (this.dying || this.finished || this.intro) {
+      c.body.group.visible = c.state !== 'away' && !this.intro;
+      c.body.update(delta, 'sit', 0);
+      return;
+    }
+
+    if (c.state === 'away') {
+      c.body.group.visible = false;
+      if (c.t <= 0) {
+        if (!p.isHidden && this.catAppear(pp, 4, 8)) {
+          c.state = 'follow';
+          c.stay = 60 + Math.random() * 40;
+          c.stuck = 0;
+          c.body.group.visible = true;
+          sound.playMeow(Math.hypot(pp.x - c.pos.x, pp.z - c.pos.z), 0, false);
+          this.markSeen('chat');
+          if (!this.catWarn.seen) {
+            this.catWarn.seen = true;
+            this.state.showToast('🐈‍⬛ Un chat noir te fixe de ses yeux jaunes… Il a l\'air de vouloir te suivre. Ne cours pas, tu lui ferais peur.');
+          }
+        } else c.t = 6;
+      }
+      return;
+    }
+    c.body.group.visible = true;
+
+    // 🏃 You run near it: it bolts with a yowl the creatures hear
+    if (c.state !== 'flee' && p.isSprinting && d < 4.5) {
+      c.state = 'flee';
+      c.t = 2.5;
+      c.fleeDir.set(-dx, 0, -dz).normalize();
+      sound.playMeow(d, pan(), true);
+      if (this.net?.role !== 'guest') this.alertAll(c.pos.clone().setY(0.5), 15);
+      if (!this.catWarn.flee) {
+        this.catWarn.flee = true;
+        this.state.showToast('🐈‍⬛ MRRAAOOW ! Le chat s\'enfuit en hurlant… Ça s\'entend de loin.');
+      }
+    }
+
+    // 😾 A creature is coming: it arches and hisses
+    if (c.state === 'follow' || c.state === 'scratch') {
+      const threat = this.monsters.find((m) => m.state !== 'STUNNED' && Math.hypot(m.position.x - c.pos.x, m.position.z - c.pos.z) < 11);
+      if (threat && c.hissCd <= 0) {
+        c.state = 'hiss';
+        c.t = 2.6;
+        c.hissCd = 14;
+        c.yaw = Math.atan2(threat.position.x - c.pos.x, threat.position.z - c.pos.z);
+        if (d < 18) sound.playHiss(0.9);
+        if (!this.catWarn.hiss) {
+          this.catWarn.hiss = true;
+          this.state.showToast('😾 Le chat se hérisse et feule vers le couloir… Quelque chose approche. Cache-toi !');
+        }
+      }
+    }
+
+    if (c.state === 'flee') {
+      pose = 'run';
+      this.catStep(c.pos.x + c.fleeDir.x * 3, c.pos.z + c.fleeDir.z * 3, 6, delta);
+      if (c.t <= 0) {
+        c.state = 'away';
+        c.t = 60 + Math.random() * 40;
+      }
+    } else if (c.state === 'hiss') {
+      pose = 'hiss';
+      if (c.t <= 0) c.state = 'follow';
+    } else if (c.state === 'scratch' && c.goal) {
+      const g = c.goal;
+      const gd = Math.hypot(g.position.x - c.pos.x, g.position.z - c.pos.z);
+      if (g.searched) {
+        c.goal = null;
+        c.state = 'follow';
+      } else if (gd > 0.75) {
+        pose = 'walk';
+        if (!this.catStep(g.position.x, g.position.z, 2.2, delta)) {
+          c.stuck += delta;
+          if (c.stuck > 3) {
+            c.goal = null;
+            c.state = 'follow';
+          }
+        }
+      } else {
+        pose = 'scratch';
+        c.yaw = Math.atan2(g.position.x - c.pos.x, g.position.z - c.pos.z);
+        if (c.t <= 0) {
+          c.t = 1.2;
+          if (d < 14) sound.playChalk();
+        }
+        if (!this.catWarn.scratch && d < 12) {
+          this.catWarn.scratch = true;
+          this.state.showToast(`🐈‍⬛ Le chat gratte « ${g.name} » en miaulant doucement… Il y a peut-être quelque chose dedans.`);
+        }
+      }
+    } else {
+      // Following: a couple of metres behind you
+      c.stay -= delta;
+      const bx = pp.x + Math.sin(p.yaw) * 1.6;
+      const bz = pp.z + Math.cos(p.yaw) * 1.6;
+      const bd = Math.hypot(bx - c.pos.x, bz - c.pos.z);
+      if (bd > 0.6) {
+        const spd = Math.min(3.6, 1 + bd * 0.8);
+        pose = spd > 2.6 ? 'run' : 'walk';
+        if (this.catStep(bx, bz, spd, delta)) c.stuck = 0;
+        else c.stuck += delta;
+        c.speed = spd / 3.6;
+      } else c.yaw = Math.atan2(dx, dz);
+      // Lost behind a wall or too far: it finds its own way (pops up near you later)
+      if (c.stuck > 2.5 || d > 14) {
+        c.stuck = 0;
+        if (!this.catAppear(pp, 2, 4)) {
+          c.state = 'away';
+          c.t = 8;
+        }
+      }
+      // Something hidden nearby? It goes and scratches the furniture
+      if (c.scratchCd <= 0) {
+        c.scratchCd = 3;
+        let best: ContainerObject | null = null;
+        let bestD = 7;
+        for (const ct of this.map.containers.values()) {
+          if (ct.searched || !ct.itemInside || ct.locked || this.catScratched.has(ct.id)) continue;
+          const cd = Math.hypot(ct.position.x - c.pos.x, ct.position.z - c.pos.z);
+          if (cd < bestD) {
+            bestD = cd;
+            best = ct;
+          }
+        }
+        if (best) {
+          this.catScratched.add(best.id);
+          c.goal = best;
+          c.state = 'scratch';
+          c.stuck = 0;
+          c.t = 0;
+          sound.playMeow(d, pan(), false);
+        }
+      }
+      if (c.stay <= 0 && c.state === 'follow') {
+        c.state = 'away';
+        c.t = 45 + Math.random() * 45;
+        sound.playMeow(d, pan(), false);
+      }
+    }
+    c.body.group.position.copy(c.pos);
+    c.body.group.rotation.y = c.yaw;
+    c.body.update(delta, pose, c.speed);
+  }
 
   private setupShade() {
     this.shade?.body.dispose();
@@ -4908,6 +5191,7 @@ export class GameEngine {
     this.updateRandomEvents(delta);
     this.updateMimic(delta);
     this.updateShade(delta);
+    this.updateCat(delta);
     this.updateUv(delta);
     this.updateSecret(delta);
     this.updateWounds(delta);
@@ -7056,7 +7340,9 @@ export class GameEngine {
   /** Tutorial: what the player has done this run */
   public tut = { cans: 0, interacts: 0 };
   private treatSeason: Season | null = null;
-  private treats: { mesh: THREE.Group; y: number; taken: boolean; chest?: boolean; present?: boolean }[] = [];
+  private treats: { mesh: THREE.Group; y: number; taken: boolean; chest?: boolean; present?: boolean; gold?: boolean }[] = [];
+  /** 🎁 golden gifts picked up this run (December) */
+  public runGold = 0;
   /** Rare chests found this run (each worth TREATS_PER_CHEST) */
   public runChests = 0;
   /** 🎄 Christmas night (special chapter): evil Santa, snow, 12 presents to find */
@@ -7082,7 +7368,9 @@ export class GameEngine {
     this.runTreats = 0;
     this.runChests = 0;
     this.runPresents = 0;
+    this.runGold = 0;
     if (this.xmasNight && !this.maze && !this.forest && !this.site) this.setupXmasNight();
+    else if (getActiveSeason() === 'noel' && !this.imp && this.vsRole !== 'monster') this.setupGoldGifts();
     this.survivalWave = 0;
     if (this.survival && !this.maze && !this.forest && !this.site) {
       this.survivalWave = 1;
@@ -7166,6 +7454,11 @@ export class GameEngine {
         tr.taken = true;
         tr.mesh.removeFromParent();
         sound.playItemPickup();
+        if (tr.gold) {
+          this.runGold++;
+          this.state.showToast(`🎁 Cadeau doré ${this.runGold}/3 ! (5, 15 et 30 trouvés = skins du Père Fouettard — gardés même si tu meurs)`);
+          continue;
+        }
         if (tr.present) {
           this.runPresents++;
           this.state.showToast(
@@ -7185,6 +7478,37 @@ export class GameEngine {
         this.runTreats++;
         this.state.showToast(`${info.emoji} ${this.runTreats} ${this.runTreats > 1 ? info.many : info.one} — gardés même si vous mourez`);
       }
+    }
+  }
+
+  /** 🎁 December: 3 golden gifts hidden in every level (they count for the Père Fouettard skins) */
+  private setupGoldGifts() {
+    const track = <T extends { dispose: () => void }>(o: T) => {
+      this.treatDisposables.push(o);
+      return o;
+    };
+    const lv = this.maze ?? this.forest ?? this.site;
+    const spots = lv ? lv.freeSpots(12).map((p) => p.setY(p.y + 0.45)) : treatSpots(this.map, 14);
+    // Far from each other: take every 4th spot
+    const picks = spots.filter((_, i) => i % 4 === 1).slice(0, 3);
+    for (const pos of picks) {
+      const mesh = buildPresentModel(track);
+      mesh.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        const mat = track((m.material as THREE.MeshStandardMaterial).clone());
+        mat.color.lerp(new THREE.Color(0xffc21a), 0.75);
+        mat.emissive = new THREE.Color(0x6a4800);
+        mat.emissiveIntensity = 0.6;
+        mat.metalness = 0.6;
+        mat.roughness = 0.3;
+        m.material = mat;
+      });
+      mesh.scale.setScalar(0.8);
+      mesh.position.set(pos.x, pos.y - 0.45, pos.z);
+      mesh.rotation.y = Math.random() * Math.PI * 2;
+      this.scene.add(mesh);
+      this.treats.push({ mesh, y: mesh.position.y, taken: false, present: true, gold: true });
     }
   }
 

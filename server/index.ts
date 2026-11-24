@@ -53,7 +53,7 @@ import { grantServerAch } from '../src/achievements.ts';
 import { PushSub, isPushSub, pushPublicKey, pushTo, setupPush } from './push.ts';
 import { LEVEL_SKINS, PASS_TIERS, PASS_XP_PER_TIER, nextWeek, passEnds, passKey, passName, passReward, weekKey, weeklyChallenges } from '../src/progression.ts';
 import { BOXES, SUPPLY_NAMES, TIER_LABEL, TIER_PRICE, cosmetic as cosmeticById } from '../src/economy.ts';
-import { CATALOG, STORY_SKINS } from '../src/economy.ts';
+import { CATALOG, GIFT_SKINS, STORY_SKINS } from '../src/economy.ts';
 
 /** Admin accounts (lower case): infinite coins, can gift coins to anyone. */
 const ADMINS = new Set(['corrupted_wolf', ...(process.env.PZ_ADMINS ?? '').toLowerCase().split(',').filter(Boolean)]);
@@ -147,6 +147,8 @@ interface User {
   stars?: Record<string, number>;
   /** 🔧 Atelier: upgrade levels */
   upgrades?: Record<string, number>;
+  /** 🎁 golden gifts found this Christmas */
+  xgifts?: { key: string; n: number; at: number };
   /** 🏅 ranked season (month): points, best tier; past seasons */
   rank?: { season: string; points: number; best: number; wins: number; losses: number };
   rankHistory?: { season: string; tier: string; points: number }[];
@@ -506,6 +508,7 @@ const walletView = (u: User) => ({
   ranked: rankView(u),
   stars: u.stars ?? {},
   upgrades: u.upgrades ?? {},
+  xgifts: u.xgifts && u.xgifts.key === xgiftKey() ? u.xgifts.n : 0,
   tracks: isAdmin(u) ? MENU_TRACKS.map((t) => t.id) : (u.tracks ?? []),
   gallery: isAdmin(u)
     ? { endings: [...ENDING_KEYS], docs: GALLERY_DOCS.map((d) => d.id), beasts: BEASTS.map((b) => b.id), items: ITEM_ENTRIES.map((b) => b.id) }
@@ -1329,6 +1332,41 @@ app.post('/api/wallet/reward', (req, res) => {
   if (diff >= 2) payReferral(user);
   saveUsers();
   res.json({ gained, xp, rankGain, ...walletView(user) });
+});
+
+// 🎁 Golden gifts (December): 5 / 15 / 30 found = exclusive skins
+const xgiftKey = () => {
+  const d = eventNow();
+  return `noel-${d.getUTCMonth() === 0 ? d.getUTCFullYear() - 1 : d.getUTCFullYear()}`;
+};
+app.post('/api/xmas/gifts', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  if (currentSeason() !== 'noel') return res.status(400).json({ error: 'La chasse aux cadeaux n\'a lieu qu\'à Noël.' });
+  const n = Math.max(0, Math.min(3, Math.floor(Number(req.body?.n) || 0)));
+  const key = xgiftKey();
+  if (!user.xgifts || user.xgifts.key !== key) user.xgifts = { key, n: 0, at: 0 };
+  const g = user.xgifts;
+  const now = Date.now();
+  // At most 3 per game, and a game takes a little while
+  if (!n || now - g.at < 30000) return res.json({ total: g.n, newSkins: [], ...walletView(user) });
+  const before = g.n;
+  g.n += n;
+  g.at = now;
+  const w = walletOf(user);
+  const newSkins: string[] = [];
+  for (const [need, id] of GIFT_SKINS) {
+    if (before < need && g.n >= need && !w.owned.includes(id)) {
+      w.owned.push(id);
+      newSkins.push(id);
+    }
+  }
+  if (newSkins.length) {
+    const names = newSkins.map((id) => cosmeticById(id)?.name ?? id).join(', ');
+    user.inbox = [...(user.inbox ?? []), { from: 'Patient Zero', text: `🎁 ${g.n} cadeaux dorés trouvés : tu gagnes ${names} !`, at: now }].slice(-20);
+  }
+  saveUsers();
+  res.json({ total: g.n, newSkins, ...walletView(user) });
 });
 
 // 🔧 Atelier: buy the next level of an upgrade

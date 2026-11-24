@@ -45,6 +45,22 @@ export const BEASTS: BeastEntry[] = [
     tips: ['Un bruit qui revient toujours du même casier ? Méfiance.', 'La lampe UV révèle ses traces de mains sur la porte de son casier.', 'Ne vous cachez jamais dans son casier, et ne restez pas planté devant.'],
   },
   {
+    id: 'chat',
+    name: 'Le Chat noir (ami)',
+    emoji: '🐈‍⬛',
+    where: 'Chapitres 1 et 2',
+    desc: "Il vivait déjà à Saint-Aurore avant l'épidémie. Il te suit un moment, feule quand une créature approche et gratte les meubles qui cachent quelque chose.",
+    tips: ["Ne cours pas près de lui : il s'enfuit en hurlant et tout l'étage l'entend.", 'Quand il se hérisse en regardant un couloir, cache-toi.'],
+  },
+  {
+    id: 'fouettard',
+    name: 'Le Père Fouettard',
+    emoji: '🔔',
+    where: 'Chapitre 1 — en décembre seulement',
+    desc: 'Le compagnon noir de saint Nicolas, en version Saint-Aurore : un grand manteau, des chaînes… et des clochettes qui tintent à chaque pas.',
+    tips: ['Les clochettes trahissent sa position : écoute d\'où elles viennent.', 'Il est un peu plus lent que les autres : en Normal, on le sème en marchant vite.'],
+  },
+  {
     id: 'eteigneur',
     name: 'L\'Éteigneur',
     emoji: '🕯️',

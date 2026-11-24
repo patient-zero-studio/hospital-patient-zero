@@ -104,6 +104,8 @@ export class MonsterAI {
 
   /** Daily mutator: faster monsters */
   public speedMul = 1;
+  /** 🔔 the Père Fouettard: bells ring with each step */
+  public bells = false;
   /** 👂👁 how far it sees and hears (chapter 1 is gentler) */
   public senseMul = 1;
   /** seconds without seeing you before it gives up the chase */
@@ -945,6 +947,7 @@ export class MonsterAI {
         speed = this.chaseSpeed;
         if (this.footstepTimer <= 0) {
           sound.playMonsterFootstep(earDist, pan, true);
+          if (this.bells) sound.playBells(earDist, pan);
           this.footstepTimer = 0.27;
         }
         break;
@@ -977,6 +980,7 @@ export class MonsterAI {
     // Slow footsteps while patrolling (audible through walls)
     if (speed > 0 && this.state !== 'CHASE' && this.footstepTimer <= 0) {
       sound.playMonsterFootstep(earDist, pan, false);
+      if (this.bells) sound.playBells(earDist, pan);
       this.footstepTimer = 0.62;
     }
 
@@ -1035,6 +1039,7 @@ export class MonsterAI {
     if (this.speedNow > 0.3 && this.footstepTimer <= 0) {
       const chasing = this.state === 'CHASE';
       sound.playMonsterFootstep(earDist, pan, chasing);
+      if (this.bells) sound.playBells(earDist, pan);
       this.footstepTimer = chasing ? 0.27 : 0.62;
     }
 
@@ -1238,6 +1243,7 @@ export class MonsterAI {
     }
     if (this.speedNow > 0.3 && this.footstepTimer <= 0) {
       sound.playMonsterFootstep(earDist, pan, chasing);
+      if (this.bells) sound.playBells(earDist, pan);
       this.footstepTimer = chasing ? 0.27 : 0.55;
     }
     this.animate(delta);
