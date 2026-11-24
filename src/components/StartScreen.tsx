@@ -100,6 +100,7 @@ interface StartScreenProps {
   clanTag?: string | null;
   onMusic?: () => void;
   onGallery?: () => void;
+  onBestiary?: () => void;
   friendsOnline?: number | null;
   /** friend requests + invitations waiting */
   friendsAlert?: number;
@@ -168,6 +169,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   rankTier,
   onMusic,
   onGallery,
+  onBestiary,
   friendsOnline = null,
   friendsAlert = 0,
   season = null,
@@ -577,6 +579,15 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               >
                 <span>🖼️</span>
                 <span>Galerie</span>
+              </button>
+            )}
+            {onBestiary && (
+              <button
+                onClick={onBestiary}
+                className="px-6 py-2.5 bg-black/60 hover:bg-zinc-900 text-zinc-200 font-mono text-xs uppercase tracking-widest flex items-center gap-3 transition-all cursor-pointer border border-zinc-700 hover:border-violet-400"
+              >
+                <span>📖</span>
+                <span>Bestiaire</span>
               </button>
             )}
             {onMusic && (

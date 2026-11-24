@@ -93,6 +93,8 @@ interface HUDProps {
   hideCount?: number | null;
   /** 🎡 the emote wheel [T] is open */
   emoteWheel?: boolean;
+  /** 🔮 seconds before the secret passage closes */
+  secretLeft?: number | null;
   /** ⏱️ Speedrun chrono */
   speedrun?: { time: number; best: number | null } | null;
   treatEmoji?: string | null;
@@ -166,6 +168,7 @@ export const HUD: React.FC<HUDProps> = ({
   speedrun = null,
   hideCount = null,
   emoteWheel = false,
+  secretLeft = null,
   pact = null,
   imp = null,
   treatEmoji = null,
@@ -358,6 +361,13 @@ export const HUD: React.FC<HUDProps> = ({
       {runCoins > 0 && (
         <div className="absolute bottom-[100px] left-1/2 -translate-x-1/2 px-2 py-0.5 bg-black/60 border border-amber-700/60 text-amber-300 font-mono text-[11px]">
           🪙 {runCoins} pièce{runCoins > 1 ? 's' : ''} trouvée{runCoins > 1 ? 's' : ''}
+        </div>
+      )}
+
+      {/* 🔮 Secret passage countdown */}
+      {secretLeft != null && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 px-3 py-1 bg-black/70 border border-violet-700 text-violet-200 font-mono text-xs pointer-events-none">
+          🔮 Passage secret : {Math.floor(secretLeft / 60)}:{String(secretLeft % 60).padStart(2, '0')}
         </div>
       )}
 

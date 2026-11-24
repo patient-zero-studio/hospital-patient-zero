@@ -46,6 +46,7 @@ import { CLAN_CHEST_LEVELS, CLAN_COLORS, CLAN_EMBLEMS, CLAN_MAX, CLAN_NAME_RE, C
 import { MENU_TRACKS } from '../src/music.ts';
 import { isEndingKey } from '../src/gallery.ts';
 import { isDocId } from '../src/galleryDocs.ts';
+import { isBeastId, isItemEntryId } from '../src/bestiary.ts';
 import { grantServerAch } from '../src/achievements.ts';
 import { PushSub, isPushSub, pushPublicKey, pushTo, setupPush } from './push.ts';
 import { LEVEL_SKINS, PASS_TIERS, PASS_XP_PER_TIER, nextWeek, passEnds, passKey, passName, passReward, weekKey, weeklyChallenges } from '../src/progression.ts';
@@ -137,6 +138,9 @@ interface User {
   /** 🖼️ gallery: endings seen, documents found */
   endings?: string[];
   docs?: string[];
+  /** 📖 bestiary: creatures met, item kinds found */
+  beasts?: string[];
+  itemsSeen?: string[];
   /** 🏅 ranked season (month): points, best tier; past seasons */
   rank?: { season: string; points: number; best: number; wins: number; losses: number };
   rankHistory?: { season: string; tier: string; points: number }[];
@@ -488,7 +492,7 @@ const SHOP_LOCKED = 'Boutique verrouillée : échappe-toi de l\'hôpital une foi
 const walletView = (u: User) => ({
   ranked: rankView(u),
   tracks: u.tracks ?? [],
-  gallery: { endings: u.endings ?? [], docs: u.docs ?? [] },
+  gallery: { endings: u.endings ?? [], docs: u.docs ?? [], beasts: u.beasts ?? [], items: u.itemsSeen ?? [] },
   clanTag: u.clan ? (clans.get(u.clan)?.tag ?? null) : null,
   bests: bestsOf(u),
   referrals: u.referrals ?? 0,
@@ -2451,11 +2455,16 @@ app.post('/api/gallery', (req, res) => {
   if (!u) return res.status(401).json({ error: 'Session expirée.' });
   const docs = Array.isArray(req.body?.docs) ? req.body.docs.filter(isDocId).slice(0, 40) : [];
   const ending = isEndingKey(req.body?.ending) ? req.body.ending : null;
-  const before = (u.endings?.length ?? 0) + (u.docs?.length ?? 0);
+  const beasts = Array.isArray(req.body?.beasts) ? req.body.beasts.filter(isBeastId).slice(0, 30) : [];
+  const items = Array.isArray(req.body?.items) ? req.body.items.filter(isItemEntryId).slice(0, 30) : [];
+  const count = () => (u.endings?.length ?? 0) + (u.docs?.length ?? 0) + (u.beasts?.length ?? 0) + (u.itemsSeen?.length ?? 0);
+  const before = count();
   u.docs = [...new Set([...(u.docs ?? []), ...docs])];
   if (ending) u.endings = [...new Set([...(u.endings ?? []), ending])];
-  if ((u.endings?.length ?? 0) + (u.docs?.length ?? 0) !== before) saveUsers();
-  res.json({ gallery: { endings: u.endings ?? [], docs: u.docs ?? [] } });
+  if (beasts.length) u.beasts = [...new Set([...(u.beasts ?? []), ...beasts])];
+  if (items.length) u.itemsSeen = [...new Set([...(u.itemsSeen ?? []), ...items])];
+  if (count() !== before) saveUsers();
+  res.json({ gallery: { endings: u.endings ?? [], docs: u.docs ?? [], beasts: u.beasts ?? [], items: u.itemsSeen ?? [] } });
 });
 
 // ---------------------------------------------------------------------------

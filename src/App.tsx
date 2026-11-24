@@ -29,6 +29,7 @@ import { RedeemCode } from './components/RedeemCode';
 import { ClansPanel } from './components/ClansPanel';
 import { MusicMenu } from './components/MusicMenu';
 import { GalleryMenu } from './components/GalleryMenu';
+import { BestiaryMenu } from './components/BestiaryMenu';
 import { endingKey } from './gallery';
 import { STORY_DOC_IDS, storyDocsFound } from './galleryDocs';
 import { tierOf } from './ranked';
@@ -138,6 +139,7 @@ const EMPTY_HUD: HudSnapshot = {
   pact: null,
   imp: null,
   emoteWheel: false,
+  secretLeft: null,
   photo: null,
   treatEmoji: null,
   selectedSlot: 0,
@@ -1001,6 +1003,7 @@ export default function App() {
   const [clansOpen, setClansOpen] = useState(false);
   const [musicOpen, setMusicOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  const [bestiaryOpen, setBestiaryOpen] = useState(false);
   const [rankedOpen, setRankedOpen] = useState(false);
   /** 🖼️ Documents picked up (and the ending reached) go to the gallery */
   const reportGallery = (ending?: GameEnding) => {
@@ -1009,9 +1012,11 @@ export default function App() {
     if (!s || !e || onlineRef.current?.watching) return;
     const docs = e.state.notesCollected.map((n) => n.id);
     const key = ending ? endingKey(ending, e.state.notesCollected.length) : undefined;
-    if (!docs.length && !key) return;
+    const beasts = [...e.seenBeasts];
+    const items = [...e.seenItems];
+    if (!docs.length && !key && !beasts.length && !items.length) return;
     api
-      .gallery(s.token, docs, key)
+      .gallery(s.token, docs, key, beasts, items)
       .then((g) => setWallet((w) => (w ? { ...w, gallery: g.gallery } : w)))
       .catch(() => {});
   };
@@ -1020,6 +1025,10 @@ export default function App() {
   // ⏱️ Personal bests for the speedrun chrono
   useEffect(() => {
     if (engineRef.current && wallet?.bests) engineRef.current.speedBests = wallet.bests;
+    if (engineRef.current && wallet?.gallery) {
+      engineRef.current.knownBeasts = new Set(wallet.gallery.beasts ?? []);
+      engineRef.current.knownDocs = new Set(wallet.gallery.docs ?? []);
+    }
   }, [wallet]);
   // Polled while in the menus: who is online, requests, invitations
   useEffect(() => {
@@ -1436,6 +1445,7 @@ export default function App() {
           clanTag={wallet?.clanTag ?? null}
           onMusic={() => setMusicOpen(true)}
           onGallery={session ? () => setGalleryOpen(true) : undefined}
+          onBestiary={session ? () => setBestiaryOpen(true) : undefined}
           onRanked={session ? () => setRankedOpen(true) : undefined}
           rankTier={wallet?.ranked?.tier ?? null}
           onFriends={
@@ -1609,6 +1619,14 @@ export default function App() {
       )}
       {rankedOpen && session && !isPlaying && <RankedMenu token={session.token} me={session.username} onProfile={setProfileOf} onWallet={setWallet} onClose={() => setRankedOpen(false)} />}
       {musicOpen && !isPlaying && <MusicMenu token={session?.token ?? null} wallet={wallet} onWallet={setWallet} onClose={() => setMusicOpen(false)} />}
+      {bestiaryOpen && session && !isPlaying && (
+        <BestiaryMenu
+          beasts={wallet?.gallery?.beasts ?? []}
+          items={wallet?.gallery?.items ?? []}
+          docs={wallet?.gallery?.docs ?? []}
+          onClose={() => setBestiaryOpen(false)}
+        />
+      )}
       {galleryOpen && session && !isPlaying && (
         <GalleryMenu endings={wallet?.gallery?.endings ?? []} docs={wallet?.gallery?.docs ?? []} achDone={wallet?.ach?.done ?? {}} onClose={() => setGalleryOpen(false)} />
       )}
@@ -1779,6 +1797,7 @@ export default function App() {
           speedrun={hud.speedrun}
           hideCount={hud.hideCount}
           emoteWheel={hud.emoteWheel}
+          secretLeft={hud.secretLeft}
           pact={hud.pact}
           imp={hud.imp}
           treatEmoji={hud.treatEmoji}

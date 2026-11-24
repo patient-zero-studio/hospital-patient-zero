@@ -65,7 +65,7 @@ export interface WalletView {
   /** 🎵 menu tracks bought */
   tracks?: string[];
   /** 🖼️ endings seen, documents found */
-  gallery?: { endings: string[]; docs: string[] };
+  gallery?: { endings: string[]; docs: string[]; beasts?: string[]; items?: string[] };
   /** 🛡️ your clan's tag */
   clanTag?: string | null;
   /** 🏅 ranked season */
@@ -455,7 +455,13 @@ export const api = {
   clanDeposit: (token: string, coins: number): Promise<ClansView & { message: string; wallet: WalletView }> => post('/api/clans/deposit', { coins }, token),
   adminClanDelete: (token: string, id: string): Promise<{ message: string }> => post('/api/admin/clans/delete', { id }, token),
   buyTrack: (token: string, id: string): Promise<WalletView & { message: string }> => post('/api/music/buy', { id }, token),
-  gallery: (token: string, docs: string[], ending?: string): Promise<{ gallery: { endings: string[]; docs: string[] } }> => post('/api/gallery', { docs, ending }, token),
+  gallery: (
+    token: string,
+    docs: string[],
+    ending?: string,
+    beasts: string[] = [],
+    items: string[] = []
+  ): Promise<{ gallery: { endings: string[]; docs: string[]; beasts?: string[]; items?: string[] } }> => post('/api/gallery', { docs, ending, beasts, items }, token),
 
   // ---- 🎟️ Codes, 💬 chat, 👀 spectator ----
   redeem: (token: string, code: string): Promise<WalletView & { message: string }> => post('/api/redeem', { code }, token),

@@ -29,7 +29,9 @@ import { Difficulty, difficultyInfo } from './Difficulty';
 import { CanSystem, FlipResult } from './CanSystem';
 import { RemotePlayer } from './RemotePlayer';
 import { MimicBody } from './Mimic';
-import type { HidingSpot } from './MapBuilder';
+import type { CollisionBox, FlickerLight, HidingSpot } from './MapBuilder';
+import { BEASTS } from '../bestiary';
+import { GALLERY_DOCS } from '../galleryDocs';
 import { NoiseMarkers } from './NoiseMarkers';
 import { VentCrawler, CRAWLER_STATES, CrawlerHuman } from './VentCrawler';
 import { buildItemModel } from './ItemModels';
@@ -184,6 +186,8 @@ export interface HudSnapshot {
   hideCount: number | null;
   /** 🎡 the emote wheel is open */
   emoteWheel: boolean;
+  /** 🔮 secret passage countdown */
+  secretLeft: number | null;
   /** 📸 photo mode */
   photo: { filter: string; help: boolean; msg: string | null } | null;
   /** 💃 victory dance on screen: no HUD */
@@ -1819,6 +1823,7 @@ export class GameEngine {
     this.clearSmokes();
     this.spawnGadgets();
     this.setupUv();
+    this.setupSecret();
     this.setupMimic();
 
     // Cans live inside the level group so interactions can raycast them
@@ -3004,6 +3009,7 @@ export class GameEngine {
     this.pushHud();
   }
   private uvTexture(text: string | null) {
+    if (text === '__secret') return this.secretGlyph();
     const c = document.createElement('canvas');
     c.width = text ? 512 : 256;
     c.height = text ? 128 : 256;
@@ -3113,7 +3119,9 @@ export class GameEngine {
   }
   private updateUv(delta: number) {
     if (this.uvOn && !this.state.inventory.some((i) => i.type === 'uvlamp')) this.setUv(false, true);
-    const all = this.mimicMark ? [...this.uvMarks, this.mimicMark] : this.uvMarks;
+    const all = [...this.uvMarks];
+    if (this.mimicMark) all.push(this.mimicMark);
+    if (this.secret && this.secret.state === 'hidden') all.push(this.secret.mark);
     if (!all.length) return;
     const p = this.player;
     const lit = this.uvOn && p.flashlightOn && p.flashlightBattery > 0 && !p.isHidden;
@@ -3136,6 +3144,11 @@ export class GameEngine {
     }
   }
   private onUvFound(m: UvMark) {
+    if (m === this.secret?.mark) {
+      sound.playHiss(0.8);
+      this.state.showToast('👁 Un symbole étrange sur le mur… Gardez la lumière UV dessus.');
+      return;
+    }
     if (!m.text) {
       sound.playHiss(1.2);
       this.state.showToast('🖐 Des traces de mains sur ce casier… de l\'INTÉRIEUR. Quelque chose s\'y cache. N\'y entrez pas.');
@@ -3152,6 +3165,378 @@ export class GameEngine {
         ? `🔮 « ${m.text} » — Tous les messages cachés trouvés (${this.uvTotal}/${this.uvTotal}) ! +${n} 🪙`
         : `🔮 Message caché (${this.uvFound}/${this.uvTotal}) : « ${m.text} »  +${n} 🪙`
     );
+  }
+
+  // -----------------------------------------------------------------------
+  // 📖 Bestiary: creatures met, item kinds found (sent to the account at the end of the run)
+  // -----------------------------------------------------------------------
+  public seenBeasts = new Set<string>();
+  public seenItems = new Set<string>();
+  /** what the account already knows (the toast only shows new creatures) */
+  public knownBeasts = new Set<string>();
+  public knownDocs = new Set<string>();
+  private seenT = 0;
+  private markSeen(id: string) {
+    if (this.seenBeasts.has(id) || this.watchOnly) return;
+    this.seenBeasts.add(id);
+    if (this.knownBeasts.has(id)) return;
+    const b = BEASTS.find((x) => x.id === id);
+    if (b) setTimeout(() => this.running && this.state.showToast(`📖 Nouvelle créature dans le Bestiaire : ${b.emoji} ${b.name}`), 2500);
+  }
+  private beastId(m: MonsterAI) {
+    if (m.nurse) return 'infirmiere';
+    if (m.blind) return 'aveugle';
+    if (this.maze) return 'traqueur';
+    if (this.forest) return 'foret';
+    const s = this.site;
+    if (s instanceof CircusTent) return 'clowns';
+    if (s instanceof DreamHouse) return 'cauchemar';
+    if (s instanceof BossArena) return 'moreau';
+    if (s instanceof Rooftop) return 'toit';
+    if (s instanceof SiteB) return 'sujet00';
+    return 'patient0';
+  }
+  private trackSeen(delta: number) {
+    this.seenT -= delta;
+    if (this.seenT > 0) return;
+    this.seenT = 0.5;
+    if (this.vsRole || this.watchOnly) return;
+    for (const i of this.state.inventory) if (i.type !== 'note' && i.type !== 'cassette' && i.type !== 'special') this.seenItems.add(i.type);
+    if (this.state.runCoins > 0) this.seenItems.add('coins');
+    const p = this.player.position;
+    for (const m of this.monsters) {
+      if (!m.mesh.visible || m.position.distanceTo(p) > 14) continue;
+      this.markSeen(this.beastId(m));
+    }
+    if (this.crawler && this.crawler.position.distanceTo(p) < 10) this.markSeen('rampant');
+  }
+
+  // -----------------------------------------------------------------------
+  // 🔮 Hidden room: a UV symbol on a wall; light it 1.5 s and a passage opens for 2 minutes
+  // (the room is a pocket outside the map: the creatures can't get in)
+  // -----------------------------------------------------------------------
+  private secret: {
+    mark: UvMark;
+    door: THREE.Mesh;
+    at: THREE.Vector3;
+    dir: THREE.Vector3;
+    exitAt: THREE.Vector3;
+    inward: THREE.Vector3;
+    room: THREE.Group;
+    boxes: CollisionBox[];
+    fixture: FlickerLight;
+    lit: number;
+    state: 'hidden' | 'open' | 'closed';
+    timeLeft: number;
+    inside: boolean;
+    visited: boolean;
+    warned: number;
+  } | null = null;
+  private secretFade = 0;
+  private secretGlyph() {
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 256;
+    const g = c.getContext('2d')!;
+    g.shadowColor = '#b48cff';
+    g.shadowBlur = 18;
+    g.strokeStyle = '#ece0ff';
+    g.fillStyle = '#ece0ff';
+    g.lineWidth = 7;
+    // An eye inside a triangle, with arrows pointing at the wall
+    g.beginPath();
+    g.moveTo(128, 30);
+    g.lineTo(230, 210);
+    g.lineTo(26, 210);
+    g.closePath();
+    g.stroke();
+    g.beginPath();
+    g.ellipse(128, 145, 46, 26, 0, 0, Math.PI * 2);
+    g.stroke();
+    g.beginPath();
+    g.arc(128, 145, 13, 0, Math.PI * 2);
+    g.fill();
+    g.font = 'bold 30px "Courier New", monospace';
+    g.textAlign = 'center';
+    g.fillText('▼ POUSSE ▼', 128, 246);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+  private setupSecret() {
+    const old = this.secret;
+    if (old) {
+      // (the same map can be rebuilt: take the room's walls and light back out of it)
+      for (const b of old.boxes) {
+        const bi = this.map.collisionBoxes.indexOf(b);
+        if (bi >= 0) this.map.collisionBoxes.splice(bi, 1);
+      }
+      const li = this.map.lights.indexOf(old.fixture);
+      if (li >= 0) this.map.lights.splice(li, 1);
+      this.disposeUvMark(old.mark);
+      old.door.parent?.remove(old.door);
+      old.room.parent?.remove(old.room);
+      old.room.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh) {
+          m.geometry.dispose();
+          (m.material as THREE.Material).dispose();
+        }
+      });
+      old.door.geometry.dispose();
+      (old.door.material as THREE.Material).dispose();
+    }
+    this.secret = null;
+    this.secretFade = 0;
+    if (this.maze || this.forest || this.site || this.vsRole || this.imp || this.watchOnly || this.net?.mode === 'race') return;
+    const walls = this.map.collisionBoxes.filter((b) => !b.disabled && !b.doorId && b.min.y < 1.0 && b.max.y > 2.2);
+    const dirs: [number, number][] = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ];
+    let pick: { x: number; z: number; dx: number; dz: number } | null = null;
+    for (const s of treatSpots(this.map, 20)) {
+      if (s.y > 1) continue; // ground floor only
+      if (this.uvMarks.some((m) => Math.hypot(m.mesh.position.x - s.x, m.mesh.position.z - s.z) < 4)) continue;
+      for (const [dx, dz] of dirs) {
+        for (const b of walls) {
+          const t = rayBox2D(s.x, s.z, dx, dz, b);
+          if (t === null || t > 3) continue;
+          const along = dx !== 0 ? b.max.z - b.min.z : b.max.x - b.min.x;
+          if (along < 2.2) continue;
+          let x = s.x + dx * (t - 0.025);
+          let z = s.z + dz * (t - 0.025);
+          if (dx !== 0) z = THREE.MathUtils.clamp(z, b.min.z + 0.8, b.max.z - 0.8);
+          else x = THREE.MathUtils.clamp(x, b.min.x + 0.8, b.max.x - 0.8);
+          pick = { x, z, dx, dz };
+          break;
+        }
+        if (pick) break;
+      }
+      if (pick) break;
+    }
+    if (!pick) return;
+    const dir = new THREE.Vector3(-pick.dx, 0, -pick.dz); // out of the wall, toward the corridor
+    const at = new THREE.Vector3(pick.x, 0, pick.z);
+    const mark = this.makeUvMark('__secret', 0.9, 0.9);
+    mark.mesh.position.set(at.x, 1.45, at.z);
+    mark.mesh.lookAt(at.x + dir.x, 1.45, at.z + dir.z);
+    // The opening (shown once the wall slides)
+    const dc = document.createElement('canvas');
+    dc.width = 128;
+    dc.height = 256;
+    const dg = dc.getContext('2d')!;
+    const grad = dg.createRadialGradient(64, 128, 10, 64, 128, 130);
+    grad.addColorStop(0, '#000');
+    grad.addColorStop(0.75, '#05010a');
+    grad.addColorStop(1, '#3a1a6a');
+    dg.fillStyle = grad;
+    dg.fillRect(0, 0, 128, 256);
+    dg.strokeStyle = '#a070ff';
+    dg.lineWidth = 6;
+    dg.strokeRect(3, 3, 122, 250);
+    const dt = new THREE.CanvasTexture(dc);
+    dt.colorSpace = THREE.SRGBColorSpace;
+    const door = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 2.1), new THREE.MeshBasicMaterial({ map: dt, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -3 }));
+    door.position.set(at.x + dir.x * 0.01, 1.05, at.z + dir.z * 0.01);
+    door.lookAt(door.position.x + dir.x, 1.05, door.position.z + dir.z);
+    door.visible = false;
+    this.map.sceneGroup.add(door);
+
+    // ---- The pocket room, far east of everything
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (const b of this.map.collisionBoxes) {
+      maxX = Math.max(maxX, b.max.x);
+      minZ = Math.min(minZ, b.min.z);
+      maxZ = Math.max(maxZ, b.max.z);
+    }
+    const cx = maxX + 40;
+    const cz = (minZ + maxZ) / 2;
+    const W = 5;
+    const H = 2.8;
+    const room = new THREE.Group();
+    const stone = new THREE.MeshStandardMaterial({ color: 0x575060, roughness: 0.9 });
+    const box = (w: number, h: number, d: number, x: number, y: number, z: number, m: THREE.Material = stone) => {
+      const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+      o.position.set(x, y, z);
+      o.receiveShadow = true;
+      room.add(o);
+      return o;
+    };
+    box(W, 0.1, W, cx, -0.05, cz);
+    box(W, 0.1, W, cx, H + 0.05, cz);
+    box(0.2, H, W, cx - W / 2, H / 2, cz);
+    box(0.2, H, W, cx + W / 2, H / 2, cz);
+    box(W, H, 0.2, cx, H / 2, cz - W / 2);
+    box(W, H, 0.2, cx, H / 2, cz + W / 2);
+    // Glowing UV tubes along the walls, a table in the middle
+    const tube = new THREE.MeshStandardMaterial({ color: 0x6a40ff, emissive: 0x7a4cff, emissiveIntensity: 2.4 });
+    // A real (dim, violet) light: the engine's light pool picks it up like any fixture
+    const fixture: FlickerLight = {
+      position: new THREE.Vector3(cx, H - 0.3, cz),
+      color: new THREE.Color(0xc0a8ff),
+      distance: 10,
+      k: 1,
+      current: 0,
+      fixtureMat: tube,
+      baseIntensity: 8,
+      baseEmissive: 2.4,
+      nextFlicker: 1,
+      flicker: true,
+      needsPower: false,
+    };
+    this.map.lights.push(fixture);
+    box(W - 0.4, 0.05, 0.05, cx, H - 0.15, cz - W / 2 + 0.14, tube);
+    box(W - 0.4, 0.05, 0.05, cx, H - 0.15, cz + W / 2 - 0.14, tube);
+    box(1.4, 0.06, 0.8, cx, 0.78, cz, new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 0.8 }));
+    for (const [lx, lz] of [
+      [-0.62, -0.32],
+      [0.62, -0.32],
+      [-0.62, 0.32],
+      [0.62, 0.32],
+    ])
+      box(0.05, 0.76, 0.05, cx + lx, 0.38, cz + lz, new THREE.MeshStandardMaterial({ color: 0x3a2a1e }));
+    // Writing on the walls, visible here without UV
+    const wallText = (text: string, x: number, z: number, ry: number) => {
+      const m = this.makeUvMark(text, 1.8, 0.45);
+      m.mesh.removeFromParent();
+      m.mat.opacity = 0.85;
+      m.found = true;
+      m.mesh.position.set(x, 1.6, z);
+      m.mesh.rotation.y = ry;
+      room.add(m.mesh);
+    };
+    wallText('ICI ILS NE VIENNENT PAS', cx, cz + W / 2 - 0.11, Math.PI);
+    wallText('LE MUR SE REFERME', cx - W / 2 + 0.11, cz, Math.PI / 2);
+    wallText('NE TRAÎNE PAS', cx + W / 2 - 0.11, cz, -Math.PI / 2);
+    // Way out: on the south wall
+    const exitDoor = door.clone();
+    exitDoor.visible = true;
+    exitDoor.position.set(cx, 1.05, cz - W / 2 + 0.11);
+    exitDoor.rotation.set(0, 0, 0);
+    room.add(exitDoor);
+    this.map.sceneGroup.add(room);
+    const mkBox = (x0: number, x1: number, z0: number, z1: number): CollisionBox => ({ min: new THREE.Vector3(x0, 0, z0), max: new THREE.Vector3(x1, H, z1) });
+    const boxes = [
+      mkBox(cx - W / 2 - 0.1, cx - W / 2 + 0.1, cz - W / 2, cz + W / 2),
+      mkBox(cx + W / 2 - 0.1, cx + W / 2 + 0.1, cz - W / 2, cz + W / 2),
+      mkBox(cx - W / 2, cx + W / 2, cz - W / 2 - 0.1, cz - W / 2 + 0.1),
+      mkBox(cx - W / 2, cx + W / 2, cz + W / 2 - 0.1, cz + W / 2 + 0.1),
+      mkBox(cx - 0.7, cx + 0.7, cz - 0.4, cz + 0.4),
+    ];
+    this.map.collisionBoxes.push(...boxes);
+    // Loot on the table (the host decides, like every item in the world)
+    if (this.net?.role !== 'guest') {
+      const r = Math.random;
+      const defs: Omit<GameItem, 'id'>[] = [
+        [
+          { name: 'Pile', type: 'battery', description: 'Recharge 55 % de la batterie de la lampe torche.', icon: 'BatteryCharging' },
+          { name: 'Adrénaline', type: 'medkit', description: 'Auto-injecteur : endurance au maximum + 6 s de sprint illimité.', icon: 'HeartPulse' },
+          { name: 'Seringue de Sédatif', type: 'sedative', description: 'Immobilise un monstre 5 secondes (à moins de 3 m, face à lui).', icon: 'Syringe' },
+        ][Math.floor(r() * 3)] as Omit<GameItem, 'id'>,
+        r() < 0.5 ? SMOKE_ITEM : TRAP_ITEM,
+      ];
+      const tapes = GALLERY_DOCS.filter((d) => d.chapter === 9);
+      const fresh = tapes.filter((d) => !this.knownDocs.has(d.id));
+      const tape = (fresh.length ? fresh : tapes)[Math.floor(r() * (fresh.length || tapes.length))];
+      if (tape) defs.push({ name: tape.name, type: 'cassette', description: tape.text, lore: tape.text, icon: 'Disc', id: tape.id } as unknown as Omit<GameItem, 'id'>);
+      defs.forEach((d, i) => {
+        const id = (d as unknown as { id?: string }).id ?? `secret-${i}-${Math.floor(r() * 1e6)}`;
+        this.spawnWorldItem({ ...d, id } as GameItem, new THREE.Vector3(cx - 0.45 + i * 0.45, 0.81, cz), r() * Math.PI, false);
+      });
+    }
+    this.secret = {
+      mark,
+      door,
+      at,
+      dir,
+      exitAt: new THREE.Vector3(cx, 0, cz - W / 2 + 0.15),
+      inward: new THREE.Vector3(0, 0, 1),
+      room,
+      boxes,
+      fixture,
+      lit: 0,
+      state: 'hidden',
+      timeLeft: 0,
+      inside: false,
+      visited: false,
+      warned: 999,
+    };
+  }
+  private secretTeleport(pos: THREE.Vector3, face: THREE.Vector3) {
+    this.player.teleport(pos, Math.atan2(-face.x, -face.z));
+    this.secretFade = 0.5;
+    this.blackout = 1;
+    sound.playStairs();
+  }
+  private updateSecret(delta: number) {
+    if (this.secretFade > 0) {
+      this.secretFade -= delta;
+      this.blackout = Math.max(0, this.secretFade / 0.5);
+    }
+    const s = this.secret;
+    if (!s) return;
+    const p = this.player;
+    if (s.state === 'hidden') {
+      if (s.mark.mat.opacity > 0.6) s.lit += delta;
+      else s.lit = Math.max(0, s.lit - delta * 0.5);
+      if (s.lit >= 1.5) {
+        s.state = 'open';
+        s.timeLeft = 120;
+        s.door.visible = true;
+        s.mark.mesh.visible = false;
+        sound.playBreakerClunk();
+        sound.playDistantSlam(0);
+        p.shake = Math.max(p.shake, 0.35);
+        this.state.showToast('🔮 Le mur glisse : un passage secret s\'ouvre ! Il se refermera dans 2 minutes.');
+        this.pushHud();
+      }
+      return;
+    }
+    if (s.state !== 'open') return;
+    s.timeLeft -= delta;
+    const pos = p.position;
+    // (no new trigger while the screen is still fading after a passage)
+    if (this.secretFade > 0) {
+      /* wait */
+    } else if (!s.inside) {
+      if (!p.isHidden && Math.hypot(pos.x - (s.at.x + s.dir.x * 0.35), pos.z - (s.at.z + s.dir.z * 0.35)) < 0.6) {
+        s.inside = true;
+        this.secretTeleport(s.exitAt.clone().addScaledVector(s.inward, 1.0), s.inward);
+        if (!s.visited) {
+          s.visited = true;
+          const n = 30;
+          if (this.net?.role === 'guest') this.net.send({ k: 'coins', n });
+          else this.state.runCoins += n;
+          this.state.showToast('🔮 Une salle cachée ! Ici, les monstres ne peuvent pas entrer. +30 🪙 — sortez avant que le mur se referme.');
+        } else this.state.showToast('🔮 Vous revoilà dans la salle cachée. Surveillez le temps !');
+      }
+    } else {
+      if (s.timeLeft <= 60 && s.warned > 60) this.state.showToast('⏳ Plus qu\'une minute avant que le passage se referme !');
+      if (s.timeLeft <= 30 && s.warned > 30) this.state.showToast('⏳ 30 secondes ! Le mur commence à trembler…');
+      if (s.timeLeft <= 10 && s.warned > 10) this.state.showToast('⏳ 10 secondes ! SORTEZ !');
+      s.warned = Math.min(s.warned, s.timeLeft);
+      if (Math.hypot(pos.x - s.exitAt.x, pos.z - s.exitAt.z) < 0.6) {
+        s.inside = false;
+        this.secretTeleport(s.at.clone().addScaledVector(s.dir, 1.4), s.dir);
+      }
+    }
+    if (s.timeLeft <= 0) {
+      s.state = 'closed';
+      s.door.visible = false;
+      sound.playDistantSlam(0);
+      if (s.inside) {
+        s.inside = false;
+        this.secretTeleport(s.at.clone().addScaledVector(s.dir, 1.4), s.dir);
+        p.shake = Math.max(p.shake, 0.6);
+        this.state.showToast('🔮 Le passage se referme… Le mur vous recrache dans le couloir !');
+      } else if (Math.hypot(pos.x - s.at.x, pos.z - s.at.z) < 25) this.state.showToast('🔮 Le passage secret s\'est refermé.');
+      this.pushHud();
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -3351,6 +3736,7 @@ export class GameEngine {
         : '👁 UN MIMIC ! Il imitait les bruits depuis ce casier… Son hurlement a alerté tout l\'étage. FUYEZ !'
     );
     this.mimicMet = true;
+    this.markSeen('mimic');
     this.pushHud();
   }
   private animateMimicBurst(delta: number) {
@@ -4250,6 +4636,8 @@ export class GameEngine {
     this.updateRandomEvents(delta);
     this.updateMimic(delta);
     this.updateUv(delta);
+    this.updateSecret(delta);
+    this.trackSeen(delta);
     this.trackRun(delta);
     if (p.inDuct && !this.ductWarned && this.crawler) {
       this.ductWarned = true;
@@ -4592,6 +4980,7 @@ export class GameEngine {
       timeLeft: this.vsRole ? this.timeLeft : null,
       hideCount: this.hideSeek && this.hideCount > 0 ? Math.ceil(this.hideCount) : null,
       emoteWheel: this.emoteWheel,
+      secretLeft: this.secret?.state === 'open' ? Math.max(0, Math.ceil(this.secret.timeLeft)) : null,
       photo: this.photo ? { filter: GameEngine.PHOTO_FILTERS[this.photoFilter], help: this.photoHelp, msg: this.photoMsg } : null,
       imp: this.imp
         ? {
