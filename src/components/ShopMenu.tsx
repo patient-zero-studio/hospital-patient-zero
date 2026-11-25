@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Coins, Crown, Gift, Loader2, ShoppingBag, Sparkles, X } from 'lucide-react';
-import { ADVENT, BOXES, EVENT_BOX_PRICE, TREATS_PER_CHEST, BoxId, BoxResult, CATALOG, Cosmetic, TIER_COLOR, TIER_LABEL, TIER_PRICE, cosmetic, fmtCoins, rarityColor, rarityLabel } from '../economy';
+import { ADVENT, BOXES, EVENT_BOX_PRICE, TREATS_PER_CHEST, BoxId, BoxResult, CATALOG, Cosmetic, TIER_COLOR, TIER_LABEL, TIER_PRICE, cosmetic, fmtCoins, isLegendary, rarityColor, rarityLabel } from '../economy';
+import { ChestReveal } from './ChestReveal';
 import { api, AdminUser, Boost, BoostKind, WalletView } from '../net/api';
 import { SEASON_INFO, Season, SeasonSetting } from '../seasons';
 import { AdminDashboard } from './AdminDashboard';
@@ -757,43 +758,34 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
           </>
         )}
 
-        {reveal && (
-          <div className="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center" onClick={() => reveal.result && setReveal(null)}>
-            {(() => {
-              const b =
-                reveal.box === 'daily'
-                  ? { name: 'Cadeau du jour', color: '#34d399' }
-                  : reveal.box === 'advent'
-                    ? { name: "Calendrier de l'Avent", color: '#ef4444' }
-                    : reveal.box === 'event'
-                      ? { name: season ? `Boîte ${SEASON_INFO[season].name}` : 'Boîte', color: season ? SEASON_INFO[season].color : '#fbbf24' }
+        {reveal &&
+          (() => {
+            const b =
+              reveal.box === 'daily'
+                ? { name: 'Cadeau du jour', color: '#34d399' }
+                : reveal.box === 'advent'
+                  ? { name: "Calendrier de l'Avent", color: '#ef4444' }
+                  : reveal.box === 'event'
+                    ? { name: season ? `Boîte ${SEASON_INFO[season].name}` : 'Boîte', color: season ? SEASON_INFO[season].color : '#fbbf24' }
                     : BOXES.find((x) => x.id === reveal.box)!;
-              const r = reveal.result;
-              const skin = r?.skin ? cosmetic(r.skin) : undefined;
-              return (
-                <div className="flex flex-col items-center text-center">
-                  <div
-                    className={`w-32 h-32 flex items-center justify-center text-6xl border-4 mb-6 ${r ? '' : 'animate-[spin_0.6s_linear_infinite]'}`}
-                    style={{ borderColor: b.color, boxShadow: `0 0 60px ${b.color}`, background: `radial-gradient(circle, ${b.color}55, #000)` }}
-                  >
-                    {!r ? '🎁' : skin ? <CosmeticBadge c={skin} size={90} /> : r.kind === 'coins' ? '🪙' : '📦'}
-                  </div>
-                  {r ? (
-                    <>
-                      <div className="text-xs font-mono uppercase tracking-[0.4em] mb-2" style={{ color: b.color }}>
-                        {b.name}
-                      </div>
-                      <div className="text-2xl font-black text-zinc-100 max-w-md">{r.text}</div>
-                      <div className="text-[11px] font-mono text-zinc-500 mt-6">Cliquez pour continuer</div>
-                    </>
-                  ) : (
-                    <div className="text-sm font-mono text-zinc-400 animate-pulse">Ouverture…</div>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-        )}
+            const r = reveal.result;
+            const skin = r?.skin ? cosmetic(r.skin) : undefined;
+            const prize = !r
+              ? null
+              : skin && !r.refund
+                ? {
+                    color: rarityColor(skin),
+                    label: rarityLabel(skin),
+                    rank: isLegendary(skin) ? 4 : skin.tier === 'exclusif' ? 3 : skin.tier === 'petit' ? 1 : 2,
+                    text: r.text,
+                    icon: <CosmeticBadge c={skin} size={110} />,
+                    preview: <Preview look={withItem(look ?? DEFAULT_APPEARANCE, skin)} tab={skin.target === 'human' ? 'human' : 'monster'} />,
+                  }
+                : r.kind === 'supplies'
+                  ? { color: '#60a5fa', label: 'Fournitures', rank: 0, text: r.text, icon: '📦' }
+                  : { color: '#fbbf24', label: 'Pièces', rank: 0, text: r.text, icon: '🪙' };
+            return <ChestReveal key={String(reveal.box)} name={b.name} color={b.color} ready={!!r} prize={prize} onClose={() => setReveal(null)} />;
+          })()}
       </div>
     </div>
   );

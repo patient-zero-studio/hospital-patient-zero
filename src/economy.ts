@@ -437,7 +437,7 @@ export const openBox = (w: Wallet, id: BoxId, rnd: () => number = Math.random): 
     return { kind: 'skin', skin: skin.id, refund, text: `${skin.name} (déjà possédé → +${refund} pièces)` };
   }
   w.owned.push(skin.id);
-  return { kind: 'skin', skin: skin.id, text: `${skin.name} — ${TIER_LABEL[skin.tier]} !` };
+  return { kind: 'skin', skin: skin.id, text: `${skin.name} — ${rarityLabel(skin)} !` };
 };
 
 // ---------------------------------------------------------------------------
@@ -554,7 +554,7 @@ export const claimAdvent = (w: Wallet, day: number, rnd: () => number = Math.ran
       parts.push(`${skin.name} (déjà possédé → +${refund} pièces)`);
     } else {
       w.owned.push(skin.id);
-      parts.push(`${skin.name} — ${TIER_LABEL[skin.tier]} !`);
+      parts.push(`${skin.name} — ${rarityLabel(skin)} !`);
     }
   }
   if (r.supplies) {
@@ -624,7 +624,7 @@ export const openEventBox = (w: Wallet, season: Season, rnd: () => number = Math
     return { kind: 'skin', skin: skin.id, refund, text: `${skin.name} (déjà possédé → +${refund} pièces)` };
   }
   w.owned.push(skin.id);
-  return { kind: 'skin', skin: skin.id, text: `${skin.name} — ${TIER_LABEL[skin.tier]} !` };
+  return { kind: 'skin', skin: skin.id, text: `${skin.name} — ${rarityLabel(skin)} !` };
 };
 
 // ---------------------------------------------------------------------------

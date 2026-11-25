@@ -127,3 +127,16 @@ canvas {
 .menu-pulse { animation: menu-pulse 2.2s ease-in-out infinite; }
 .menu-pulse:hover { animation-play-state: paused; }
 @keyframes menu-rays { to { transform: rotate(360deg); } }
+
+/* 🎁 chest opening */
+@keyframes chest-shake {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(calc(var(--k) * -3px), calc(var(--k) * 1px)) rotate(calc(var(--k) * -2.5deg)); }
+  50% { transform: translate(calc(var(--k) * 2px), calc(var(--k) * -2px)) rotate(calc(var(--k) * 1.5deg)) scale(1.03); }
+  75% { transform: translate(calc(var(--k) * 3px), calc(var(--k) * 1px)) rotate(calc(var(--k) * 2.5deg)); }
+}
+@keyframes chest-lid { to { transform: translateY(-220px) rotate(-40deg); opacity: 0; } }
+@keyframes chest-flash { from { opacity: 1; } to { opacity: 0; } }
+@keyframes chest-particle { from { transform: translate(0, 0) scale(1); opacity: 1; } to { transform: translate(var(--dx), var(--dy)) scale(0.2) rotate(200deg); opacity: 0; } }
+@keyframes chest-item { 0% { transform: scale(0) rotate(-15deg); opacity: 0; } 60% { transform: scale(1.12) rotate(3deg); opacity: 1; } 100% { transform: scale(1) rotate(0); } }
+@keyframes chest-quake { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-9px, 5px); } 50% { transform: translate(8px, -6px); } 75% { transform: translate(-6px, -4px); } }

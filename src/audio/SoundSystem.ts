@@ -664,6 +664,108 @@ class SoundSystem {
     });
   }
 
+  /** 🎁 A chest shaking: a dull wooden thump with a little metal rattle. */
+  public playChestRattle(strength = 0.5) {
+    if (!this.ctx || !this.sfxGain) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(110 + strength * 40, t);
+    o.frequency.exponentialRampToValueAtTime(55, t + 0.12);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.25 * strength + 0.05, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    o.connect(g);
+    g.connect(this.sfxGain);
+    o.start(t);
+    o.stop(t + 0.2);
+    // rattle
+    const len = Math.floor(ctx.sampleRate * 0.08);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 3200;
+    bp.Q.value = 4;
+    const ng = ctx.createGain();
+    ng.gain.value = 0.12 * strength;
+    src.connect(bp);
+    bp.connect(ng);
+    ng.connect(this.sfxGain);
+    src.start(t + 0.02);
+  }
+
+  /** 🎁 The chest bursts open: a boom, then a jingle that grows with the rarity (4 = legendary choir). */
+  public playChestOpen(rank = 0) {
+    if (!this.ctx || !this.sfxGain) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    // boom
+    const len = Math.floor(ctx.sampleRate * 0.6);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 4);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(2400, t);
+    lp.frequency.exponentialRampToValueAtTime(200, t + 0.5);
+    const bg = ctx.createGain();
+    bg.gain.value = 0.5;
+    src.connect(lp);
+    lp.connect(bg);
+    bg.connect(this.sfxGain);
+    src.start(t);
+    // jingle: more notes and higher the rarer
+    const scale = [523, 659, 784, 1047, 1319, 1568, 2093];
+    const n = 3 + Math.min(4, rank);
+    for (let i = 0; i < n; i++) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = rank >= 3 ? 'square' : 'triangle';
+      const at = t + 0.12 + i * 0.07;
+      o.frequency.setValueAtTime(scale[i], at);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.setValueAtTime(rank >= 3 ? 0.08 : 0.2, at);
+      g.gain.exponentialRampToValueAtTime(0.001, at + 0.4);
+      o.connect(g);
+      g.connect(this.sfxGain);
+      o.start(at);
+      o.stop(at + 0.45);
+    }
+    // legendary: a held golden chord ("choir")
+    if (rank >= 4) {
+      for (const f of [261.6, 329.6, 392, 523.3, 659.3]) {
+        for (const det of [-6, 6]) {
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'sawtooth';
+          o.frequency.value = f;
+          o.detune.value = det;
+          const f2 = ctx.createBiquadFilter();
+          f2.type = 'lowpass';
+          f2.frequency.value = 1800;
+          const at = t + 0.6;
+          g.gain.setValueAtTime(0.0001, at);
+          g.gain.exponentialRampToValueAtTime(0.025, at + 0.4);
+          g.gain.setValueAtTime(0.025, at + 1.6);
+          g.gain.exponentialRampToValueAtTime(0.0001, at + 2.8);
+          o.connect(f2);
+          f2.connect(g);
+          g.connect(this.sfxGain);
+          o.start(at);
+          o.stop(at + 2.9);
+        }
+      }
+    }
+  }
+
   /** Electrical surge when the power comes back. */
   public playPowerUp() {
     if (!this.ctx || !this.sfxGain) return;
