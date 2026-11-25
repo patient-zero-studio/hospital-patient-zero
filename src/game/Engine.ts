@@ -298,6 +298,8 @@ export interface EngineCallbacks {
   onHobo: () => void;
   /** Achievement unlocked during play (the account may already have it). */
   onAchievement?: (id: string) => void;
+  /** 🧩 the code safe's keypad must open */
+  onKeypad?: () => void;
   /** Progress counter for counter achievements. */
   onStat?: (key: StatKey, n: number) => void;
 }
@@ -1914,6 +1916,7 @@ export class GameEngine {
     this.setupMimic();
     this.setupShade();
     this.setupCat();
+    this.setupPuzzle();
 
     // Cans live inside the level group so interactions can raycast them
     this.cans = new CanSystem(this.map.sceneGroup, {
@@ -4149,6 +4152,110 @@ export class GameEngine {
     c.body.update(delta, pose, c.speed);
   }
 
+  // -----------------------------------------------------------------------
+  // 🧩 The code safe (chapter 1, solo): a safe somewhere, a 4-digit code
+  // scribbled on a scrap of paper hidden in a drawer elsewhere. Both change
+  // every game. Each wrong code beeps (and the creatures hear it).
+  // -----------------------------------------------------------------------
+  private puzzle: { code: string; mesh: THREE.Group; box: CollisionBox; wrong: number } | null = null;
+
+  private setupPuzzle() {
+    if (this.puzzle) {
+      this.puzzle.mesh.removeFromParent();
+      this.map.containers.delete('puzzle-safe');
+      this.map.interactiveMeshes = this.map.interactiveMeshes.filter((m) => m !== this.puzzle!.mesh);
+      this.map.collisionBoxes = this.map.collisionBoxes.filter((b) => b !== this.puzzle!.box);
+      this.puzzle = null;
+    }
+    if (this.chapter !== 1 || this.maze || this.forest || this.site || this.imp || this.vsRole || this.survival || this.xmasNight || this.net) return;
+    const spots = treatSpots(this.map, 16);
+    if (spots.length < 4) return;
+    const at = spots[Math.floor(Math.random() * spots.length)];
+    // The scrap of paper goes into an empty drawer / cabinet far enough from the safe
+    // (every piece of furniture holds something: the paper replaces a few coins / a snack, never a key)
+    // (never in a secret room: the paper must always be reachable)
+    const far = (c: ContainerObject) => !c.locked && !c.searched && !/secret|salle0/.test(c.id) && Math.hypot(c.position.x - at.x, c.position.z - at.z) > 8;
+    let empty = [...this.map.containers.values()].filter((c) => far(c) && !c.itemInside);
+    if (!empty.length) empty = [...this.map.containers.values()].filter((c) => far(c) && (c.itemInside?.type === 'coins' || c.itemInside?.type === 'food'));
+    if (!empty.length) return;
+    const code = String(Math.floor(1000 + Math.random() * 9000));
+    const hide = empty[Math.floor(Math.random() * empty.length)];
+    hide.itemInside = {
+      id: 'note-puzzle-code',
+      name: 'Bout de papier griffonné',
+      type: 'note',
+      description: `Griffonné à la hâte : « Coffre du gardien → ${code}. Ne le donne à PERSONNE. »`,
+      lore: `Coffre du gardien → ${code}. Ne le donne à PERSONNE.\n\n(Un petit coffre métallique est caché quelque part dans l'hôpital.)`,
+      icon: 'FileText',
+    };
+    // The safe: a small steel box with a glowing keypad
+    const g = new THREE.Group();
+    g.position.set(at.x, 0, at.z);
+    g.rotation.y = Math.floor(Math.random() * 4) * (Math.PI / 2);
+    const steel = new THREE.MeshStandardMaterial({ color: 0x2a2e33, metalness: 0.8, roughness: 0.4 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.45), steel);
+    body.position.y = 0.35;
+    body.castShadow = true;
+    g.add(body);
+    const door = new THREE.Mesh(new THREE.BoxGeometry(0.47, 0.6, 0.02), new THREE.MeshStandardMaterial({ color: 0x33383e, metalness: 0.85, roughness: 0.35 }));
+    door.position.set(0, 0.35, 0.235);
+    g.add(door);
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.02), new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: 0x10ff60, emissiveIntensity: 0.35 }));
+    pad.position.set(0.13, 0.42, 0.25);
+    g.add(pad);
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.03), new THREE.MeshBasicMaterial({ color: 0x30ff80 }));
+    screen.position.set(0.13, 0.48, 0.262);
+    g.add(screen);
+    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.01, 8, 18), new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: 0.9, roughness: 0.25 }));
+    handle.position.set(-0.1, 0.35, 0.255);
+    g.add(handle);
+    g.traverse((o) => (o.userData = { ...o.userData, isContainer: true, containerId: 'puzzle-safe' }));
+    // In the level group: that is what the interaction ray looks at
+    this.map.sceneGroup.add(g);
+    this.map.interactiveMeshes.push(g);
+    const loot: Omit<GameItem, 'id'>[] = [
+      { name: 'Seringue de Sédatif', type: 'sedative', description: 'Immobilise un monstre 5 secondes (à moins de 3 m, face à lui).', icon: 'Syringe' },
+      { name: 'Adrénaline', type: 'medkit', description: 'Auto-injecteur : endurance au maximum + 6 s de sprint illimité.', icon: 'HeartPulse' },
+      TRAP_ITEM,
+      BANDAGE_ITEM,
+    ];
+    this.map.containers.set('puzzle-safe', {
+      id: 'puzzle-safe',
+      name: 'Coffre à code',
+      type: 'safe',
+      searched: false,
+      itemInside: { id: `puzzle-loot-${Math.floor(Math.random() * 1e6)}`, ...loot[Math.floor(Math.random() * loot.length)] },
+      position: new THREE.Vector3(at.x, 0.4, at.z),
+      mesh: g,
+      locked: true,
+    });
+    const box: CollisionBox = { min: new THREE.Vector3(at.x - 0.32, 0, at.z - 0.32), max: new THREE.Vector3(at.x + 0.32, 0.7, at.z + 0.32) };
+    this.map.collisionBoxes.push(box);
+    this.puzzle = { code, mesh: g, box, wrong: 0 };
+  }
+
+  /** 🧩 Keypad: true = the safe opens */
+  public tryPuzzleCode(code: string): boolean {
+    const pz = this.puzzle;
+    const c = this.map.containers.get('puzzle-safe');
+    if (!pz || !c || !c.locked) return false;
+    if (code === pz.code) {
+      c.locked = false;
+      sound.playBreakerClunk();
+      this.giveCoins(60);
+      this.ach('puzzle_safe');
+      this.state.showToast('🔓 Clac ! Le coffre s\'ouvre : +60 pièces, et il y a quelque chose dedans ([E] pour le prendre).');
+      return true;
+    }
+    pz.wrong++;
+    sound.playDoorLocked();
+    sound.playAlarmRing(2);
+    // The beep carries: the creatures nearby come and look
+    this.alertAll(c.position.clone().setY(1.2), 12 + pz.wrong * 3);
+    this.state.showToast(pz.wrong === 1 ? 'BIP BIP ! Mauvais code… et ça s\'entend.' : `BIP BIP ! Mauvais code (${pz.wrong}). Quelque chose a entendu…`);
+    return false;
+  }
+
   private setupShade() {
     this.shade?.body.dispose();
     this.shade = null;
@@ -5794,8 +5901,13 @@ export class GameEngine {
   // -----------------------------------------------------------------------
   // Death sequence
   // -----------------------------------------------------------------------
+  /** 💀 Bestiary id of the creature that got you (game over screen + death style) */
+  public deathBy: string | null = null;
+  private deathFxT = 0;
   private startDeath(killer: Killer) {
     if (this.dying) return;
+    this.deathBy = killer === this.crawler ? 'rampant' : killer instanceof MonsterAI ? this.beastId(killer) : 'patient0';
+    this.deathFxT = 0;
     this.stat('deaths');
     this.killer = killer;
     this.dying = true;
@@ -5810,8 +5922,31 @@ export class GameEngine {
     this.fear = 1;
     this.buzz([250, 80, 400]);
     sound.setHeartbeat(60, false);
-    sound.playMonsterChaseRoar();
-    sound.playJumpscareStinger();
+    // Each creature kills its own way
+    switch (this.deathBy) {
+      case 'infirmiere':
+        // Strangled: no roar, just a choke and the stinger
+        sound.playBreath(1);
+        sound.playJumpscareStinger();
+        break;
+      case 'rampant':
+        sound.playHiss(1.4);
+        sound.playJumpscareStinger();
+        break;
+      case 'aveugle':
+        sound.playMonsterChaseRoar();
+        sound.playStatic(1.4, 0.35);
+        sound.playJumpscareStinger();
+        break;
+      case 'fouettard':
+        sound.playBells(0.5, 0);
+        sound.playMonsterChaseRoar();
+        sound.playJumpscareStinger();
+        break;
+      default:
+        sound.playMonsterChaseRoar();
+        sound.playJumpscareStinger();
+    }
     this.hint = null;
     this.pushHud();
   }
@@ -5829,15 +5964,54 @@ export class GameEngine {
     // In the duct you die on all fours
     cam.position.x += (Math.random() - 0.5) * 0.04;
     cam.position.z += (Math.random() - 0.5) * 0.04;
+    // 💀 Each creature its own death
+    const t = this.deathT;
+    this.deathFxT -= delta;
+    switch (this.deathBy) {
+      case 'infirmiere': {
+        // Lifted off the ground by the throat, slowly choking
+        cam.position.y += Math.min(0.35, t * 0.4) * delta * 6;
+        cam.rotateZ(Math.sin(t * 3) * 0.08);
+        if (this.deathFxT <= 0) {
+          this.deathFxT = 0.45;
+          sound.playBreath(1);
+        }
+        break;
+      }
+      case 'rampant': {
+        // Dragged backwards into the dark
+        const back = new THREE.Vector3(0, 0, 1).applyQuaternion(cam.quaternion).setY(0).normalize();
+        cam.position.addScaledVector(back, delta * 1.6);
+        cam.position.y = Math.max(0.35, cam.position.y - delta * 1.4);
+        cam.rotateZ(0.5 * Math.min(1, t * 2));
+        break;
+      }
+      case 'aveugle': {
+        // It screams in your face: everything shakes
+        cam.position.x += (Math.random() - 0.5) * 0.14;
+        cam.position.y += (Math.random() - 0.5) * 0.1;
+        this.player.shake = 1;
+        break;
+      }
+      case 'fouettard': {
+        // Bells ringing like mad, the world swinging
+        cam.rotateZ(Math.sin(t * 9) * 0.25);
+        if (this.deathFxT <= 0) {
+          this.deathFxT = 0.13;
+          sound.playBells(0.4, (Math.random() - 0.5) * 1.6);
+        }
+        break;
+      }
+    }
     // Dropped, shaking flashlight lighting the face from below
     const fl = this.player.flashlight;
     fl.position.copy(cam.position).add(new THREE.Vector3(0, -0.55, 0));
     fl.intensity = 6 + Math.random() * 4;
     this.player.flashlightTarget.position.copy(killer.headWorld);
     this.player.flashlightTarget.updateMatrixWorld();
-    this.damage = Math.min(1, this.deathT * 0.9);
-    this.blackout = Math.max(0, (this.deathT - 1.1) * 2.5);
-    if (this.deathT > 1.6) {
+    this.damage = Math.min(1, this.deathT * (this.deathBy === 'infirmiere' ? 0.6 : 0.9));
+    this.blackout = Math.max(0, (this.deathT - (this.deathBy === 'infirmiere' ? 1.5 : 1.1)) * 2.5);
+    if (this.deathT > (this.deathBy === 'infirmiere' ? 2 : 1.6)) {
       if (this.vsRole) {
         // Versus: the creature got you, round over
         this.dying = false;
@@ -6496,6 +6670,11 @@ export class GameEngine {
       case 'container': {
         const c = this.map.containers.get(t.id);
         if (!c) return;
+        // 🧩 The code safe: type the code on its keypad
+        if (c.id === 'puzzle-safe' && c.locked) {
+          if (this.actor === 'local') this.cb.onKeypad?.();
+          return;
+        }
         if (c.locked) {
           if (c.requiredItemId && gs.hasItem(c.requiredItemId)) {
             c.locked = false;

@@ -63,6 +63,7 @@ import { ownedEmotes } from './components/LobbyStage';
 import { MapOverlay } from './components/MapOverlay';
 import { AtelierMenu } from './components/AtelierMenu';
 import { QuestsMenu } from './components/QuestsMenu';
+import { KeypadModal } from './components/KeypadModal';
 import { RunStats, starsOf, starMask } from './stars';
 
 const SETTINGS_KEY = 'hospital-pz-settings-v2';
@@ -170,6 +171,8 @@ export default function App() {
   const [runResult, setRunResult] = useState<{ stats: RunStats; stars: [boolean, boolean, boolean] | null; chapter: number; before: number; bonus: number } | null>(null);
   /** 🗺️ [M] map */
   const [mapOpen, setMapOpen] = useState(false);
+  /** 🧩 code safe keypad */
+  const [keypadOpen, setKeypadOpen] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const [victory, setVictory] = useState<{ ending: GameEnding; title: string; narrative: string } | null>(null);
   /** Campaign: the black screen between two chapters */
@@ -312,7 +315,7 @@ export default function App() {
 
   // Latest UI state, readable from engine callbacks / listeners without stale closures
   const ui = useRef({ isPlaying, isPaused, isInventoryOpen, isGameOver, victory: !!victory, pausedAt: 0, overlay: false, mapOpen: false });
-  ui.current = { ...ui.current, isPlaying, isPaused, isInventoryOpen, isGameOver, victory: !!victory || !!versusResult || !!campaignCard, overlay: hoboOpen || shopOpen || filmOpen, mapOpen };
+  ui.current = { ...ui.current, isPlaying, isPaused, isInventoryOpen, isGameOver, victory: !!victory || !!versusResult || !!campaignCard, overlay: hoboOpen || shopOpen || filmOpen || keypadOpen, mapOpen };
 
   // --- Engine lifecycle (created once) ---------------------------------
   useEffect(() => {
@@ -357,6 +360,10 @@ export default function App() {
           setHoboOpen(true);
         },
         onAchievement: (id) => queueAchRef.current(id),
+        onKeypad: () => {
+          setKeypadOpen(true);
+          document.exitPointerLock?.();
+        },
         onStat: (k, n) => queueAchRef.current(null, k, n),
         onPointerUnlock: () => {
           const u = ui.current;
@@ -391,11 +398,14 @@ export default function App() {
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine || !isPlaying) return;
-    engine.setPaused(isPaused || isInventoryOpen || hoboOpen || shopOpen || filmOpen || mapOpen, isPaused);
-  }, [isPaused, isInventoryOpen, isPlaying, hoboOpen, shopOpen, filmOpen, mapOpen]);
+    engine.setPaused(isPaused || isInventoryOpen || hoboOpen || shopOpen || filmOpen || mapOpen || keypadOpen, isPaused);
+  }, [isPaused, isInventoryOpen, isPlaying, hoboOpen, shopOpen, filmOpen, mapOpen, keypadOpen]);
   // The map closes with the game
   useEffect(() => {
-    if (!isPlaying || isGameOver || victory) setMapOpen(false);
+    if (!isPlaying || isGameOver || victory) {
+      setMapOpen(false);
+      setKeypadOpen(false);
+    }
   }, [isPlaying, isGameOver, victory]);
 
   // Persist settings
@@ -1996,6 +2006,15 @@ export default function App() {
       )}
       {IS_TOUCH && isPlaying && <RotateHint />}
 
+      {keypadOpen && engine && isPlaying && (
+        <KeypadModal
+          onTry={(code) => engineRef.current?.tryPuzzleCode(code) ?? false}
+          onClose={() => {
+            setKeypadOpen(false);
+            lock();
+          }}
+        />
+      )}
       {mapOpen && engine && isPlaying && (
         <MapOverlay
           read={readMap}
@@ -2094,6 +2113,7 @@ export default function App() {
           onMainMenu={handleMainMenu}
           online={!!online}
           questMsg={questMsg}
+          killer={engineRef.current?.deathBy ?? null}
         />
       )}
 

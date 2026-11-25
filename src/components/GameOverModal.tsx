@@ -1,4 +1,5 @@
 import React from 'react';
+import { BEASTS } from '../bestiary';
 import { Skull, RotateCcw, Home } from 'lucide-react';
 
 interface GameOverModalProps {
@@ -8,9 +9,27 @@ interface GameOverModalProps {
   online?: boolean;
   /** 📋 quests completed during this game */
   questMsg?: string | null;
+  /** 💀 bestiary id of the creature that got you */
+  killer?: string | null;
 }
 
-export const GameOverModal: React.FC<GameOverModalProps> = ({ onRestart, onMainMenu, online, questMsg }) => {
+const KILL_LINE: Record<string, string> = {
+  patient0: 'Le Patient Zéro vous a rattrapé dans les couloirs.',
+  infirmiere: 'L\'Infirmière vous a serré la gorge… vous l\'aviez quittée des yeux.',
+  rampant: 'Le Rampant vous a tiré dans le conduit.',
+  aveugle: 'L\'Aveugle vous a entendu… et il a hurlé.',
+  traqueur: 'Le Traqueur a suivi votre trace jusqu\'au bout.',
+  foret: 'La Chose des bois vous a vu de loin.',
+  sujet00: 'Lucas vous a attrapé.',
+  toit: 'L\'Ombre du toit vous a eu entre deux éclairs.',
+  moreau: 'Le Dr Moreau a eu le dernier mot.',
+  cauchemar: 'Le cauchemar vous a englouti.',
+  clowns: 'Les clowns ont fini leur numéro… avec vous.',
+  fouettard: 'Les clochettes se sont tues. Le Père Fouettard vous a eu.',
+};
+
+export const GameOverModal: React.FC<GameOverModalProps> = ({ onRestart, onMainMenu, online, questMsg, killer }) => {
+  const beast = killer ? BEASTS.find((b) => b.id === killer) : null;
   return (
     <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4">
       {/* Red horror noise overlay */}
@@ -25,7 +44,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({ onRestart, onMainM
           VOUS AVEZ PÉRI
         </h1>
         <p className="text-xs font-mono text-zinc-400 mb-6 uppercase tracking-wider">
-          {online ? 'Vous avez été attrapés tous les deux.' : 'Le Patient Zéro vous a rattrapé dans les couloirs.'}
+          {online ? 'Vous avez été attrapés tous les deux.' : (killer && KILL_LINE[killer]) || KILL_LINE.patient0}
         </p>
 
         {/* Survival Tip */}
@@ -34,7 +53,13 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({ onRestart, onMainM
             CONSEIL DE SURVIE
           </span>
           <p className="text-xs text-zinc-300 leading-relaxed font-mono">
-            La créature voit à peine dans le noir, mais la lumière de votre lampe l'attire et elle entend chaque pas de course. Éteignez la lampe [F], accroupissez-vous [C], et ne vous cachez jamais dans un casier sous ses yeux. Et surtout… taisez-vous : il entend votre voix.
+            {beast && beast.id !== 'patient0' ? (
+              <>
+                {beast.emoji} {beast.name} : {beast.tips.join(' ')}
+              </>
+            ) : (
+              "La créature voit à peine dans le noir, mais la lumière de votre lampe l'attire et elle entend chaque pas de course. Éteignez la lampe [F], accroupissez-vous [C], et ne vous cachez jamais dans un casier sous ses yeux. Et surtout… taisez-vous : il entend votre voix."
+            )}
           </p>
         </div>
 
