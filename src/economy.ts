@@ -29,6 +29,11 @@ export const TIER_PRICE: Record<Tier, number> = { petit: 100, moyen: 500, style:
 export const TIER_LABEL: Record<Tier, string> = { petit: 'Petit skin', moyen: 'Skin moyen', style: 'Skin stylé', exclusif: 'Exclusif' };
 export const TIER_COLOR: Record<Tier, string> = { petit: '#a1a1aa', moyen: '#38bdf8', style: '#c084fc', exclusif: '#fbbf24' };
 
+/** ✨ Rarity: exclusive AND never sold (earned or advent calendar) = Légendaire */
+export const isLegendary = (c: Cosmetic) => c.tier === 'exclusif' && (!!c.unlock || !!c.calendarOnly);
+export const rarityLabel = (c: Cosmetic) => (isLegendary(c) ? 'Légendaire' : TIER_LABEL[c.tier]);
+export const rarityColor = (c: Cosmetic) => (isLegendary(c) ? '#ff8a1a' : TIER_COLOR[c.tier]);
+
 const c = (id: string, name: string, target: Target, slot: Slot, value: string, tier: Tier): Cosmetic => ({ id, name, target, slot, value, tier });
 /** Event item (sold in the event shop while the event is on). */
 const ev = (season: Season, id: string, name: string, target: Target, slot: Slot, value: string, tier: Tier, calendarOnly = false): Cosmetic => ({
@@ -300,6 +305,15 @@ export const dailyShop = (key = todayKey()): Cosmetic[] => {
 // ---------------------------------------------------------------------------
 // Mystery boxes
 // ---------------------------------------------------------------------------
+/** ✨ How rare an outfit is: 0 none, 1 stylé, 2 exclusif, 3 légendaire */
+export const outfitRank = (target: Target, value?: string): 0 | 1 | 2 | 3 => {
+  if (!value) return 0;
+  const it = CATALOG.find((x) => x.target === target && x.slot === 'outfit' && x.value === value);
+  if (!it) return 0;
+  if (isLegendary(it)) return 3;
+  return it.tier === 'exclusif' ? 2 : it.tier === 'style' ? 1 : 0;
+};
+
 export type BoxId = 'rare' | 'mythique' | 'legendaire' | 'exclusive';
 export interface BoxDef {
   id: BoxId;

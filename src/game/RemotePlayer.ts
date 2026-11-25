@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { FxHandle, buildFx } from './AnimatedFx';
+import { FxHandle, buildFx, buildPrestige } from './AnimatedFx';
+import { outfitRank } from '../economy';
 import type { PlayerNetState } from '../net/protocol';
 import { ProceduralTextures } from '../textures/ProceduralTextures';
 import { HUMAN_OUTFITS, buildHumanAccessory, buildHumanBodyExtra } from './Cosmetics';
@@ -669,6 +670,8 @@ export class RemotePlayer {
 
   /** ✨ Animated skin */
   private fx: FxHandle | null = null;
+  /** 🏅 rarity glow (exclusive / legendary outfits) */
+  private prestige: FxHandle | null = null;
   /** 💃 Victory dance ('' = wave) */
   public danceId = '';
   private danceT = 0;
@@ -676,6 +679,7 @@ export class RemotePlayer {
   /** 💃 One frame of the victory dance (poses the bones directly). */
   public dance(delta: number, id = this.danceId) {
     this.fx?.tick(delta);
+    this.prestige?.tick(delta);
     this.blink(delta);
     this.face(delta, 0, 1, id === 'jump' || id === 'chicken' || id === 'breakdance' ? 0.6 : 0);
     this.danceT += delta;
@@ -949,6 +953,10 @@ export class RemotePlayer {
     const fxId = look.fx || outfit?.fx;
     this.fx = fxId ? buildFx(fxId, track, 1.75 * ch.height, false) : null;
     if (this.fx) this.group.add(this.fx.group);
+    if (this.prestige) this.group.remove(this.prestige.group);
+    const rank = outfitRank('human', look.outfit);
+    this.prestige = buildPrestige(rank, rank >= 3 ? 0xff7a1a : 0xfbbf24, track, 1.75 * ch.height);
+    if (this.prestige) this.group.add(this.prestige.group);
   }
 
   private static skinTex: THREE.CanvasTexture | null = null;
@@ -1160,6 +1168,7 @@ export class RemotePlayer {
   /** Customisation preview: idle breathing, flashlight in hand. */
   public idle(delta: number) {
     this.fx?.tick(delta);
+    this.prestige?.tick(delta);
     this.pose(delta, 0, false, false, false);
   }
 
@@ -1167,6 +1176,7 @@ export class RemotePlayer {
     const s = this.state;
     if (!s) return;
     this.fx?.tick(delta);
+    this.prestige?.tick(delta);
     this.group.visible = !s.dead && !s.hid && !this.forceHidden;
 
     const prev = this.position.clone();

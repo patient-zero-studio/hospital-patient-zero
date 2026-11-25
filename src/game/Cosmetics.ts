@@ -55,9 +55,9 @@ export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
   // 🐟 Poisson d'avril
   clown: { gown: '#facc15', hair: '#f97316', accs: ['clownnose', 'fishhat'], extras: ['xmasbands'] },
   // 🏆 Pass de saison / ⭐ niveaux
-  hazmat: { gown: '#f5c400', hair: '#1d1d22', accs: ['gasmask'], extras: ['belt'] },
-  moreauh: { gown: '#ecebe6', hair: '#b8b8b8', accs: ['glasses'], gownFx: 'white', extras: ['stethoscope'] },
-  lucas: { gown: '#8fb0de', hair: '#4a2e1a', accs: [], extras: ['stripes'] },
+  hazmat: { gown: '#f5c400', hair: '#1d1d22', accs: ['gasmask'], extras: ['belt'] , fx: 'sparks' },
+  moreauh: { gown: '#ecebe6', hair: '#b8b8b8', accs: ['glasses'], gownFx: 'white', extras: ['stethoscope'] , fx: 'aura' },
+  lucas: { gown: '#8fb0de', hair: '#4a2e1a', accs: [], extras: ['stripes'] , fx: 'stars' },
   // 🤠 Nouvelles tenues
   cowboy: { gown: '#8a5a2b', hair: '#4a2e1a', accs: ['cowboyhat'], extras: ['belt'] },
   pirate: { gown: '#7a1a1a', hair: '#1d1d22', accs: ['piratehat', 'eyepatch'], extras: ['belt'] },
@@ -67,7 +67,7 @@ export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
   impostor: { gown: '#1a0a0e', hair: '#0a0a0a', accs: ['impmask'], extras: ['cape'], fx: 'aura' },
   clanknight: { gown: '#2a2f45', hair: '#1d1d22', accs: ['beret'], extras: ['cape', 'belt'] },
   champion: { gown: '#7a0a14', hair: '#f5d36a', accs: ['royalcrown'], gownFx: 'gold', extras: ['cape', 'medal', 'belt'], fx: 'stars' },
-  veteran: { gown: '#4b5320', hair: '#2a2a20', accs: ['beret', 'shades'], extras: ['medal', 'belt'] },
+  veteran: { gown: '#4b5320', hair: '#2a2a20', accs: ['beret', 'shades'], extras: ['medal', 'belt'] , fx: 'embers' },
 };
 
 /** Size of a head, so the event hats fit both the human and the creature. */
@@ -721,31 +721,31 @@ export const MONSTER_OUTFITS: Record<string, MonsterOutfit> = {
   yeti: { skin: '#eef4ff', eyes: '#38bdf8', gown: '#c8d8ee', accs: [], skinFx: 'frost' },
   gingerbread: { skin: '#a0522d', eyes: '#ffffff', gown: '#f4f0e8', accs: [] },
   krampus: { skin: '#3b2a1e', eyes: '#ff2010', gown: '#1a120c', accs: ['horns', 'chains'], body: ['royalcape'], fx: 'smoke' },
-  fouettard: { skin: '#2a1e18', eyes: '#ff2a1a', gown: '#100a07', accs: ['hood', 'chains', 'bellcollar'] },
+  fouettard: { skin: '#2a1e18', eyes: '#ff2a1a', gown: '#100a07', accs: ['hood', 'chains', 'bellcollar'] , fx: 'smoke' },
   // 🎃 Halloween
   mummy: { skin: '#d6cba8', eyes: '#ffd21a', gown: '#c8bc98', accs: ['bandages'] },
-  pumpking: { skin: '#1a1208', eyes: '#ff9a00', gown: '#2a1a0a', accs: ['pumpkinhead'], skinFx: 'inferno' },
+  pumpking: { skin: '#1a1208', eyes: '#ff9a00', gown: '#2a1a0a', accs: ['pumpkinhead'], skinFx: 'inferno' , fx: 'embers' },
   // 🐰 Pâques
-  chocobunny: { skin: '#5a3018', eyes: '#fde047', gown: '#3a1e0e', accs: ['bunnyears'] },
+  chocobunny: { skin: '#5a3018', eyes: '#fde047', gown: '#3a1e0e', accs: ['bunnyears'] , fx: 'stars' },
   // 💘 Saint-Valentin
-  lovebeast: { skin: '#f472b6', eyes: '#ff3a8a', gown: '#9d174d', accs: ['heartboppers'] },
+  lovebeast: { skin: '#f472b6', eyes: '#ff3a8a', gown: '#9d174d', accs: ['heartboppers'] , fx: 'aura' },
   // 🐟 Poisson d'avril
-  clownm: { skin: '#f4f4f0', eyes: '#22d3ee', gown: '#7c3aed', accs: ['clownnose'] },
+  clownm: { skin: '#f4f4f0', eyes: '#22d3ee', gown: '#7c3aed', accs: ['clownnose'] , fx: 'sparks' },
   // 🏆 Pass de saison / ⭐ niveaux
-  toxic: { skin: '#5adf3a', eyes: '#e8ff3a', gown: '#2a3a10', accs: ['gasmask'], skinFx: 'toxic', body: ['tanks'] },
+  toxic: { skin: '#5adf3a', eyes: '#e8ff3a', gown: '#2a3a10', accs: ['gasmask'], skinFx: 'toxic', body: ['tanks'] , fx: 'smoke' },
   abyss: { skin: '#0a1428', eyes: '#38bdf8', gown: '#050a14', accs: ['horns'], skinFx: 'abyss', fx: 'aura' },
   legend: { skin: '#2e2628', eyes: '#ffd21a', gown: '#3a0a4a', accs: ['royalcrown'], body: ['royalcape', 'scepter', 'pauldrons'], fx: 'embers' },
   // 🏆 Histoire : le boss et le chapitre secret
-  moreau: { skin: '#cfc8b8', eyes: '#ff1a0a', gown: '#e8e8e2', accs: ['chains'], skinFx: 'bone' },
-  ombre: { skin: '#08080c', eyes: '#ffffff', gown: '#030303', accs: [], skinFx: 'shadow' },
+  moreau: { skin: '#cfc8b8', eyes: '#ff1a0a', gown: '#e8e8e2', accs: ['chains'], skinFx: 'bone' , fx: 'sparks' },
+  ombre: { skin: '#08080c', eyes: '#ffffff', gown: '#030303', accs: [], skinFx: 'shadow' , fx: 'smoke' },
   // 🛡️ Coffre de clan
-  clanbeast: { skin: '#3a3f5a', eyes: '#7dd3fc', gown: '#14182a', accs: ['horns', 'chains'], skinFx: 'abyss', body: ['pauldrons'] },
+  clanbeast: { skin: '#3a3f5a', eyes: '#7dd3fc', gown: '#14182a', accs: ['horns', 'chains'], skinFx: 'abyss', body: ['pauldrons'] , fx: 'aura' },
   // 🏅 Pass classé
   gladiator: { skin: '#6a4a32', eyes: '#ff3a10', gown: '#3a1a0a', accs: ['hockey', 'chains'], skinFx: 'gold', body: ['pauldrons'], fx: 'sparks' },
   // 🦌 Nouvelles créatures
-  wendigo: { skin: '#d8d0c0', eyes: '#9ef0ff', gown: '#2a2420', accs: ['antlers'], skinFx: 'bone' },
+  wendigo: { skin: '#d8d0c0', eyes: '#9ef0ff', gown: '#2a2420', accs: ['antlers'], skinFx: 'bone' , fx: 'smoke' },
   plaguebeast: { skin: '#3a3a30', eyes: '#ff3a10', gown: '#141414', accs: ['plaguemask'] },
-  ghostpirate: { skin: '#7ad0c8', eyes: '#e0fff8', gown: '#203a3a', accs: ['piratehat', 'chains'], skinFx: 'frost' },
+  ghostpirate: { skin: '#7ad0c8', eyes: '#e0fff8', gown: '#203a3a', accs: ['piratehat', 'chains'], skinFx: 'frost' , fx: 'aura' },
   // 🎄 Nuit de Noël
   evilsanta: { skin: '#d8cfc4', eyes: '#ff1a0a', gown: '#9a0c18', accs: ['santahat', 'beard'], body: ['royalcape'], fx: 'embers' },
 };

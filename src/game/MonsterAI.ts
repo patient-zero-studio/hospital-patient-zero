@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { FxHandle, buildFx } from './AnimatedFx';
+import { FxHandle, buildFx, buildPrestige } from './AnimatedFx';
+import { outfitRank } from '../economy';
 import { ProceduralTextures } from '../textures/ProceduralTextures';
 import { MONSTER_OUTFITS, buildMonsterAccessory, buildMonsterBodyExtra } from './Cosmetics';
 import { MonsterState } from '../types';
@@ -567,7 +568,10 @@ export class MonsterAI {
   /** Player customisation: skin tint, glowing eyes, gown scraps, accessory, outfit. */
   /** ✨ Animated skin worn by the creature */
   private fx: FxHandle | null = null;
+  /** 🏅 rarity glow (exclusive / legendary outfits) */
+  private prestige: FxHandle | null = null;
   public tickFx(delta: number) {
+    this.prestige?.tick(delta);
     if (!this.fx) return;
     this.fx.tick(delta);
     if (this.fx.eyes && !this.blind) this.eyeMat.emissive.copy(this.fx.eyes());
@@ -647,6 +651,9 @@ export class MonsterAI {
     const fxId = look.fx || o?.fx;
     this.fx = fxId ? buildFx(fxId, track, 2.3, true) : null;
     if (this.fx) this.mesh.add(this.fx.group);
+    if (this.prestige) this.mesh.remove(this.prestige.group);
+    this.prestige = buildPrestige(outfitRank('monster', look.outfit), new THREE.Color(o?.eyes ?? look.eyes).getHex(), track, 2.3);
+    if (this.prestige) this.mesh.add(this.prestige.group);
   }
 
   /** Chapter 2 — "the Blind One": no eyes, bandaged head, terrifying hearing. */

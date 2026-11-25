@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Coins, Crown, Gift, Loader2, ShoppingBag, Sparkles, X } from 'lucide-react';
-import { ADVENT, BOXES, EVENT_BOX_PRICE, TREATS_PER_CHEST, BoxId, BoxResult, CATALOG, Cosmetic, TIER_COLOR, TIER_LABEL, TIER_PRICE, cosmetic, fmtCoins } from '../economy';
+import { ADVENT, BOXES, EVENT_BOX_PRICE, TREATS_PER_CHEST, BoxId, BoxResult, CATALOG, Cosmetic, TIER_COLOR, TIER_LABEL, TIER_PRICE, cosmetic, fmtCoins, rarityColor, rarityLabel } from '../economy';
 import { api, AdminUser, Boost, BoostKind, WalletView } from '../net/api';
 import { SEASON_INFO, Season, SeasonSetting } from '../seasons';
 import { AdminDashboard } from './AdminDashboard';
@@ -217,9 +217,9 @@ export const CosmeticBadge: React.FC<{ c: Cosmetic; size?: number }> = ({ c, siz
       style={{
         width: size,
         height: size,
-        borderColor: TIER_COLOR[c.tier],
+        borderColor: rarityColor(c),
         background: isColor ? c.value : 'radial-gradient(circle, #27272a 0%, #09090b 100%)',
-        boxShadow: c.tier === 'exclusif' ? `0 0 16px ${TIER_COLOR[c.tier]}88` : undefined,
+        boxShadow: c.tier === 'exclusif' ? `0 0 16px ${rarityColor(c)}88` : undefined,
       }}
     >
       {!isColor && (
@@ -394,8 +394,8 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
         <CosmeticBadge c={c} />
         <div className="flex-1 min-w-0">
           <div className="text-sm text-zinc-100 truncate">{c.name}</div>
-          <div className="text-[10px] font-mono uppercase tracking-wider" style={{ color: TIER_COLOR[c.tier] }}>
-            {TIER_LABEL[c.tier]} · {c.target === 'human' ? 'Humain' : 'Monstre'}
+          <div className="text-[10px] font-mono uppercase tracking-wider" style={{ color: rarityColor(c) }}>
+            {rarityLabel(c)} · {c.target === 'human' ? 'Humain' : 'Monstre'}
           </div>
         </div>
         <button
@@ -720,8 +720,8 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
                         <CosmeticBadge c={c} size={36} />
                         <div>
                           <div className="text-sm text-zinc-100">{c.name}</div>
-                          <div className="text-[10px] font-mono uppercase" style={{ color: TIER_COLOR[c.tier] }}>
-                            {TIER_LABEL[c.tier]} · {c.target === 'human' ? 'Humain' : 'Monstre'}
+                          <div className="text-[10px] font-mono uppercase" style={{ color: rarityColor(c) }}>
+                            {rarityLabel(c)} · {c.target === 'human' ? 'Humain' : 'Monstre'}
                           </div>
                         </div>
                       </div>

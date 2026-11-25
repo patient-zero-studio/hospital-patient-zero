@@ -266,3 +266,153 @@ export const buildFx = (id: string, track: Track, height: number, monster: boole
   }
   return null;
 };
+
+/** Canvas sigil: rings, a star and runes, drawn in one colour. */
+const sigilTexture = (track: Track, color: string, points: number, runes: number, seed: number) => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const x = c.getContext('2d')!;
+  x.strokeStyle = color;
+  x.fillStyle = color;
+  x.shadowColor = color;
+  x.shadowBlur = 10;
+  x.translate(128, 128);
+  x.lineWidth = 4;
+  x.beginPath();
+  x.arc(0, 0, 120, 0, Math.PI * 2);
+  x.stroke();
+  x.lineWidth = 2;
+  for (const r of [100, 58]) {
+    x.beginPath();
+    x.arc(0, 0, r, 0, Math.PI * 2);
+    x.stroke();
+  }
+  // star polygon
+  x.beginPath();
+  const step = points === 8 ? 3 : 2;
+  for (let i = 0; i <= points; i++) {
+    const a = ((i * step) / points) * Math.PI * 2 - Math.PI / 2;
+    const px = Math.cos(a) * 100;
+    const py = Math.sin(a) * 100;
+    if (i === 0) x.moveTo(px, py);
+    else x.lineTo(px, py);
+  }
+  x.stroke();
+  // runes in the outer band
+  let sd = seed;
+  const rnd = () => (sd = (sd * 9301 + 49297) % 233280) / 233280;
+  x.lineWidth = 2.5;
+  for (let i = 0; i < runes; i++) {
+    x.save();
+    x.rotate((i / runes) * Math.PI * 2);
+    x.translate(0, -110);
+    x.beginPath();
+    const n = 2 + Math.floor(rnd() * 2);
+    for (let k = 0; k < n; k++) {
+      x.moveTo((rnd() - 0.5) * 10, (rnd() - 0.5) * 12);
+      x.lineTo((rnd() - 0.5) * 10, (rnd() - 0.5) * 12);
+    }
+    x.stroke();
+    x.restore();
+  }
+  // little gems on the inner ring
+  for (let i = 0; i < points; i++) {
+    const a = (i / points) * Math.PI * 2;
+    x.beginPath();
+    x.arc(Math.cos(a) * 58, Math.sin(a) * 58, 4, 0, Math.PI * 2);
+    x.fill();
+  }
+  const tex = track(new THREE.CanvasTexture(c));
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+};
+
+const hex = (n: number) => '#' + n.toString(16).padStart(6, '0');
+
+/**
+ * 🏅 The rarer the outfit, the more it shines.
+ *  rank 2 = Exclusif: a sigil turning slowly under the feet.
+ *  rank 3 = Légendaire: a golden double sigil, light shafts and sparks rising.
+ */
+export const buildPrestige = (rank: number, accent: number, track: Track, height: number): FxHandle | null => {
+  if (rank < 2) return null;
+  const g = new THREE.Group();
+  let t = Math.random() * 10;
+  const legend = rank >= 3;
+  const mat = (tex: THREE.Texture, opacity: number) =>
+    track(new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+  const outerR = legend ? 1.0 : 0.78;
+  const outerMat = mat(sigilTexture(track, legend ? '#ffc83a' : hex(accent), legend ? 8 : 6, legend ? 24 : 16, legend ? 7 : 3), legend ? 0.85 : 0.6);
+  const outer = new THREE.Mesh(track(new THREE.PlaneGeometry(outerR * 2, outerR * 2)), outerMat);
+  outer.rotation.x = -Math.PI / 2;
+  outer.position.y = 0.025;
+  g.add(outer);
+  let inner: THREE.Mesh | null = null;
+  const shafts: THREE.Mesh[] = [];
+  const motes: THREE.Mesh[] = [];
+  if (legend) {
+    inner = new THREE.Mesh(track(new THREE.PlaneGeometry(1.1, 1.1)), mat(sigilTexture(track, hex(accent), 6, 12, 11), 0.75));
+    inner.rotation.x = -Math.PI / 2;
+    inner.position.y = 0.035;
+    g.add(inner);
+    // Light shafts: vertical gradient planes, crossed
+    const c = document.createElement('canvas');
+    c.width = 8;
+    c.height = 128;
+    const x = c.getContext('2d')!;
+    const grd = x.createLinearGradient(0, 0, 0, 128);
+    grd.addColorStop(0, 'rgba(255,200,60,0)');
+    grd.addColorStop(0.6, 'rgba(255,200,60,0.35)');
+    grd.addColorStop(1, 'rgba(255,220,120,0.9)');
+    x.fillStyle = grd;
+    x.fillRect(0, 0, 8, 128);
+    const tex = track(new THREE.CanvasTexture(c));
+    const shaftMat = track(new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    const shaftGeo = track(new THREE.PlaneGeometry(0.12, height * 1.15));
+    for (let i = 0; i < 6; i++) {
+      const m = new THREE.Mesh(shaftGeo, shaftMat);
+      m.userData.a = (i / 6) * Math.PI * 2;
+      m.position.y = (height * 1.15) / 2;
+      shafts.push(m);
+      g.add(m);
+    }
+    // Golden sparks rising
+    const moteGeo = track(new THREE.OctahedronGeometry(0.022, 0));
+    const moteMat = glow(track, 0xffd25a, 0.95);
+    for (let i = 0; i < 16; i++) {
+      const m = new THREE.Mesh(moteGeo, moteMat);
+      m.userData.p = Math.random();
+      m.userData.a = Math.random() * Math.PI * 2;
+      m.userData.r = 0.35 + Math.random() * 0.5;
+      motes.push(m);
+      g.add(m);
+    }
+  }
+  noShadow(g);
+  return {
+    group: g,
+    tick(dt) {
+      t += dt;
+      const pulse = 0.5 + 0.5 * Math.sin(t * 2.2);
+      outer.rotation.z += dt * (legend ? 0.35 : 0.25);
+      outerMat.opacity = (legend ? 0.6 : 0.4) + pulse * (legend ? 0.35 : 0.25);
+      if (inner) {
+        inner.rotation.z -= dt * 0.7;
+        inner.scale.setScalar(0.95 + pulse * 0.1);
+      }
+      for (const s of shafts) {
+        const a = s.userData.a + t * 0.4;
+        s.position.x = Math.cos(a) * 0.72;
+        s.position.z = Math.sin(a) * 0.72;
+        s.rotation.y = -a;
+        s.scale.x = 0.6 + 0.6 * Math.abs(Math.sin(t * 1.7 + s.userData.a * 3));
+      }
+      for (const m of motes) {
+        const p = (m.userData.p + t * 0.22) % 1;
+        m.position.set(Math.cos(m.userData.a) * m.userData.r, p * height * 1.2, Math.sin(m.userData.a) * m.userData.r);
+        m.rotation.y += dt * 4;
+        m.scale.setScalar((1 - p) * (0.7 + 0.5 * Math.abs(Math.sin(t * 9 + m.userData.a * 5))));
+      }
+    },
+  };
+};
