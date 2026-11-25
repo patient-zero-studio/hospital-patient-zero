@@ -38,7 +38,9 @@ export const PublicRoomBanner: React.FC<{ me: string | null; active: boolean; on
         ? '🏁 une Course'
         : room.chapter === 9
           ? '🎪 la Nuit du Cirque'
-          : '🤝 une partie en coop';
+          : room.chapter === 10
+            ? '⚔️ un Duel des Chevaliers'
+            : '🤝 une partie en coop';
   return (
     <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[70] w-[min(94vw,460px)] flex items-center gap-2 p-2.5 border border-emerald-600 bg-zinc-950/95 shadow-[0_0_30px_rgba(16,185,129,0.3)]">
       <div className="flex-1 min-w-0 text-xs font-mono text-zinc-100">

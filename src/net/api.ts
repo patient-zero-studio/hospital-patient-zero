@@ -38,6 +38,8 @@ export interface WalletView {
   dailyStreak?: number;
   /** 🎡 free wheel spin not used yet today */
   wheelAvailable?: boolean;
+  /** 👑 finished the King's quests: the title « Sire » */
+  sire?: boolean;
   /** achievements unlocked + counters */
   ach?: AchState;
   /** achievements unlocked by this very request */
@@ -217,6 +219,10 @@ export interface PlayerProfileView {
   username: string;
   level: LevelInfo;
   admin: boolean;
+  /** 👑 finished the King's quests */
+  sire?: boolean;
+  /** 🏰 castle decor for the secret room */
+  castle?: boolean;
   since?: string;
   status: 'playing' | 'online' | 'offline';
   stats: Partial<Record<StatKey, number>>;

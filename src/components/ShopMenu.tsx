@@ -29,6 +29,7 @@ const SeasonSwitch: React.FC<{ value: SeasonSetting; onSet: (s: SeasonSetting) =
     ['paques', '🐰 Pâques maintenant'],
     ['valentin', '💘 Saint-Valentin maintenant'],
     ['poisson', "🐟 Poisson d'avril maintenant"],
+    ['chevaliers', '⚔️ Tournoi des Chevaliers'],
     ['off', '⛔ Aucun événement'],
   ];
   return (
@@ -299,6 +300,7 @@ export const CosmeticBadge: React.FC<{ c: Cosmetic; size?: number }> = ({ c, siz
     cowboy: '🤠', pirate: '🦜', detective: '🔎', plaguedoc: '🐦‍⬛', plaguebeast: '☠️', wendigo: '🦌', ghostpirate: '👻',
     gladiator: '⚔️', stars: '🌟', champion: '🏆',
     aura: '🔮', smoke: '💨', halo: '😇', sparks: '⚡', flames: '🔥', rainbow: '🌈',
+    llantern: '🏮', ltorch: '🔥', squire: '🛡️', knight: '⚔️', blackknight: '🖤', knightpz: '⚔️', dragon: '🐉', knighthelm: '🪖',
     lminer: '⛏️', lice: '🧊', lcandle: '🕯️', lgreen: '🏮', lred: '🩸', lpink: '💗', lgold: '🔦',
     witchhat: '🧙', pumpkinhead: '🎃', witch: '🧙', vampire: '🧛', reaper: '💀', mummy: '🧻', pumpking: '🎃',
   };
@@ -745,7 +747,7 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
                         🎁
                       </div>
                       <div className="flex-1 min-w-0 w-full">
-                        <div className="text-sm font-bold text-zinc-100">Boîte {SEASON_INFO[season].name}</div>
+                        <div className="text-sm font-bold text-zinc-100">{season === 'chevaliers' ? '👑 Trésor du Royaume' : `Boîte ${SEASON_INFO[season].name}`}</div>
                         <div className="text-[11px] font-mono text-zinc-400 mb-1.5">
                           Ramasse des {t.many} {t.emoji} dans tous les chapitres (gardés même si tu meurs). Parfois un 💎 coffre rare en cache {TREATS_PER_CHEST} d'un coup ! {EVENT_BOX_PRICE} {t.many} = une boîte avec un skin {SEASON_INFO[season].name} (ou des pièces).
                         </div>
@@ -894,7 +896,7 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
                 : reveal.box === 'advent'
                   ? { name: "Calendrier de l'Avent", color: '#ef4444' }
                   : reveal.box === 'event'
-                    ? { name: season ? `Boîte ${SEASON_INFO[season].name}` : 'Boîte', color: season ? SEASON_INFO[season].color : '#fbbf24' }
+                    ? { name: season === 'chevaliers' ? 'Trésor du Royaume' : season ? `Boîte ${SEASON_INFO[season].name}` : 'Boîte', color: season ? SEASON_INFO[season].color : '#fbbf24' }
                     : BOXES.find((x) => x.id === reveal.box)!;
             const r = reveal.result;
             const skin = r?.skin ? cosmetic(r.skin) : undefined;

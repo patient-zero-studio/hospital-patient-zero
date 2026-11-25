@@ -2,7 +2,7 @@
  * 🎵 Menu music: tracks to unlock (level, achievement or coins).
  * The sound itself is made live by the sound system (no audio files).
  */
-export type TrackUnlock = { kind: 'free' } | { kind: 'level'; n: number } | { kind: 'ach'; id: string; label: string } | { kind: 'coins'; price: number };
+export type TrackUnlock = { kind: 'free' } | { kind: 'level'; n: number } | { kind: 'ach'; id: string; label: string } | { kind: 'coins'; price: number } | { kind: 'limited'; label: string };
 
 export interface MenuTrack {
   id: string;
@@ -19,6 +19,7 @@ export const MENU_TRACKS: MenuTrack[] = [
   { id: 'choeur', name: 'Chœur des patients', emoji: '👻', desc: 'Des voix lointaines qui chantent dans les couloirs vides.', unlock: { kind: 'level', n: 15 } },
   { id: 'orage', name: 'Orage sur le toit', emoji: '⛈️', desc: 'La pluie, le tonnerre, et un piano abandonné.', unlock: { kind: 'ach', id: 'ch6_escape', label: 'S\'envoler du toit (Chapitre 6)' } },
   { id: 'neons', name: 'Néons du Site B', emoji: '🟣', desc: 'Synthés des années 80 sous la lumière violette.', unlock: { kind: 'coins', price: 400 } },
+  { id: 'donjon', name: 'Le Donjon', emoji: '🏰', desc: 'Orgue, chœur et cloche d\'église, sous la crypte. Édition limitée.', unlock: { kind: 'limited', label: 'Sortir du Donjon pendant le Tournoi des Chevaliers (édition limitée)' } },
   { id: 'battement', name: 'Cœur qui bat', emoji: '💓', desc: 'Un rythme de cœur affolé, pour les nuits de poursuite.', unlock: { kind: 'coins', price: 800 } },
 ];
 
@@ -35,9 +36,10 @@ export const trackUnlocked = (t: MenuTrack, p: { level: number; ach: Record<stri
     case 'ach':
       return !!p.ach[t.unlock.id];
     case 'coins':
+    case 'limited':
       return p.owned.includes(t.id);
   }
 };
 
 export const unlockText = (u: TrackUnlock) =>
-  u.kind === 'level' ? `Niveau ${u.n}` : u.kind === 'ach' ? u.label : u.kind === 'coins' ? `${u.price} pièces` : 'Offerte';
+  u.kind === 'level' ? `Niveau ${u.n}` : u.kind === 'ach' || u.kind === 'limited' ? u.label : u.kind === 'coins' ? `${u.price} pièces` : 'Offerte';

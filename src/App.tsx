@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioSettings, Chapter, ControlSettings, GameEnding, GameItem } from './types';
 
 /** Chapters playable online (3 stays solo: the endless maze). */
-const toMpChapter = (c: unknown): 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9 => (c === 2 || c === 4 || c === 5 || c === 6 || c === 7 || c === 8 || c === 9 ? c : 1);
+const toMpChapter = (c: unknown): 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9 | 10 => (c === 2 || c === 4 || c === 5 || c === 6 || c === 7 || c === 8 || c === 9 || c === 10 ? c : 1);
 import { sound } from './audio/SoundSystem';
 import { CampaignCarry, GameEngine, HudSnapshot } from './game/Engine';
 import { CampaignCard } from './components/CampaignCard';
@@ -37,6 +37,8 @@ import { RankedMenu } from './components/RankedMenu';
 import { CHAT_PRESETS } from './net/NetClient';
 import { PlayerProfile } from './components/PlayerProfile';
 import { SecretRoom } from './components/SecretRoom';
+import { UpdateNotes } from './components/UpdateNotes';
+import { KNIGHTS_ACHS, KNIGHTS_PUBLIC, markUpdateSeen, updateSeen } from './updates';
 import { PublicRoomBanner } from './components/PublicRoomBanner';
 import { ShopMenu } from './components/ShopMenu';
 import { HoboShop } from './components/HoboShop';
@@ -190,7 +192,7 @@ export default function App() {
   const [chapter, setChapter] = useState<Chapter>(() => {
     try {
       const v = localStorage.getItem('pz-chapter');
-      return v === '8' ? 8 : v === '7' ? 7 : v === '6' ? 6 : v === '5' ? 5 : v === '4' ? 4 : v === '3' ? 3 : v === '2' ? 2 : 1;
+      return v === '10' ? 10 : v === '8' ? 8 : v === '7' ? 7 : v === '6' ? 6 : v === '5' ? 5 : v === '4' ? 4 : v === '3' ? 3 : v === '2' ? 2 : 1;
     } catch {
       return 1;
     }
@@ -684,7 +686,7 @@ export default function App() {
     engineRef.current?.setNet(null);
     if (engineRef.current) engineRef.current.levelSeed = null;
     // Locked chapter picked earlier: fall back to the last one that is open
-    const open = [true, ch2Unlocked, ch3Unlocked, ch4Unlocked, ch5Unlocked, ch6Unlocked, ch7Unlocked, ch8Unlocked];
+    const open = [true, ch2Unlocked, ch3Unlocked, ch4Unlocked, ch5Unlocked, ch6Unlocked, ch7Unlocked, ch8Unlocked, false, knightsOpen];
     let ch: Chapter = chapter;
     while (ch > 1 && !open[ch - 1]) ch = (ch - 1) as Chapter;
     // 🏅 Ranked: logged in, Normal or harder
@@ -1119,6 +1121,8 @@ export default function App() {
   // 🔐 Secret chapter: every document of chapters 1-7 (the gallery keeps them)
   const docsFound = storyDocsFound(wallet?.gallery?.docs ?? []);
   const ch8Unlocked = docsFound >= STORY_DOC_IDS.length || !!wallet?.admin;
+  /** 🔒 the Knights' update: admins only until it's released */
+  const knightsOpen = KNIGHTS_PUBLIC || !!wallet?.admin;
 
   const tokenOrThrow = () => {
     const s = sessionRef.current;
@@ -1160,6 +1164,9 @@ export default function App() {
   const [profileOf, setProfileOf] = useState<string | null>(null);
   /** 🏚️ whose secret room is open */
   const [roomOf, setRoomOf] = useState<string | null>(null);
+  /** 📰 the latest update's notes: pop up once, then from the Nouveautés button */
+  const [newsOpen, setNewsOpen] = useState(() => !updateSeen());
+  const [newsSeen, setNewsSeen] = useState(() => updateSeen());
   const [friends, setFriends] = useState<FriendsView | null>(null);
   const refreshFriends = useCallback(async () => {
     const s = sessionRef.current;
@@ -1636,6 +1643,11 @@ export default function App() {
           onClans={session ? () => setClansOpen(true) : undefined}
           clanTag={wallet?.clanTag ?? null}
           onMusic={() => setMusicOpen(true)}
+          onNews={knightsOpen ? () => setNewsOpen(true) : undefined}
+          donjonOpen={knightsOpen}
+          achHidden={knightsOpen ? 0 : KNIGHTS_ACHS.length}
+          sire={!!wallet?.sire}
+          newsUnseen={!newsSeen}
           onGallery={session ? () => setGalleryOpen(true) : undefined}
           onBestiary={session ? () => setBestiaryOpen(true) : undefined}
           onAtelier={session ? () => setAtelierOpen(true) : () => setMpOpen(true)}
@@ -1740,6 +1752,7 @@ export default function App() {
           ch6Unlocked={ch6Unlocked}
           ch7Unlocked={ch7Unlocked}
           ch8Unlocked={ch8Unlocked}
+          duelOpen={knightsOpen}
           onUpdateSettings={(s) => {
             setLobby((l) => ({ ...l, ...s }));
             netRef.current?.updateSettings(s);
@@ -1966,13 +1979,22 @@ export default function App() {
           onClose={() => setProfileOf(null)}
         />
       )}
+      {newsOpen && knightsOpen && !isPlaying && (
+        <UpdateNotes
+          onClose={() => {
+            markUpdateSeen();
+            setNewsSeen(true);
+            setNewsOpen(false);
+          }}
+        />
+      )}
       {roomOf && session && <SecretRoom name={roomOf} token={session.token} onClose={() => setRoomOf(null)} />}
       {runMsg && victory && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[90] px-5 py-2 border border-emerald-600 bg-black/90 text-emerald-300 font-mono text-xs shadow-[0_0_30px_rgba(16,185,129,0.3)] text-center max-w-[92vw]">
           {runMsg}
         </div>
       )}
-      {achOpen && <AchievementsMenu ach={wallet?.ach ?? null} loggedIn={!!session} onClose={() => setAchOpen(false)} />}
+      {achOpen && <AchievementsMenu ach={wallet?.ach ?? null} loggedIn={!!session} hide={knightsOpen ? [] : KNIGHTS_ACHS} onClose={() => setAchOpen(false)} />}
 
       {rewardMsg && (victory || versusResult || isGameOver) && (
         <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[90] px-5 py-2 border border-amber-500 bg-black/90 text-amber-300 font-mono text-sm shadow-[0_0_30px_rgba(250,180,0,0.4)]">

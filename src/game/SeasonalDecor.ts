@@ -19,7 +19,7 @@ export const buildSeasonalDecor = (season: Season, map: MapData): { group: THREE
   };
 
   // Deterministic: everyone sees the same decorations
-  let seed = { noel: 1225, halloween: 1031, paques: 420, valentin: 214, poisson: 401 }[season];
+  let seed = { noel: 1225, halloween: 1031, paques: 420, valentin: 214, poisson: 401, chevaliers: 1415 }[season];
   const rnd = () => {
     seed = (seed * 16807) % 2147483647;
     return (seed - 1) / 2147483646;
@@ -36,6 +36,41 @@ export const buildSeasonalDecor = (season: Season, map: MapData): { group: THREE
     o.position.set(x, y, z);
     parent.add(o);
     return o;
+  };
+
+  // ---- ⚔️ Knights' tournament: banners on the walls, shields and crossed swords ----
+  const bannerColors = [0x1d3a8a, 0x9a0c18, 0x14532d, 0x4a1d6a].map((c) => mat(c, { roughness: 0.9, side: THREE.DoubleSide }));
+  const goldTrim = mat(0xd4a840, { metalness: 0.8, roughness: 0.3, emissive: 0x3a2800, emissiveIntensity: 0.4 });
+  const steel = mat(0xb8bcc4, { metalness: 0.9, roughness: 0.3 });
+  const bannerGeo = track(new THREE.PlaneGeometry(0.7, 1.3));
+  const rodGeo = track(new THREE.CylinderGeometry(0.02, 0.02, 0.86, 6));
+  const crestGeo = track(new THREE.CircleGeometry(0.16, 6));
+  const banner = () => {
+    const g = new THREE.Group();
+    mesh(bannerGeo, bannerColors[Math.floor(rnd() * bannerColors.length)], g, 0, -0.65, 0);
+    mesh(rodGeo, goldTrim, g, 0, 0, 0.01).rotation.z = Math.PI / 2;
+    mesh(crestGeo, goldTrim, g, 0, -0.55, 0.01);
+    return g;
+  };
+  const shieldGeo = track(new THREE.CylinderGeometry(0.28, 0.28, 0.05, 6));
+  const bladeGeo = track(new THREE.BoxGeometry(0.06, 0.9, 0.015));
+  const hiltGeo = track(new THREE.BoxGeometry(0.24, 0.04, 0.04));
+  const armory = () => {
+    const g = new THREE.Group();
+    const sh = mesh(shieldGeo, bannerColors[Math.floor(rnd() * bannerColors.length)], g, 0, 0.32, 0);
+    sh.rotation.x = Math.PI / 2 - 0.25;
+    const rim = mesh(crestGeo, goldTrim, g, 0, 0.33, 0.04);
+    rim.rotation.x = -0.25;
+    rim.scale.setScalar(0.5);
+    for (const s of [-1, 1]) {
+      const sw = new THREE.Group();
+      sw.position.set(s * 0.35, 0.5, -0.05);
+      sw.rotation.z = s * 0.35;
+      mesh(bladeGeo, steel, sw, 0, 0, 0);
+      mesh(hiltGeo, goldTrim, sw, 0, -0.38, 0);
+      g.add(sw);
+    }
+    return g;
   };
 
   // ---- Christmas ----
@@ -346,6 +381,10 @@ export const buildSeasonalDecor = (season: Season, map: MapData): { group: THREE
           deco.position.set(wx - dx * 0.02, p.y + 0.9 + rnd() * 1.1, wz - dz * 0.02);
           deco.rotation.set(0, facing, (rnd() - 0.5) * 0.8);
           deco.scale.setScalar(1.2 + rnd() * 0.6);
+        } else if (season === 'chevaliers') {
+          deco = banner();
+          deco.position.set(wx - dx * 0.03, p.y + 2.6, wz - dz * 0.03);
+          deco.rotation.y = facing;
         } else if (season === 'halloween' && rnd() < 0.4) {
           // Cobweb in the upper corner area of that wall
           deco = new THREE.Mesh(webGeo, webMat);
@@ -369,6 +408,7 @@ export const buildSeasonalDecor = (season: Season, map: MapData): { group: THREE
         else if (season === 'paques') deco = rnd() < 0.5 ? eggBasket() : eggsAround();
         else if (season === 'valentin') deco = rnd() < 0.55 ? balloons() : roses();
         else if (season === 'poisson') deco = rnd() < 0.5 ? fishbowl() : gifts();
+        else if (season === 'chevaliers') deco = armory();
         else {
           const r = rnd();
           if (r < 0.6) {
@@ -441,6 +481,19 @@ export const buildTreatModel = (season: Season, track: <T extends { dispose: () 
       const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.04, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.015, bevelSegments: 2 });
       geo.center();
       add(geo, m(0xff2a6a, 0.5));
+      break;
+    }
+    case 'chevaliers': {
+      // A little coat of arms: a shield with a gold rim and a coloured field
+      const field = m(pick([0x1d4ed8, 0xc8102e, 0x15803d]), 0.45);
+      const gold = m(0xffd04a, 0.6);
+      const shield = add(new THREE.CylinderGeometry(0.09, 0.09, 0.025, 6), gold);
+      shield.rotation.x = Math.PI / 2;
+      shield.scale.set(1, 1, 1.25);
+      const inner = add(new THREE.CylinderGeometry(0.072, 0.072, 0.03, 6), field, 0, 0, 0.004);
+      inner.rotation.x = Math.PI / 2;
+      inner.scale.set(1, 1, 1.25);
+      add(new THREE.BoxGeometry(0.02, 0.1, 0.035), gold, 0, 0, 0.01);
       break;
     }
     case 'poisson': {

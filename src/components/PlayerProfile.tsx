@@ -50,6 +50,7 @@ export const PlayerProfile: React.FC<{ name: string; token: string; onAddFriend?
               <div className="flex-1 min-w-0">
                 <div className="text-xl font-bold text-zinc-100 truncate">
                   {p.admin ? '👑 ' : ''}
+                  {p.sire && <span className="text-amber-300">Sire </span>}
                   {p.username}
                 </div>
                 <div className="text-xs font-mono flex items-center gap-2" style={{ color: levelColor(p.level.level) }}>

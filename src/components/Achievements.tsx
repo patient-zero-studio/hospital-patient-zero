@@ -40,19 +40,22 @@ export const AchievementToast: React.FC<{ queue: string[]; onDone: () => void }>
 interface MenuProps {
   ach: AchState | null;
   loggedIn: boolean;
+  /** ids not shown yet (unreleased content) */
+  hide?: string[];
   onClose: () => void;
 }
 
 /** Full list with progress, secrets hidden until unlocked. */
-export const AchievementsMenu: React.FC<MenuProps> = ({ ach, loggedIn, onClose }) => {
+export const AchievementsMenu: React.FC<MenuProps> = ({ ach, loggedIn, hide = [], onClose }) => {
   const [filter, setFilter] = useState<'all' | 'done' | 'todo'>('all');
   const done = ach?.done ?? {};
-  const total = ACHIEVEMENTS.length;
-  const count = ACHIEVEMENTS.filter((a) => done[a.id]).length;
-  const earned = ACHIEVEMENTS.filter((a) => done[a.id]).reduce((s, a) => s + a.reward, 0);
-  const all = ACHIEVEMENTS.reduce((s, a) => s + a.reward, 0);
+  const ACHS = ACHIEVEMENTS.filter((a) => !hide.includes(a.id));
+  const total = ACHS.length;
+  const count = ACHS.filter((a) => done[a.id]).length;
+  const earned = ACHS.filter((a) => done[a.id]).reduce((s, a) => s + a.reward, 0);
+  const all = ACHS.reduce((s, a) => s + a.reward, 0);
   const list = useMemo(
-    () => ACHIEVEMENTS.filter((a) => (filter === 'done' ? done[a.id] : filter === 'todo' ? !done[a.id] : true)),
+    () => ACHS.filter((a) => (filter === 'done' ? done[a.id] : filter === 'todo' ? !done[a.id] : true)),
     [filter, done]
   );
 

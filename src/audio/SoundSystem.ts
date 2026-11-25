@@ -124,6 +124,7 @@ class SoundSystem {
     if (!on) {
       this.setHeartbeat(60, false);
       this.setBossMusic(false, 0.5);
+      this.setDungeonMusic(false);
     }
     this.applyAmbience(on ? 0.6 : 0.25);
   }
@@ -667,6 +668,275 @@ class SoundSystem {
   /** Effective effects volume (0..1) */
   public sfxLevel() {
     return this.settings.masterVolume * this.settings.sfxVolume;
+  }
+
+  /** 🐉 The dragon's roar: a deep growl that rises, with a rattle */
+  public playDragonRoar() {
+    if (!this.ctx || !this.sfxGain) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    for (const [f, type] of [
+      [55, 'sawtooth'],
+      [82, 'square'],
+    ] as const) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(300, t);
+      lp.frequency.linearRampToValueAtTime(1400, t + 0.8);
+      lp.frequency.linearRampToValueAtTime(200, t + 2.2);
+      o.type = type;
+      o.frequency.setValueAtTime(f, t);
+      o.frequency.linearRampToValueAtTime(f * 1.6, t + 0.8);
+      o.frequency.linearRampToValueAtTime(f * 0.8, t + 2.2);
+      const lfo = ctx.createOscillator();
+      const lg = ctx.createGain();
+      lfo.frequency.value = 22;
+      lg.gain.value = f * 0.15;
+      lfo.connect(lg);
+      lg.connect(o.frequency);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.35, t + 0.3);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 2.3);
+      o.connect(lp);
+      lp.connect(g);
+      g.connect(this.sfxGain);
+      o.start(t);
+      lfo.start(t);
+      o.stop(t + 2.4);
+      lfo.stop(t + 2.4);
+    }
+  }
+
+  /** 🔥 Fire breath: a roaring blast of noise */
+  public playFireBreath() {
+    if (!this.ctx || !this.sfxGain) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const len = Math.floor(ctx.sampleRate * 3.3);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'lowpass';
+    bp.frequency.value = 900;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.55, t + 0.2);
+    g.gain.setValueAtTime(0.5, t + 2.8);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 3.3);
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(this.sfxGain);
+    src.start(t);
+  }
+
+  // --- ⚔️ CHAPTER 10: the Dungeon's music (organ, choir, bells; faster in a chase) ---
+  private dungeon: { bus: GainNode; next: number; step: number; timer: number | null; chase: boolean } | null = null;
+  public setDungeonMusic(on: boolean, chase = false) {
+    if (!this.ctx || !this.musicGain) return;
+    const ctx = this.ctx;
+    if (on && this.dungeon) {
+      this.dungeon.chase = chase;
+      return;
+    }
+    if (on) {
+      if (!this.inGame) return;
+      const bus = ctx.createGain();
+      bus.gain.setValueAtTime(0.0001, ctx.currentTime);
+      bus.gain.linearRampToValueAtTime(0.6, ctx.currentTime + 3);
+      bus.connect(this.musicGain);
+      this.dungeon = { bus, next: ctx.currentTime + 0.1, step: 0, timer: null, chase };
+      this.dungeonSchedule();
+      return;
+    }
+    const b = this.dungeon;
+    if (!b) return;
+    this.dungeon = null;
+    if (b.timer) window.clearTimeout(b.timer);
+    b.bus.gain.cancelScheduledValues(ctx.currentTime);
+    b.bus.gain.setValueAtTime(b.bus.gain.value, ctx.currentTime);
+    b.bus.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 1);
+    window.setTimeout(() => b.bus.disconnect(), 1500);
+  }
+  private dungeonSchedule() {
+    const b = this.dungeon;
+    if (!b || !this.ctx) return;
+    const ctx = this.ctx;
+    while (b.next < ctx.currentTime + 0.4) {
+      const beat = 60 / (b.chase ? 132 : 56);
+      this.dungeonStep(b.step, b.next, b.bus, b.chase, beat);
+      b.next += beat;
+      b.step++;
+    }
+    b.timer = window.setTimeout(() => this.dungeonSchedule(), 120);
+  }
+  /** One beat: a slow D-minor organ progression, a choir pad, a bell every 8 beats; drums in a chase */
+  private dungeonStep(i: number, t: number, out: AudioNode, chase: boolean, beat: number) {
+    const ctx = this.ctx!;
+    const chords = [
+      [146.8, 174.6, 220],
+      [116.5, 146.8, 174.6],
+      [130.8, 164.8, 196],
+      [110, 138.6, 164.8],
+    ];
+    const bar = Math.floor(i / 4) % 4;
+    if (i % 4 === 0) {
+      const len = beat * 4;
+      for (const f of [...chords[bar], chords[bar][0] / 2]) {
+        // organ: two detuned pulses through a soft filter
+        for (const det of [-5, 5]) {
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          const lp = ctx.createBiquadFilter();
+          lp.type = 'lowpass';
+          lp.frequency.value = chase ? 1600 : 900;
+          o.type = 'square';
+          o.frequency.value = f;
+          o.detune.value = det;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.linearRampToValueAtTime(0.022, t + 0.15);
+          g.gain.setValueAtTime(0.022, t + len - 0.2);
+          g.gain.linearRampToValueAtTime(0.0001, t + len);
+          o.connect(lp);
+          lp.connect(g);
+          g.connect(out);
+          o.start(t);
+          o.stop(t + len + 0.05);
+        }
+        // choir "aah": a sine an octave up, slow vibrato
+        const c = ctx.createOscillator();
+        const cg = ctx.createGain();
+        const v = ctx.createOscillator();
+        const vg = ctx.createGain();
+        c.type = 'sine';
+        c.frequency.value = f * 2;
+        v.frequency.value = 5;
+        vg.gain.value = 4;
+        v.connect(vg);
+        vg.connect(c.frequency);
+        cg.gain.setValueAtTime(0.0001, t);
+        cg.gain.linearRampToValueAtTime(0.018, t + len * 0.5);
+        cg.gain.linearRampToValueAtTime(0.0001, t + len);
+        c.connect(cg);
+        cg.connect(out);
+        c.start(t);
+        v.start(t);
+        c.stop(t + len + 0.05);
+        v.stop(t + len + 0.05);
+      }
+    }
+    // the church bell, every 8 beats (every 4 in a chase)
+    if (i % (chase ? 4 : 8) === 0) {
+      for (const [m, a] of [
+        [1, 0.12],
+        [2.76, 0.05],
+        [5.4, 0.03],
+      ]) {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.value = 293.7 * m;
+        g.gain.setValueAtTime(a, t);
+        g.gain.exponentialRampToValueAtTime(0.0005, t + 3.5);
+        o.connect(g);
+        g.connect(out);
+        o.start(t);
+        o.stop(t + 3.6);
+      }
+    }
+    // war drums in a chase
+    if (chase) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.frequency.setValueAtTime(i % 2 ? 110 : 80, t);
+      o.frequency.exponentialRampToValueAtTime(40, t + 0.15);
+      g.gain.setValueAtTime(0.4, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+      o.connect(g);
+      g.connect(out);
+      o.start(t);
+      o.stop(t + 0.3);
+    }
+  }
+
+  /** ⚔️ A heavy armoured footstep (quieter the further it is) */
+  public playArmorStep(distance = 5) {
+    if (!this.ctx || !this.sfxGain) return;
+    const vol = Math.max(0, 1 - distance / 26);
+    if (vol <= 0.02) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    // thud
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(90, t);
+    o.frequency.exponentialRampToValueAtTime(45, t + 0.12);
+    g.gain.setValueAtTime(0.35 * vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    o.connect(g);
+    g.connect(this.sfxGain);
+    o.start(t);
+    o.stop(t + 0.2);
+    // metal clank
+    for (const f of [820, 1240, 1780]) {
+      const m = ctx.createOscillator();
+      const mg = ctx.createGain();
+      m.type = 'triangle';
+      m.frequency.value = f * (0.97 + Math.random() * 0.06);
+      mg.gain.setValueAtTime(0.05 * vol, t + 0.01);
+      mg.gain.exponentialRampToValueAtTime(0.0005, t + 0.25);
+      m.connect(mg);
+      mg.connect(this.sfxGain);
+      m.start(t + 0.01);
+      m.stop(t + 0.27);
+    }
+  }
+
+  /** ⚔️ A portcullis falling (or the drawbridge chains when `chains`) */
+  public playPortcullis(chains = false) {
+    if (!this.ctx || !this.sfxGain) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const dur = chains ? 2.6 : 0.5;
+    const len = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      const k = i / len;
+      // chains: a rattling noise (bursts); portcullis: a short metallic crash
+      const burst = chains ? (Math.sin(i / 380) > 0.2 ? 1 : 0.3) : Math.pow(1 - k, 3);
+      d[i] = (Math.random() * 2 - 1) * burst * (chains ? 0.6 * (1 - k * 0.5) : 1);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = chains ? 2200 : 1400;
+    bp.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.value = 0.5;
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(this.sfxGain);
+    src.start(t);
+    // the final boom
+    const o = ctx.createOscillator();
+    const og = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(70, t + dur - 0.1);
+    o.frequency.exponentialRampToValueAtTime(30, t + dur + 0.4);
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.setValueAtTime(0.6, t + dur - 0.1);
+    og.gain.exponentialRampToValueAtTime(0.001, t + dur + 0.5);
+    o.connect(og);
+    og.connect(this.sfxGain);
+    o.start(t);
+    o.stop(t + dur + 0.6);
   }
 
   /** 🎡 Wheel tick: a short plastic click */
@@ -1339,6 +1609,12 @@ class SoundSystem {
         this.burst(bus, t, 0.05, step % 2 ? 0.03 : 0.015, 'highpass', 7000, 1, 0.001);
         if (step % 16 === 0) this.swell(bus, t, ch, 0.025, 4, 'sawtooth', 1400);
         next = 240;
+        break;
+      }
+      case 'donjon': {
+        // 🏰 the Dungeon's organ, choir and bell, slow
+        this.dungeonStep(step, t, bus, false, 60 / 56);
+        next = Math.round((60 / 56) * 1000);
         break;
       }
       case 'battement': {

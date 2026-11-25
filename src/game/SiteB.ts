@@ -77,8 +77,10 @@ export interface SiteNet {
 
 export interface SiteAction {
   msg?: string;
+  /** coins found (the treasure) */
+  coins?: number;
   shake?: number;
-  ending?: 'LUCAS' | 'ROOFTOP' | 'MOREAU' | 'SECRET';
+  ending?: 'LUCAS' | 'ROOFTOP' | 'MOREAU' | 'SECRET' | 'DONJON';
 }
 
 type Phase = 'wings' | 'ready' | 'boss' | 'down' | 'over';

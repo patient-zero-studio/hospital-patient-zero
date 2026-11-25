@@ -4,7 +4,7 @@ import type { GameEnding } from './types';
  * 🖼️ Gallery: every ending of the game. Some endings have a "+" version
  * (all the chapter's documents found before getting out).
  */
-export const ENDING_KEYS = ['SURVIVAL', 'PURGE', 'TRUTH', 'SEWER', 'SEWER+', 'MAZE', 'MAZE+', 'RESCUE', 'RESCUE+', 'DESTROY', 'LUCAS', 'ROOFTOP', 'ROOFTOP+', 'MOREAU', 'SECRET'] as const;
+export const ENDING_KEYS = ['SURVIVAL', 'PURGE', 'TRUTH', 'SEWER', 'SEWER+', 'MAZE', 'MAZE+', 'RESCUE', 'RESCUE+', 'DESTROY', 'LUCAS', 'ROOFTOP', 'ROOFTOP+', 'MOREAU', 'SECRET', 'DONJON'] as const;
 export type EndingKey = (typeof ENDING_KEYS)[number];
 export const isEndingKey = (k: unknown): k is EndingKey => typeof k === 'string' && (ENDING_KEYS as readonly string[]).includes(k);
 
@@ -26,4 +26,5 @@ export const ENDING_FROM_ACH: Record<string, EndingKey> = {
   ch6_escape: 'ROOFTOP',
   ch7_end: 'MOREAU',
   ch8_end: 'SECRET',
+  ch10_end: 'DONJON',
 };

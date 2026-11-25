@@ -20,6 +20,9 @@ export const LAMPS: Record<string, LampDef> = {
   lred: { color: 0xff4a3a, drain: 0.9, width: 1 },
   lpink: { color: 0xff6ad8, drain: 0.9, width: 1 },
   lgold: { color: 0xffd84a, drain: 0.85, width: 1.15 },
+  // ⚔️ Chevaliers
+  llantern: { color: 0xffc46a, drain: 1, width: 1.25 },
+  ltorch: { color: 0xff7a1a, drain: 0.9, width: 1.1 },
 };
 
 export const lampOf = (id?: string): LampDef => (id && LAMPS[id]) || DEFAULT_LAMP;

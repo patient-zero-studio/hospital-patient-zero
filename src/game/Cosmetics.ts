@@ -27,7 +27,7 @@ export interface HumanOutfit {
   /** extra material tweaks */
   gownFx?: 'gold' | 'neon' | 'white' | 'ghost';
   hairFx?: 'neon';
-  extras?: ('stethoscope' | 'mohawk' | 'stripes' | 'belt' | 'xmasbands' | 'cape' | 'wings' | 'medal')[];
+  extras?: ('stethoscope' | 'mohawk' | 'stripes' | 'belt' | 'xmasbands' | 'cape' | 'wings' | 'medal' | 'armor' | 'blackarmor')[];
   /** animated effect that comes with the outfit (unless you wear another one) */
   fx?: string;
 }
@@ -68,6 +68,10 @@ export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
   clanknight: { gown: '#2a2f45', hair: '#1d1d22', accs: ['beret'], extras: ['cape', 'belt'] },
   champion: { gown: '#7a0a14', hair: '#f5d36a', accs: ['royalcrown'], gownFx: 'gold', extras: ['cape', 'medal', 'belt'], fx: 'stars' },
   veteran: { gown: '#4b5320', hair: '#2a2a20', accs: ['beret', 'shades'], extras: ['medal', 'belt'] , fx: 'embers' },
+  // ⚔️ Mise à jour des Chevaliers
+  squire: { gown: '#7a5a32', hair: '#4a2e1a', accs: ['hood'], extras: ['belt'] },
+  knight: { gown: '#3a3f55', hair: '#2a2a2a', accs: ['knighthelm'], extras: ['armor', 'belt'], fx: 'sparks' },
+  blackknight: { gown: '#0c0c0e', hair: '#0a0a0a', accs: ['blackhelm'], extras: ['blackarmor', 'cape'], fx: 'flames' },
 };
 
 /** Size of a head, so the event hats fit both the human and the creature. */
@@ -261,6 +265,29 @@ const buildFestive = (id: string, h: HeadSpec, track: Track, g: THREE.Group): bo
       tail.rotation.z = -Math.PI / 2;
       tail.scale.z = 0.3;
       for (const side of [-1, 1]) add(track, pivot, new THREE.SphereGeometry(0.009 * s, 8, 6), std(track, 0x111111), 0.075 * s, 0.012 * s, side * 0.03 * s);
+      return true;
+    }
+    case 'knighthelm':
+    case 'blackhelm': {
+      // ⚔️ A great helm: a steel bucket with a visor slit and a plume
+      const black = id === 'blackhelm';
+      const metal = std(track, black ? 0x1c1c22 : 0xb8bcc4, { metalness: 0.9, roughness: black ? 0.45 : 0.28 });
+      const slit = std(track, 0x030303, { roughness: 1, emissive: black ? 0xff2a00 : 0x000000, emissiveIntensity: black ? 0.8 : 0 });
+      const H = (h.top - h.cy) * 2.25;
+      const zs = h.rz / h.rx;
+      const body = add(track, g, new THREE.CylinderGeometry(h.rx * 1.2, h.rx * 1.25, H, 22), metal, 0, h.cy - 0.005 * s, 0);
+      body.scale.z = zs;
+      const dome = add(track, g, new THREE.SphereGeometry(h.rx * 1.2, 22, 10, 0, Math.PI * 2, 0, Math.PI / 2), metal, 0, h.cy - 0.005 * s + H / 2, 0);
+      dome.scale.set(1, 0.5, zs);
+      add(track, g, new THREE.BoxGeometry(h.rx * 1.7, 0.014 * s, 0.03 * s), slit, 0, h.cy + 0.035 * s, h.rz * 1.22);
+      add(track, g, new THREE.BoxGeometry(0.014 * s, H * 0.62, 0.03 * s), metal, 0, h.cy - 0.03 * s, h.rz * 1.24);
+      const trim = std(track, black ? 0x8a0a14 : 0xd4a840, { metalness: 0.8, roughness: 0.3 });
+      const rim = add(track, g, new THREE.TorusGeometry(h.rx * 1.25, 0.008 * s, 6, 28), trim, 0, h.cy - 0.005 * s - H / 2, 0);
+      rim.rotation.x = Math.PI / 2;
+      rim.scale.set(1, zs, 1);
+      const plume = std(track, black ? 0x8a0a14 : 0x1d4ed8, { roughness: 0.95 });
+      const p = add(track, g, new THREE.SphereGeometry(0.05 * s, 10, 8), plume, 0, h.cy + H / 2 + h.rx * 0.55, -0.03 * s);
+      p.scale.set(0.45, 1.3, 1.8);
       return true;
     }
     case 'crown': {
@@ -685,6 +712,21 @@ export const buildHumanBodyExtra = (id: string, track: Track): THREE.Group => {
     add(track, g, new THREE.BoxGeometry(0.03, 0.04, 0.004), ribbon, -0.08, 0.36, 0.17);
     const m = add(track, g, new THREE.CylinderGeometry(0.018, 0.018, 0.005, 16), gold, -0.08, 0.32, 0.172);
     m.rotation.x = Math.PI / 2;
+  } else if (id === 'armor' || id === 'blackarmor') {
+    // ⚔️ Breastplate, shoulder plates and a cross on the chest
+    const black = id === 'blackarmor';
+    const metal = std(track, black ? 0x1c1c22 : 0xb8bcc4, { metalness: 0.9, roughness: black ? 0.45 : 0.28, side: THREE.DoubleSide });
+    const trim = std(track, black ? 0x8a0a14 : 0xd4a840, { metalness: 0.8, roughness: 0.3, emissive: black ? 0x400000 : 0x000000, emissiveIntensity: 0.5 });
+    const plate = add(track, g, new THREE.CylinderGeometry(0.218, 0.208, 0.48, 30, 1, true), metal, 0, 0.27, 0);
+    plate.scale.set(1.04, 1, 0.84);
+    const band = add(track, g, new THREE.CylinderGeometry(0.224, 0.224, 0.04, 30, 1, true), trim, 0, 0.05, 0);
+    band.scale.set(1.04, 1, 0.86);
+    for (const side of [-1, 1]) {
+      const sh = add(track, g, new THREE.SphereGeometry(0.095, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), metal, side * 0.235, 0.5, 0);
+      sh.scale.set(1.2, 0.75, 1.1);
+    }
+    add(track, g, new THREE.BoxGeometry(0.03, 0.2, 0.012), trim, 0, 0.33, 0.183);
+    add(track, g, new THREE.BoxGeometry(0.12, 0.03, 0.012), trim, 0, 0.37, 0.183);
   } else if (id === 'stripes') {
     const black = std(track, 0x151515, { roughness: 0.9, side: THREE.DoubleSide });
     for (let i = 0; i < 6; i++) {
@@ -746,6 +788,9 @@ export const MONSTER_OUTFITS: Record<string, MonsterOutfit> = {
   wendigo: { skin: '#d8d0c0', eyes: '#9ef0ff', gown: '#2a2420', accs: ['antlers'], skinFx: 'bone' , fx: 'smoke' },
   plaguebeast: { skin: '#3a3a30', eyes: '#ff3a10', gown: '#141414', accs: ['plaguemask'] },
   ghostpirate: { skin: '#7ad0c8', eyes: '#e0fff8', gown: '#203a3a', accs: ['piratehat', 'chains'], skinFx: 'frost' , fx: 'aura' },
+  // ⚔️ Mise à jour des Chevaliers: Patient Zéro in his cursed armour, and the dragon
+  knightpz: { eyes: '#ff2010', gown: '#22222a', accs: ['blackhelm'], body: ['chestplate', 'pauldrons', 'sword'], fx: 'embers' },
+  dragon: { skin: '#2f6b2a', eyes: '#ffcc00', gown: '#14301a', accs: ['horns'], body: ['dragonwings'], fx: 'flames' },
   // 🎄 Nuit de Noël
   evilsanta: { skin: '#d8cfc4', eyes: '#ff1a0a', gown: '#9a0c18', accs: ['santahat', 'beard'], body: ['royalcape'], fx: 'embers' },
 };
@@ -804,7 +849,7 @@ export const buildMonsterAccessory = (id: string, track: Track): THREE.Group => 
 // ---------------------------------------------------------------------------
 // 👑 Creature body pieces (spine space: shoulders at y ≈ 0.6, x ≈ ±0.27; or in the right hand)
 // ---------------------------------------------------------------------------
-export type MonsterBodyExtra = 'royalcape' | 'scepter' | 'pauldrons' | 'tanks';
+export type MonsterBodyExtra = 'royalcape' | 'scepter' | 'pauldrons' | 'tanks' | 'chestplate' | 'dragonwings' | 'sword';
 
 export const buildMonsterBodyExtra = (id: MonsterBodyExtra, track: Track): { group: THREE.Group; at: 'spine' | 'hand' } | null => {
   const g = new THREE.Group();
@@ -892,6 +937,45 @@ export const buildMonsterBodyExtra = (id: MonsterBodyExtra, track: Track): { gro
         }
       }
       return { group: g, at: 'spine' };
+    }
+    case 'chestplate': {
+      // Rusty knight's breastplate over the gown
+      const rust = std(track, 0x8a8a90, { metalness: 0.85, roughness: 0.5, side: THREE.DoubleSide });
+      const stain = std(track, 0x5a3a20, { roughness: 0.9 });
+      const plate = add(track, g, new THREE.CylinderGeometry(0.27, 0.24, 0.5, 26, 1, true), rust, 0, 0.36, 0.01);
+      plate.scale.set(1, 1, 0.85);
+      for (let k = 0; k < 4; k++) add(track, g, new THREE.SphereGeometry(0.03, 8, 6), stain, (k - 1.5) * 0.09, 0.2 + (k % 2) * 0.22, 0.225);
+      return { group: g, at: 'spine' };
+    }
+    case 'dragonwings': {
+      const skin = std(track, 0x1f4a1c, { roughness: 0.7, side: THREE.DoubleSide });
+      const bone = std(track, 0x2a1a10, { roughness: 0.6 });
+      for (const side of [-1, 1]) {
+        const sh = new THREE.Shape();
+        sh.moveTo(0, 0);
+        sh.lineTo(0.55, 0.45);
+        sh.lineTo(0.75, 0.05);
+        sh.quadraticCurveTo(0.6, 0.0, 0.55, -0.15);
+        sh.quadraticCurveTo(0.42, -0.05, 0.35, -0.25);
+        sh.quadraticCurveTo(0.22, -0.08, 0.12, -0.2);
+        sh.lineTo(0, 0);
+        const wing = add(track, g, new THREE.ShapeGeometry(sh), skin, side * 0.08, 0.58, -0.22);
+        wing.scale.x = side;
+        wing.rotation.y = side * 0.45;
+        const arm = add(track, g, new THREE.CylinderGeometry(0.015, 0.02, 0.7, 6), bone, side * 0.3, 0.8, -0.32);
+        arm.rotation.z = -side * 0.85;
+        arm.rotation.y = side * 0.45;
+      }
+      return { group: g, at: 'spine' };
+    }
+    case 'sword': {
+      // A big notched sword in the right hand
+      const steel = std(track, 0x9a9ea6, { metalness: 0.9, roughness: 0.35 });
+      const grip = std(track, 0x2a1a10, { roughness: 0.8 });
+      add(track, g, new THREE.BoxGeometry(0.06, 0.95, 0.015), steel, 0, -0.62, 0.05);
+      add(track, g, new THREE.BoxGeometry(0.24, 0.04, 0.05), grip, 0, -0.12, 0.05);
+      add(track, g, new THREE.CylinderGeometry(0.02, 0.02, 0.16, 8), grip, 0, -0.03, 0.05);
+      return { group: g, at: 'hand' };
     }
     case 'tanks': {
       const glass = std(track, 0x3aff2a, { roughness: 0.1, transparent: true, opacity: 0.75, emissive: 0x2aff1a, emissiveIntensity: 0.8 });

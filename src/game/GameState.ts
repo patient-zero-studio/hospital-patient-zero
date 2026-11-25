@@ -171,6 +171,14 @@ export class GameState {
           '« Lucas. » Le mot tombe dans le silence de la salle. La créature tressaille. Sous la peau grise, quelque chose bouge : un regard d\'enfant, perdu depuis des années. Les rampes UV s\'éteignent une à une. Il se recroqueville contre le fauteuil de contention et murmure, d\'une voix qui n\'est plus la sienne depuis longtemps : « …je veux rentrer. » Vous lui tendez la main. Pour la première fois, le Patient Zéro a un nom.',
       };
     }
+    if (endingType === 'DONJON') {
+      return {
+        ending: 'DONJON',
+        title: 'CHAPITRE 10 : LE PONT-LEVIS',
+        narrative:
+          'Vous courez sur les planches du pont-levis pendant que les chaînes hurlent derrière vous. Au milieu, vous vous retournez. Le Chevalier s\'est arrêté sur le seuil du donjon, l\'épée basse. Il regarde les trois blasons que vous serrez contre vous : le lion, l\'aigle, le dragon. Sous le heaume, quelque chose ressemble à un enfant qui jouait aux chevaliers dans un couloir d\'hôpital, avec une épée en carton. Il ne vous suit pas. Le pont se relève derrière vous, et le donjon se rendort.',
+      };
+    }
     if (endingType === 'SECRET') {
       return {
         ending: 'SECRET',

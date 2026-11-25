@@ -151,6 +151,17 @@ export const CATALOG: Cosmetic[] = [
   ev('poisson', 'h-pa-clown', 'Clown farceur', 'human', 'outfit', 'clown', 'style'),
   ev('poisson', 'm-pa-clown', 'Clown maléfique', 'monster', 'outfit', 'clownm', 'exclusif'),
 
+  // ---- ⚔️ Tournoi des Chevaliers (quand l'admin le lance) : le Trésor du Royaume ----
+  ev('chevaliers', 'h-ch-gown', 'Tunique du royaume', 'human', 'gown', '#1d3a8a', 'petit'),
+  ev('chevaliers', 'm-ch-skin', 'Écailles de dragon', 'monster', 'skin', '#2f6b2a', 'petit'),
+  ev('chevaliers', 'h-ch-helm', 'Heaume de chevalier', 'human', 'acc', 'knighthelm', 'moyen'),
+  ev('chevaliers', 'm-ch-helm', 'Heaume rouillé', 'monster', 'acc', 'knighthelm', 'moyen'),
+  ev('chevaliers', 'm-ch-dragon', 'Dragon', 'monster', 'outfit', 'dragon', 'exclusif'),
+  ev('chevaliers', 'h-squire', 'Écuyer', 'human', 'outfit', 'squire', 'moyen'),
+  ev('chevaliers', 'h-knight', 'Chevalier', 'human', 'outfit', 'knight', 'style'),
+  ev('chevaliers', 'l-lantern', 'Lanterne de château', 'human', 'lamp', 'llantern', 'moyen'),
+  ev('chevaliers', 'l-torch', 'Torche enflammée', 'human', 'lamp', 'ltorch', 'style'),
+
   // ---- 🏆 Pass de saison (paliers 10, 20, 30) ----
   // 🏅 Ranked pass (earned, never sold)
   { ...c('m-rank-gladiator', 'Gladiateur de l\'arène', 'monster', 'outfit', 'gladiator', 'exclusif'), unlock: 'ranked' },
@@ -160,6 +171,9 @@ export const CATALOG: Cosmetic[] = [
   { ...c('m-story-moreau', 'Dr Moreau (boss)', 'monster', 'outfit', 'moreau', 'exclusif'), unlock: 'story' },
   { ...c('h-story-moreau', 'Blouse du Dr Moreau', 'human', 'outfit', 'moreauh', 'exclusif'), unlock: 'story' },
   { ...c('m-story-ombre', 'L\'Ombre', 'monster', 'outfit', 'ombre', 'exclusif'), unlock: 'story' },
+  // ⚔️ Finish the Dungeon (chapter 10) during the Tournoi des Chevaliers (limited edition)
+  { ...c('h-story-blackknight', 'Chevalier Noir', 'human', 'outfit', 'blackknight', 'exclusif'), unlock: 'story' },
+  { ...c('m-story-knightpz', 'Patient Zéro Chevalier', 'monster', 'outfit', 'knightpz', 'exclusif'), unlock: 'story' },
   { ...c('h-story-lucas', 'Pyjama de Lucas', 'human', 'outfit', 'lucas', 'exclusif'), unlock: 'story' },
   // 🔪 Imposteur: 10 wins
   { ...c('h-imp-mask', "Masque de l'imposteur", 'human', 'outfit', 'impostor', 'exclusif'), unlock: 'story' },

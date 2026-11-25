@@ -18,7 +18,7 @@ const DAILY_LINES = [
 ];
 
 import { RANK_TIERS, tierOf } from '../ranked';
-import { Award, Bell, BellOff, BookOpen, Coins, Crown, Flag, GraduationCap, HelpCircle, Image as ImageIcon, ListOrdered, Lock, Medal, Star, Wrench, ClipboardList, Music, Plus, Settings, Shield, Shirt, ShoppingBag, Skull, Swords, Target, Ticket, User, Users, VolumeX, X, Zap } from 'lucide-react';
+import { Award, Bell, BellOff, BookOpen, Coins, Crown, Flag, GraduationCap, HelpCircle, Image as ImageIcon, ListOrdered, Lock, Medal, Newspaper, Star, Wrench, ClipboardList, Music, Plus, Settings, Shield, Shirt, ShoppingBag, Skull, Swords, Target, Ticket, User, Users, VolumeX, X, Zap } from 'lucide-react';
 import type { ChallengeDef } from '../challenges';
 import { ACHIEVEMENTS } from '../achievements';
 import { AudioSettings, ControlSettings } from '../types';
@@ -99,6 +99,15 @@ interface StartScreenProps {
   onClans?: () => void;
   clanTag?: string | null;
   onMusic?: () => void;
+  /** 📰 the update notes (newsUnseen = not read yet) */
+  onNews?: () => void;
+  /** 👑 the title « Sire » (King's quests done) */
+  sire?: boolean;
+  /** 🔒 chapter 10 (Knights' update) visible */
+  donjonOpen?: boolean;
+  /** achievements not shown yet (count) */
+  achHidden?: number;
+  newsUnseen?: boolean;
   onGallery?: () => void;
   onBestiary?: () => void;
   /** 🔧 L'Atelier (permanent upgrades) */
@@ -125,7 +134,7 @@ interface StartScreenProps {
   /** emotes owned (played when you click your character) */
   emotes?: string[];
   onCustomize?: () => void;
-  chapter?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+  chapter?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
   ch2Unlocked?: boolean;
   ch3Unlocked?: boolean;
   ch4Unlocked?: boolean;
@@ -148,7 +157,7 @@ interface StartScreenProps {
   onToggleRanked?: () => void;
   rankPoints?: number | null;
   onLeaderboard?: () => void;
-  onChangeChapter?: (c: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9) => void;
+  onChangeChapter?: (c: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10) => void;
   /** achievements unlocked (null = not logged in) */
   achCount?: number | null;
   onAchievements?: () => void;
@@ -158,7 +167,7 @@ interface StartScreenProps {
   onUpdateControls: (newControls: Partial<ControlSettings>) => void;
 }
 
-type ChapterN = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+type ChapterN = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 10;
 
 /** Dark "horror" palette for the chunky buttons */
 const C = {
@@ -234,6 +243,11 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onRanked,
   rankTier,
   onMusic,
+  onNews,
+  sire,
+  donjonOpen = false,
+  achHidden = 0,
+  newsUnseen,
   onGallery,
   onBestiary,
   onAtelier,
@@ -292,11 +306,13 @@ export const StartScreen: React.FC<StartScreenProps> = ({
     ch8Unlocked
       ? { n: 8, icon: '🌳', name: 'Le Rêve de Lucas', sub: 'Chapitre secret : ses souvenirs, et une ombre.', color: '#2d4a3a' }
       : { n: 8, icon: '❔', name: '???', sub: 'Chapitre secret', color: C.night },
+    ...(donjonOpen ? [{ n: 10 as ChapterN, icon: '🏰', name: 'Le Donjon', sub: 'Nouveau ! Le Patient Zéro en armure.', color: '#2a1a0a' }] : []),
   ];
-  const unlocked = [true, ch2Unlocked, ch3Unlocked, ch4Unlocked, ch5Unlocked, ch6Unlocked, ch7Unlocked, ch8Unlocked];
+  // (9 = the circus, multiplayer only; 10 = the Dungeon, open to everyone)
+  const unlocked = [true, ch2Unlocked, ch3Unlocked, ch4Unlocked, ch5Unlocked, ch6Unlocked, ch7Unlocked, ch8Unlocked, false, donjonOpen];
   let eff: number = chapter;
   while (eff > 1 && !unlocked[eff - 1]) eff--;
-  const cur = CHAPTERS[Math.min(7, eff - 1)];
+  const cur = CHAPTERS.find((c) => c.n === eff) ?? CHAPTERS[0];
   const lockText = (n: number) =>
     n === 8
       ? `Trouvez tous les documents des chapitres 1 à 7${docsProgress ? ` (${docsProgress[0]}/${docsProgress[1]})` : ''}`
@@ -333,7 +349,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
       {onRanked && <Sq icon={<Medal style={{ color: tier.color }} />} label="Classé" color={C.steel} onClick={onRanked} title={`Classé — ${tier.name}`} />}
       {onFriends && <Sq icon={<Users />} label="Amis" color={C.toxic} onClick={onFriends} badge={friendsAlert} title={friendsOnline ? `Amis — ${friendsOnline} en ligne` : 'Amis'} />}
       {onClans && <Sq icon={<Shield />} label={clanTag ? `[${clanTag}]` : 'Clans'} color={C.teal} onClick={onClans} title="Clans" />}
-      {onAchievements && <Sq icon={<Award />} label={achCount != null ? `${achCount}/${ACHIEVEMENTS.length}` : 'Succès'} color={C.bone} onClick={onAchievements} title="Succès" />}
+      {onAchievements && <Sq icon={<Award />} label={achCount != null ? `${achCount}/${ACHIEVEMENTS.length - achHidden}` : 'Succès'} color={C.bone} onClick={onAchievements} title="Succès" />}
       {onLeaderboard && <Sq icon={<ListOrdered />} label="Top" color={C.night} onClick={onLeaderboard} title="Classement" />}
     </>
   );
@@ -341,6 +357,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
     <>
       {onBestiary && <Sq icon={<BookOpen />} label="Bestiaire" color={C.bruise} onClick={onBestiary} />}
       {onGallery && <Sq icon={<ImageIcon />} label="Galerie" color={C.bone} onClick={onGallery} />}
+      {onNews && <Sq icon={<Newspaper />} label="Nouveautés" color={C.blood} onClick={onNews} badge={newsUnseen ? '!' : undefined} title="La dernière mise à jour" />}
       {onMusic && <Sq icon={<Music />} label="Musiques" color={C.teal} onClick={onMusic} />}
       {onRedeem && <Sq icon={<Ticket />} label="Code" color={C.rust} onClick={onRedeem} title="Code cadeau" />}
       {onTutorial && tutorialDone && <Sq icon={<GraduationCap />} label="Tutoriel" color={C.toxic} onClick={onTutorial} />}
@@ -525,6 +542,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             </button>
             <div className="min-w-0">
               <div data-no-i18n className="font-game outl text-[18px] leading-tight max-w-[140px] truncate">
+                {username && sire ? <span className="text-amber-300">Sire </span> : null}
                 {username ?? 'Invité'}
               </div>
               {level && level.need > 0 ? (

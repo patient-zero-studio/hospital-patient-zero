@@ -51,7 +51,7 @@ import { QUEST_BONUS, QuestStat, dailyQuests } from '../src/quests.ts';
 import { ENDING_KEYS, isEndingKey } from '../src/gallery.ts';
 import { GALLERY_DOCS, isDocId } from '../src/galleryDocs.ts';
 import { BEASTS, ITEM_ENTRIES, isBeastId, isItemEntryId } from '../src/bestiary.ts';
-import { grantServerAch } from '../src/achievements.ts';
+import { grantServerAch, KING_QUESTS } from '../src/achievements.ts';
 import { PushSub, isPushSub, pushPublicKey, pushTo, setupPush } from './push.ts';
 import { LEVEL_SKINS, PASS_TIERS, PASS_XP_PER_TIER, nextWeek, passEnds, passKey, passName, passReward, weekKey, weeklyChallenges } from '../src/progression.ts';
 import { BOXES, SUPPLY_NAMES, TIER_LABEL, TIER_PRICE, cosmetic as cosmeticById } from '../src/economy.ts';
@@ -99,6 +99,8 @@ interface User {
   lastTreats?: number;
   /** 🎡 day of the last wheel spin */
   lastWheel?: string;
+  /** 🏰 castle decor for the secret room (Sire during the Tournoi des Chevaliers) */
+  castleRoom?: boolean;
   /** ⚡ last big power cut whose generator was restarted (reward paid) */
   lastOutage?: string;
   /** 🏚️ secret room: number of visits, and the last visitors */
@@ -379,6 +381,8 @@ const nextReset = () => {
   return d.getTime();
 };
 const achOf = (u: User) => (u.ach = sanitizeAch(u.ach));
+/** 👑 « Sire »: the Dungeon and every King's quest */
+const isSire = (u: User) => KING_QUESTS.every((id) => !!achOf(u).done[id]);
 /** Records achievements / counters and pays their coin rewards once. */
 const reportAch = (u: User, unlock: unknown, stats: unknown, trusted: Partial<Record<StatKey, number>> = {}) => {
   const newly = applyAchReport(achOf(u), unlock, stats, trusted);
@@ -388,6 +392,8 @@ const reportAch = (u: User, unlock: unknown, stats: unknown, trusted: Partial<Re
     addXp(u, coins / 2);
   }
   grantStorySkins(u);
+  // 🏰 became « Sire » during the Tournoi: the castle room (limited edition)
+  if (currentSeason() === 'chevaliers' && isSire(u)) u.castleRoom = true;
   return newly.map((a: AchDef) => a.id);
 };
 /** 🏆 Boss beaten / secret chapter finished: their skins (once) */
@@ -546,6 +552,7 @@ const walletView = (u: User) => ({
   seasonShop: seasonShop(currentSeason()).map((x) => x.id),
   advent: adventView(u),
   ach: achOf(u),
+  sire: isSire(u),
   challenge: { id: dailyChallenge().id, done: u.lastChallenge === todayKey() },
   wallet: walletOf(u),
   shop: dailyShop().map((x) => x.id),
@@ -668,7 +675,7 @@ app.post('/api/run', (req, res) => {
   const now = Date.now();
   const chNum = Number(req.body?.chapter);
   // 0 = the campaign (chapters 1 → 5 in one go)
-  const chapter = chNum === 0 ? 0 : chNum === 8 ? 8 : chNum === 7 ? 7 : chNum === 6 ? 6 : chNum === 5 ? 5 : chNum === 4 ? 4 : chNum === 3 ? 3 : chNum === 2 ? 2 : 1;
+  const chapter = chNum === 0 ? 0 : chNum === 10 ? 10 : chNum === 8 ? 8 : chNum === 7 ? 7 : chNum === 6 ? 6 : chNum === 5 ? 5 : chNum === 4 ? 4 : chNum === 3 ? 3 : chNum === 2 ? 2 : 1;
   const difficulty = Math.floor(Number(req.body?.difficulty));
   const time = Math.round(Number(req.body?.time) * 10) / 10;
   // Exploration doesn't count; a real escape takes at least a minute (the campaign: 10 min, up to 6 h)
@@ -693,6 +700,17 @@ app.post('/api/run', (req, res) => {
   }
   const rank = list.findIndex((e) => e.username === user.username);
   if (chapter !== 0 && time < 300) serverAch(user, 'speedrun');
+  // ⚔️ Tournoi des Chevaliers (limited edition): out of the Dungeon during the event
+  if (chapter === 10 && currentSeason() === 'chevaliers') {
+    const w = walletOf(user);
+    const won = ['h-story-blackknight', 'm-story-knightpz'].filter((id) => !w.owned.includes(id));
+    if (won.length) {
+      w.owned.push(...won);
+      user.inbox = [...(user.inbox ?? []), { from: 'Patient Zero', text: '⚔️ Tu es sorti du Donjon pendant le Tournoi ! Tu gagnes les skins « Chevalier Noir » et « Patient Zéro Chevalier » (édition limitée), et la musique « Le Donjon ».', at: Date.now() }].slice(-20);
+    }
+    if (!(user.tracks ?? []).includes('donjon')) user.tracks = [...(user.tracks ?? []), 'donjon'];
+    if (isSire(user)) user.castleRoom = true;
+  }
 
   let challengeWon = 0;
   const c = dailyChallenge();
@@ -1046,6 +1064,8 @@ app.get('/api/player/:name', (req, res) => {
     username: u.username,
     level: levelOf(u.xp ?? 0),
     admin: isAdmin(u),
+    sire: isSire(u),
+    castle: !!u.castleRoom || isAdmin(u),
     since: u.createdAt,
     status: statusOf(key),
     stats: ach.stats,
@@ -1640,7 +1660,7 @@ interface Room {
   /** versus: who plays the creature */
   monster: 'host' | 'guest';
   /** 1 = the hospital, 2 = the sewers, 4 = the forest, 5 = Site B (co-op only) */
-  chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9;
+  chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
   started: boolean;
   /** same level layout for everyone (spectators too) */
   seed?: number;
@@ -1667,21 +1687,21 @@ const roomSettings = (r: Room) => {
   }
   return { difficulty: r.difficulty, mode: r.mode, monster: r.monster, chapter: r.chapter, hide: !!r.hide, imp: !!r.imp, pub: !!r.pub };
 };
-const parseChapter = (v: unknown): 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9 => {
+const parseChapter = (v: unknown): 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9 | 10 => {
   const n = Number(v);
-  return n === 2 || n === 4 || n === 5 || n === 6 || n === 7 || n === 8 || n === 9 ? n : 1;
+  return n === 2 || n === 4 || n === 5 || n === 6 || n === 7 || n === 8 || n === 9 || n === 10 ? n : 1;
 };
 const parseMode = (v: unknown): GameMode => (v === 'versus' || v === 'race' ? v : 'coop');
 const parseSide = (v: unknown): 'host' | 'guest' => (v === 'guest' ? 'guest' : 'host');
 
 const rooms = new Map<string, Room>();
 /** 👥 Co-op takes up to 8 players; the other modes (and the Circus) are 1 vs 1 */
-const roomMax = (r: Room) => (r.mode === 'coop' && r.chapter !== 9 ? 8 : 2);
+const roomMax = (r: Room) => (r.mode === 'coop' && r.chapter !== 9 && r.chapter !== 10 ? 8 : 2);
 const membersOf = (r: Room) => [r.host, ...r.guests];
 const namesOf = (r: Room) => membersOf(r).map((c) => c.username);
 const syncGuest = (r: Room) => (r.guest = r.guests[0] ?? null);
 /** 🔎 Players waiting for a random partner */
-const matchQueue: { client: Client; mode: GameMode; hide?: boolean; difficulty: number; chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9 }[] = [];
+const matchQueue: { client: Client; mode: GameMode; hide?: boolean; difficulty: number; chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9 | 10 }[] = [];
 const unqueue = (c: Client) => {
   for (let i = matchQueue.length - 1; i >= 0; i--) if (matchQueue[i].client === c) matchQueue.splice(i, 1);
 };

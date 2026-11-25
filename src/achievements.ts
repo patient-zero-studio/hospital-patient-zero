@@ -4,6 +4,9 @@
  */
 export type AchTier = 'bronze' | 'argent' | 'or' | 'platine';
 
+/** 👑 The King's quests: finish the Dungeon and all three to be called « Sire » */
+export const KING_QUESTS = ['ch10_end', 'king_herse', 'king_hard', 'king_fast'];
+
 export interface AchDef {
   id: string;
   name: string;
@@ -106,6 +109,12 @@ export const ACHIEVEMENTS: AchDef[] = [
   { id: 'imp_win', name: 'Le loup dans la bergerie', desc: "Gagner une partie d'Imposteur en étant le monstre.", icon: '🔪', tier: 'or', reward: 200 },
   { id: 'imp_crew', name: 'Démasqué !', desc: "Gagner une partie d'Imposteur avec les survivants.", icon: '🧍', tier: 'argent', reward: 120 },
   { id: 'imp_10', name: 'Maître du masque', desc: "Gagner 10 parties d'Imposteur (en imposteur ou en survivant). Récompense : skin « Masque de l'imposteur ».", icon: '🎭', tier: 'or', reward: 200, stat: 'impWon', goal: 10 },
+  // --- ⚔️ Chapter 10 ---
+  { id: 'ch10_end', name: 'Chevalier de Saint-Aurore', desc: 'Sortir du Donjon par le pont-levis (Chapitre 10). Pendant le Tournoi des Chevaliers : skins Chevalier Noir et Patient Zéro Chevalier (édition limitée).', icon: '🏰', tier: 'platine', reward: 400 },
+  // --- 👑 Quêtes du Roi (all of them + the Dungeon = the title « Sire ») ---
+  { id: 'king_herse', name: '👑 Quête du Roi : la herse', desc: 'Faire tomber une herse sur le Chevalier dans le Donjon.', icon: '⛓️', tier: 'or', reward: 150 },
+  { id: 'king_hard', name: '👑 Quête du Roi : le brave', desc: 'Sortir du Donjon en Difficile ou plus.', icon: '🛡️', tier: 'or', reward: 200 },
+  { id: 'king_fast', name: '👑 Quête du Roi : l\'éclair', desc: 'Sortir du Donjon en moins de 6 minutes.', icon: '⚡', tier: 'or', reward: 200 },
   // --- Secret chapter ---
   { id: 'ch8_end', name: 'Le garçon qui voulait être docteur', desc: 'Terminer le chapitre secret : le Rêve de Lucas. Récompense : skins de l\'Ombre et de Lucas.', icon: '🌳', tier: 'platine', reward: 500, secret: true },
   // --- Chapter 7 ---

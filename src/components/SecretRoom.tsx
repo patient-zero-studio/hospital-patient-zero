@@ -48,6 +48,7 @@ export const SecretRoom: React.FC<Props> = ({ name, token, onClose }) => {
     api.roomVisit(token, name).then(setVisit).catch(() => undefined);
   }, [name, token]);
 
+  const castle = !!p?.castle;
   const lamp = p?.look.human.lamp && LAMPS[p.look.human.lamp] ? hex(LAMPS[p.look.human.lamp].color) : '#fff1dc';
   const rare = (p?.rare ?? []).map((id) => cosmetic(id)).filter((c): c is NonNullable<typeof c> => !!c);
   const lamps = (p?.lamps ?? []).map((id) => cosmetic(id)).filter((c): c is NonNullable<typeof c> => !!c);
@@ -57,8 +58,15 @@ export const SecretRoom: React.FC<Props> = ({ name, token, onClose }) => {
       <div
         className="relative w-full max-w-4xl max-h-[96vh] overflow-y-auto border-4 border-black shadow-[0_0_80px_rgba(0,0,0,0.9)]"
         style={{
-          // wallpaper (faded stripes), wainscot and an old wooden floor
-          background: `
+          background: castle
+            ? // 🏰 castle: big stone blocks, the warm glow of the fireplace
+              `radial-gradient(ellipse at 50% 100%, #ff7a1a44 0%, transparent 45%),
+            radial-gradient(ellipse at 50% 30%, ${lamp}22 0%, transparent 55%),
+            repeating-linear-gradient(0deg, #2a2622 0 2px, transparent 2px 34px),
+            repeating-linear-gradient(90deg, #2a2622 0 2px, transparent 2px 68px),
+            linear-gradient(#4a443c, #2e2a25)`
+            : // wallpaper (faded stripes), wainscot and an old wooden floor
+              `
             radial-gradient(ellipse at 50% 30%, ${lamp}22 0%, transparent 55%),
             linear-gradient(transparent 0 72%, #2a1a0e 72% 73%, transparent 73%),
             repeating-linear-gradient(90deg, #1d1712 0 18px, #191410 18px 36px)`,
@@ -68,6 +76,28 @@ export const SecretRoom: React.FC<Props> = ({ name, token, onClose }) => {
         <button onClick={onClose} className="absolute top-3 right-3 z-10 text-zinc-400 hover:text-white" aria-label="Fermer">
           <X className="w-6 h-6" />
         </button>
+        {castle && (
+          <>
+            {/* banners on both sides */}
+            {[0, 1].map((side) => (
+              <div
+                key={side}
+                className="absolute top-0 hidden sm:block pointer-events-none"
+                style={{
+                  [side ? 'right' : 'left']: 14,
+                  width: 54,
+                  height: 190,
+                  background: side ? 'linear-gradient(#1d3a8a, #142a66)' : 'linear-gradient(#9a0c18, #6a0810)',
+                  clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 86%, 0 100%)',
+                  boxShadow: '0 6px 12px #000',
+                }}
+              >
+                <div className="text-center text-2xl pt-6">{side ? '🐉' : '🦁'}</div>
+                <div className="mx-auto mt-2 w-8 h-0.5 bg-amber-400" />
+              </div>
+            ))}
+          </>
+        )}
         {err ? (
           <p className="text-sm font-mono text-red-400 py-16 text-center">{err}</p>
         ) : !p ? (
@@ -82,7 +112,8 @@ export const SecretRoom: React.FC<Props> = ({ name, token, onClose }) => {
                 className="px-5 py-1.5 font-game uppercase tracking-[0.2em] text-amber-100 text-lg sm:text-xl text-center"
                 style={{ background: 'linear-gradient(#a8761a, #6b4a10)', border: '3px solid #000', boxShadow: '0 4px 0 #000, inset 0 1px 0 #f5c84a' }}
               >
-                🏚️ Chambre de {p.username}
+                {castle ? '🏰 Château de' : '🏚️ Chambre de'} {p.sire ? 'Sire ' : ''}
+                {p.username}
               </div>
               <div className="text-[11px] font-mono text-zinc-400 mt-2 flex items-center gap-2">
                 <span style={{ color: levelColor(p.level.level) }}>⭐ Niveau {p.level.level}</span>
@@ -175,6 +206,16 @@ export const SecretRoom: React.FC<Props> = ({ name, token, onClose }) => {
               </div>
             </div>
 
+            {/* 🔥 the fireplace (castle) */}
+            {castle && (
+              <div className="flex justify-center mt-4">
+                <div className="relative w-44 h-24" style={{ background: 'linear-gradient(#5a544c, #3a3632)', border: '3px solid #000', borderBottom: 'none', clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0 100%)' }}>
+                  <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-28 h-16" style={{ background: '#0c0806', borderRadius: '40px 40px 0 0' }}>
+                    <div className="absolute inset-x-0 bottom-1 text-center text-3xl animate-pulse">🔥</div>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* guest book */}
             <div className="mt-5 p-3" style={{ background: '#e8dcc0', color: '#2a1a0e', border: '3px solid #000', boxShadow: '0 4px 0 #000' }}>
               <div className="text-[10px] font-mono uppercase tracking-[0.25em] font-bold mb-1">👣 Livre des visiteurs</div>

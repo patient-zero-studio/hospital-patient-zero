@@ -163,7 +163,7 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
               className="flex-1 py-3 bg-amber-700 hover:bg-amber-600 text-white font-mono text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all font-bold"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>{ending === 'SEWER' || ending === 'MAZE' || ending === 'RESCUE' || ending === 'DESTROY' || ending === 'LUCAS' || ending === 'ROOFTOP' || ending === 'MOREAU' || ending === 'SECRET' ? 'Rejouer le chapitre' : 'Débloquer les Autres Fins'}</span>
+              <span>{ending === 'SEWER' || ending === 'MAZE' || ending === 'RESCUE' || ending === 'DESTROY' || ending === 'LUCAS' || ending === 'ROOFTOP' || ending === 'MOREAU' || ending === 'SECRET' || ending === 'DONJON' ? 'Rejouer le chapitre' : 'Débloquer les Autres Fins'}</span>
             </button>
           ) : (
             <div className="flex-1 py-3 border border-zinc-800 text-zinc-500 font-mono text-[10px] uppercase tracking-widest text-center">

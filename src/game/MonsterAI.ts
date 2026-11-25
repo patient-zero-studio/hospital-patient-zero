@@ -599,6 +599,11 @@ export class MonsterAI {
     this.applyLook(look);
     this.lookLocked = true;
     this.mesh.scale.setScalar(scale);
+    // A boss in a level: no showcase glow under its feet (it would give it away in the dark)
+    if (this.prestige) {
+      this.mesh.remove(this.prestige.group);
+      this.prestige = null;
+    }
   }
   /** Can someone at `eye` see her head (walls in between)? */
   public visibleFrom(eye: THREE.Vector3, boxes: CollisionBox[]) {

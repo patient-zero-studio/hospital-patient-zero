@@ -7,6 +7,7 @@ const CORNERS: Record<Season, [string, string]> = {
   paques: ['🧺', '🐰'],
   valentin: ['🌹', '💝'],
   poisson: ['🐠', '🤡'],
+  chevaliers: ['🛡️', '🏰'],
 };
 
 /** Menu decoration: things falling (snow, petals, hearts) or flying (bats, fish) + a garland of lights. */

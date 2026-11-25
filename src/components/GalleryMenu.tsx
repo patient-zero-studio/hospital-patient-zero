@@ -5,7 +5,7 @@ import { ENDING_CHAPTER, ENDING_FROM_ACH, ENDING_KEYS, ENDING_NOTES, EndingKey }
 import { GameState } from '../game/GameState';
 import type { GameEnding, GameItem } from '../types';
 
-const CH_NAME = ['', 'L\'Hôpital', 'Les Égouts', 'Le Dédale', 'La Forêt', 'Le Site B', 'Le Toit', 'Le Cœur', 'Le Rêve de Lucas (secret)', 'Salles cachées'];
+const CH_NAME = ['', 'L\'Hôpital', 'Les Égouts', 'Le Dédale', 'La Forêt', 'Le Site B', 'Le Toit', 'Le Cœur', 'Le Rêve de Lucas (secret)', 'Salles cachées', 'Le Donjon'];
 
 /** Title + text of an ending (the "+" version needs the documents) */
 const endingText = (key: EndingKey) => {

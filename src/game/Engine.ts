@@ -19,6 +19,7 @@ import { Rooftop } from './Rooftop';
 import { BossArena } from './BossArena';
 import { DreamHouse, MEMORY_IDS } from './DreamHouse';
 import { CircusTent } from './CircusTent';
+import { Dungeon, BLASON_IDS, PARCH_IDS, duelPoints } from './Dungeon';
 import { GameState } from './GameState';
 import { ProceduralTextures } from '../textures/ProceduralTextures';
 import { MicListener, MicStatus } from '../audio/MicListener';
@@ -553,7 +554,7 @@ export class GameEngine {
   private forest: Forest | null = null;
   /** Chapter 5: Site B, the UV ramps and the final fight. */
   /** Chapter 5 (Site B) or chapter 6 (the roof): same kind of scripted level */
-  private site: SiteB | Rooftop | BossArena | DreamHouse | CircusTent | null = null;
+  private site: SiteB | Rooftop | BossArena | DreamHouse | CircusTent | Dungeon | null = null;
   /** Battery drain before the UV lamp multiplies it. */
   private baseDrain = 1;
   /** Co-op: the forest / lab layout seed shared by both players (null = random, solo). */
@@ -1784,6 +1785,15 @@ export class GameEngine {
     this.stairsBuilt = true;
     this.ventOpen = false;
     this.ductWarned = true;
+    if (this.chapter === 10) {
+      this.site = new Dungeon(this.map, this.scene, this.difficulty, this.lowEndGpu, (msg) => this.shout(msg), this.levelSeed ?? Math.random());
+      this.site.onTrap = () => this.ach('king_herse');
+      // ⚔️ two players in the Dungeon: a duel for the blasons and scrolls
+      this.site.duel = this.net?.mode === 'coop';
+      this.site.guest = this.net?.role === 'guest';
+      if (this.site.stalker) this.monsters.push(this.site.stalker);
+      return;
+    }
     if (this.chapter === 9) {
       this.site = new CircusTent(this.map, this.scene, this.difficulty, this.lowEndGpu, (msg) => this.shout(msg), this.levelSeed ?? Math.random());
       this.site.guest = this.net?.role === 'guest';
@@ -2195,6 +2205,12 @@ export class GameEngine {
       this.queueChapterToast(
         '🎪 LA NUIT DU CIRQUE. Survivez ensemble à 3 nuits sous le chapiteau. Mais chaque matin, le Directeur écrit en secret à l\'un de vous : « Livre-moi ton ami… et tu sortiras libre. »'
       );
+    else if (this.site instanceof Dungeon)
+      this.queueChapterToast(
+        this.difficulty >= 2
+          ? '⚔️ CHAPITRE 10 — LE DONJON. Une crypte oubliée sous Saint-Aurore. Retrouvez les 3 blasons du royaume, puis baissez le pont-levis. Le Patient Zéro dort ici, dans une armure… et la lumière ne lui fait plus peur. Les herses [E] peuvent le bloquer.'
+          : '⚔️ CHAPITRE 10 — LE DONJON (Exploration). Retrouvez les 3 blasons du royaume, puis baissez le pont-levis.'
+      );
     else if (this.site instanceof DreamHouse)
       this.queueChapterToast(
         this.difficulty >= 2
@@ -2345,7 +2361,12 @@ export class GameEngine {
     this.hemi.groundColor.copy(this.baseHemi.ground);
     this.hemi.intensity = this.baseHemi.intensity;
     // Sewers: no windows, no white paint… a bit more fill light so the torch reveals the bricks
-    if (this.chapter === 9) {
+    if (this.chapter === 10) {
+      // The crypt: torchlight on old stones
+      this.hemi.intensity = this.baseHemi.intensity * 3.2;
+      this.hemi.color.set(0x9a7a5a);
+      this.hemi.groundColor.set(0x120a06);
+    } else if (this.chapter === 9) {
       // Under the big top at night: warm bulbs, deep shadows
       this.hemi.intensity = this.baseHemi.intensity * 2.4;
       this.hemi.color.set(0xb08a6a);
@@ -2911,7 +2932,11 @@ export class GameEngine {
     this.stat('escapes');
     this.stat('coinsFound', this.state.runCoins);
     this.ach('first_escape');
-    if (ending === 'SECRET') {
+    if (ending === 'DONJON') {
+      this.ach('ch10_end');
+      if (this.difficulty >= 3) this.ach('king_hard');
+      if (this.runTime < 360) this.ach('king_fast');
+    } else if (ending === 'SECRET') {
       this.ach('ch8_end');
     } else if (ending === 'MOREAU') {
       this.ach('ch7_end');
@@ -5091,6 +5116,7 @@ export class GameEngine {
       else if (r?.msg) this.shout(r.msg);
     } else if (this.site) {
       const r = this.site.interact(pos, 1);
+      if (r?.coins) this.asRemote(() => this.giveCoins(r.coins!));
       if (r?.ending) this.triggerEnding(r.ending);
       else if (r?.msg) this.shout(r.msg);
     }
@@ -5783,6 +5809,10 @@ export class GameEngine {
       }
       if (this.site) {
         if (this.site instanceof DreamHouse) this.site.found = this.state.notesCollected.filter((n) => MEMORY_IDS.includes(n.id)).length;
+        if (this.site instanceof Dungeon) {
+          this.site.found = this.state.notesCollected.filter((n) => BLASON_IDS.includes(n.id)).length;
+          this.site.parch = this.state.notesCollected.filter((n) => PARCH_IDS.includes(n.id)).length;
+        }
         this.site.mirror(delta);
         if (this.site instanceof CircusTent) this.circusCheck(this.site);
         this.applyUvLamp();
@@ -5857,6 +5887,10 @@ export class GameEngine {
     if (this.site) {
       const sb = this.site;
       if (sb instanceof DreamHouse) sb.found = this.state.notesCollected.filter((n) => MEMORY_IDS.includes(n.id)).length;
+      if (sb instanceof Dungeon) {
+        sb.found = this.state.notesCollected.filter((n) => BLASON_IDS.includes(n.id)).length;
+        sb.parch = this.state.notesCollected.filter((n) => PARCH_IDS.includes(n.id)).length;
+      }
       const dead = this.dying || this.finished || !!this.pendingEnding;
       if (!(this.dying && this.killer === sb.stalker)) {
         const pls: SitePlayer[] = [{ pos: p.position, yaw: p.yaw, pitch: p.pitch, flashlight: p.flashlightOn, crouch: p.isCrouching, uv: sb.uv, dead: meDead }];
@@ -6483,6 +6517,7 @@ export class GameEngine {
         this.triggerEnding(r.ending);
         return;
       }
+      if (r?.coins) this.giveCoins(r.coins);
       if (r) {
         if (r.shake) p.shake = Math.max(p.shake, r.shake);
         if (r.msg) this.shout(r.msg);
@@ -6986,6 +7021,7 @@ export class GameEngine {
         if (!w) return;
         if (w.item.type === 'coins') this.giveCoins(w.item.quantity ?? 5);
         else if (!gs.addItem(w.item)) return;
+        if (this.site instanceof Dungeon && this.site.duel) this.site.score[this.actor === 'remote' ? 1 : 0] += duelPoints(w.item.id);
         this.removeWorldItem(w.uid);
         break;
       }

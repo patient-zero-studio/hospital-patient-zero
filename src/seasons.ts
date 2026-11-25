@@ -3,8 +3,8 @@
  * Shared by the server (which one is on, advent calendar, treats) and the
  * client (decorations, event shop, treats to pick up in the levels).
  */
-export type Season = 'noel' | 'halloween' | 'paques' | 'valentin' | 'poisson';
-export const SEASONS: Season[] = ['noel', 'halloween', 'paques', 'valentin', 'poisson'];
+export type Season = 'noel' | 'halloween' | 'paques' | 'valentin' | 'poisson' | 'chevaliers';
+export const SEASONS: Season[] = ['noel', 'halloween', 'paques', 'valentin', 'poisson', 'chevaliers'];
 /** What the admin chose: follow the calendar, force an event, or none. */
 export type SeasonSetting = 'auto' | Season | 'off';
 
@@ -91,6 +91,20 @@ export const SEASON_INFO: Record<Season, SeasonInfo> = {
     bulbs: ['#38bdf8', '#fb923c', '#facc15', '#a3e635', '#f472b6'],
     falling: ['🐟', '🐠', '🐡', '🐟', '🫧'],
     fly: true,
+  },
+  // ⚔️ Started by an admin (no fixed date)
+  chevaliers: {
+    name: 'Tournoi des Chevaliers',
+    emoji: '⚔️',
+    color: '#d4a840',
+    accent: '#3b5bdb',
+    dates: "quand le roi l'annonce",
+    title: 'LE TOURNOI DES CHEVALIERS',
+    banner: '⚔️ 🛡️ 👑 🛡️ ⚔️',
+    treat: { one: 'blason', many: 'blasons', emoji: '🛡️' },
+    bulbs: ['#d4a840', '#3b5bdb', '#c8102e', '#f4f4f0'],
+    falling: ['🛡️', '⚔️', '👑', '🏰', '🐉'],
+    fly: false,
   },
 };
 

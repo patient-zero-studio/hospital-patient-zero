@@ -13,7 +13,7 @@ export interface MatchSettings {
   /** versus: which side plays the creature */
   monster: 'host' | 'guest';
   /** 1 = the hospital, 2 = the sewers, 4 = the forest, 5 = Site B (co-op only) */
-  chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9;
+  chapter: 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
   /** 🫣 versus variant: hide-and-seek */
   hide?: boolean;
   /** 🔪 Imposteur (co-op, 4 to 8 players) */
@@ -40,7 +40,9 @@ const roomLabel = (r: PublicRoom) =>
         ? '🏁 Course'
         : r.chapter === 9
           ? '🎪 La Nuit du Cirque'
-          : `🤝 Coop · chapitre ${r.chapter}`;
+          : r.chapter === 10
+            ? '⚔️ Duel des Chevaliers'
+            : `🤝 Coop · chapitre ${r.chapter}`;
 
 /** 🌍 The open public games, refreshed every few seconds */
 const PublicGames: React.FC<{ onJoin: (code: string) => void }> = ({ onJoin }) => {
@@ -142,6 +144,8 @@ interface Props {
   ch6Unlocked?: boolean;
   ch7Unlocked?: boolean;
   ch8Unlocked?: boolean;
+  /** 🔒 the Knights' duel (admins only until released) */
+  duelOpen?: boolean;
   onStart: () => void;
   onLeave: () => void;
   onClose: () => void;
@@ -338,6 +342,17 @@ export const MultiplayerPanel: React.FC<Props> = (p) => {
             🎪 La Nuit du Cirque
             <div className="text-[9px] normal-case tracking-normal text-zinc-500">survie & trahison</div>
           </button>
+          {(p.duelOpen || value.chapter === 10) && (
+            <button
+              disabled={readOnly}
+              title="À 2 dans le Donjon : le plus de blasons (3 pts) et de parchemins (1 pt) gagne"
+              className={tab(value.chapter === 10)}
+              onClick={() => onChange({ chapter: 10, mode: 'coop', hide: false, imp: false })}
+            >
+              ⚔️ Duel des Chevaliers
+              <div className="text-[9px] normal-case tracking-normal text-zinc-500">le Donjon à 2</div>
+            </button>
+          )}
           <button
             disabled={readOnly || (!p.ch8Unlocked && value.chapter !== 8)}
             title={p.ch8Unlocked ? 'Coop uniquement' : 'Chapitre secret : trouvez tous les documents des chapitres 1 à 7'}
