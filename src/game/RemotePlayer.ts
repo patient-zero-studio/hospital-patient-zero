@@ -946,7 +946,8 @@ export class RemotePlayer {
     if (!this.cosmeticBody.parent) this.spine.add(this.cosmeticBody);
     this.danceId = (look as { dance?: string }).dance ?? '';
     if (this.fx) this.group.remove(this.fx.group);
-    this.fx = look.fx ? buildFx(look.fx, track, 1.75 * ch.height, false) : null;
+    const fxId = look.fx || outfit?.fx;
+    this.fx = fxId ? buildFx(fxId, track, 1.75 * ch.height, false) : null;
     if (this.fx) this.group.add(this.fx.group);
   }
 

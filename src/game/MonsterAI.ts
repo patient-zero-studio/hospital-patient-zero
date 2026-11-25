@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FxHandle, buildFx } from './AnimatedFx';
 import { ProceduralTextures } from '../textures/ProceduralTextures';
-import { MONSTER_OUTFITS, buildMonsterAccessory } from './Cosmetics';
+import { MONSTER_OUTFITS, buildMonsterAccessory, buildMonsterBodyExtra } from './Cosmetics';
 import { MonsterState } from '../types';
 import { sound } from '../audio/SoundSystem';
 import { CollisionBox, DoorObject, NavNode } from './MapBuilder';
@@ -560,6 +560,8 @@ export class MonsterAI {
   private gownMat!: THREE.MeshStandardMaterial;
 
   private cosmetic = new THREE.Group();
+  /** 👑 cape, sceptre, armour… from the outfit */
+  private bodyExtras: THREE.Group[] = [];
   private cosmeticDisposables: { dispose: () => void }[] = [];
 
   /** Player customisation: skin tint, glowing eyes, gown scraps, accessory, outfit. */
@@ -630,8 +632,20 @@ export class MonsterAI {
     };
     for (const id of new Set([...(o?.accs ?? []), ...(look.acc ? [look.acc] : [])])) this.cosmetic.add(buildMonsterAccessory(id, track));
     if (!this.cosmetic.parent) this.head.add(this.cosmetic);
+    this.bodyExtras.forEach((b) => b.removeFromParent());
+    this.bodyExtras = [];
+    for (const id of o?.body ?? []) {
+      const ex = buildMonsterBodyExtra(id, track);
+      if (!ex) continue;
+      const parent = ex.at === 'hand' ? this.arms[1]?.elbow : this.spine;
+      if (!parent) continue;
+      parent.add(ex.group);
+      this.bodyExtras.push(ex.group);
+    }
     if (this.fx) this.mesh.remove(this.fx.group);
-    this.fx = look.fx ? buildFx(look.fx, track, 2.3, true) : null;
+    // Your own effect, otherwise the one that comes with the outfit
+    const fxId = look.fx || o?.fx;
+    this.fx = fxId ? buildFx(fxId, track, 2.3, true) : null;
     if (this.fx) this.mesh.add(this.fx.group);
   }
 

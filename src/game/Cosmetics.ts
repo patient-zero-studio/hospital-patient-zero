@@ -28,6 +28,8 @@ export interface HumanOutfit {
   gownFx?: 'gold' | 'neon' | 'white' | 'ghost';
   hairFx?: 'neon';
   extras?: ('stethoscope' | 'mohawk' | 'stripes' | 'belt' | 'xmasbands' | 'cape' | 'wings' | 'medal')[];
+  /** animated effect that comes with the outfit (unless you wear another one) */
+  fx?: string;
 }
 
 export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
@@ -35,17 +37,17 @@ export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
   doctor: { gown: '#f2f2ec', accs: ['glasses'], gownFx: 'white', extras: ['stethoscope'] },
   prisoner: { gown: '#e8741a', accs: ['beanie'], extras: ['stripes'] },
   punk: { gown: '#1a1a1e', hair: '#ff3aa8', accs: [], extras: ['mohawk'] },
-  gold: { gown: '#d4a840', hair: '#e8c860', accs: ['shades'], gownFx: 'gold' },
-  neon: { gown: '#0a1a20', hair: '#ff3ad8', accs: ['headphones'], gownFx: 'neon', hairFx: 'neon' },
+  gold: { gown: '#d4a840', hair: '#e8c860', accs: ['shades', 'crown'], gownFx: 'gold', extras: ['cape', 'medal'], fx: 'halo' },
+  neon: { gown: '#0a1a20', hair: '#ff3ad8', accs: ['headphones', 'shades'], gownFx: 'neon', hairFx: 'neon', fx: 'sparks' },
   // 🎄 Noël
-  santa: { gown: '#c8102e', hair: '#f4f4f4', accs: ['santahat', 'beard'], extras: ['belt'] },
+  santa: { gown: '#c8102e', hair: '#f4f4f4', accs: ['santahat', 'beard'], extras: ['belt', 'cape'], fx: 'stars' },
   elf: { gown: '#15803d', accs: ['elfhat'], extras: ['belt'] },
   sweater: { gown: '#b91c1c', accs: [], extras: ['xmasbands'] },
-  fouettard: { gown: '#1a120c', hair: '#0a0a0a', accs: ['hood', 'bellcollar'], extras: ['belt', 'cape'] },
+  fouettard: { gown: '#1a120c', hair: '#0a0a0a', accs: ['hood', 'bellcollar'], extras: ['belt', 'cape'], fx: 'smoke' },
   // 🎃 Halloween
   witch: { gown: '#1e1430', hair: '#7c3aed', accs: ['witchhat'] },
   vampire: { gown: '#0c0c0e', hair: '#0a0a0a', accs: ['fangs'], extras: ['cape'] },
-  reaper: { gown: '#08080a', hair: '#08080a', accs: ['hood'], gownFx: 'ghost', extras: ['cape'] },
+  reaper: { gown: '#08080a', hair: '#08080a', accs: ['hood'], gownFx: 'ghost', extras: ['cape'], fx: 'smoke' },
   // 🐰 Pâques
   bunny: { gown: '#f4f4f0', hair: '#f4f4f0', accs: ['bunnyears'] },
   // 💘 Saint-Valentin
@@ -60,11 +62,11 @@ export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
   cowboy: { gown: '#8a5a2b', hair: '#4a2e1a', accs: ['cowboyhat'], extras: ['belt'] },
   pirate: { gown: '#7a1a1a', hair: '#1d1d22', accs: ['piratehat', 'eyepatch'], extras: ['belt'] },
   detective: { gown: '#9a8a6a', hair: '#3a2a1a', accs: ['fedora'], extras: ['belt'] },
-  plaguedoc: { gown: '#141414', hair: '#141414', accs: ['plaguemask', 'fedora'], extras: ['cape'] },
+  plaguedoc: { gown: '#141414', hair: '#141414', accs: ['plaguemask', 'fedora'], extras: ['cape', 'belt'], fx: 'smoke' },
   // 🔪 Imposteur: 10 wins
-  impostor: { gown: '#1a0a0e', hair: '#0a0a0a', accs: ['impmask'], extras: ['cape'] },
+  impostor: { gown: '#1a0a0e', hair: '#0a0a0a', accs: ['impmask'], extras: ['cape'], fx: 'aura' },
   clanknight: { gown: '#2a2f45', hair: '#1d1d22', accs: ['beret'], extras: ['cape', 'belt'] },
-  champion: { gown: '#7a0a14', hair: '#f5d36a', accs: ['crown'], gownFx: 'gold', extras: ['cape', 'medal', 'belt'] },
+  champion: { gown: '#7a0a14', hair: '#f5d36a', accs: ['royalcrown'], gownFx: 'gold', extras: ['cape', 'medal', 'belt'], fx: 'stars' },
   veteran: { gown: '#4b5320', hair: '#2a2a20', accs: ['beret', 'shades'], extras: ['medal', 'belt'] },
 };
 
@@ -454,6 +456,46 @@ const buildFestive = (id: string, h: HeadSpec, track: Track, g: THREE.Group): bo
       for (let i = 0; i < 5; i++) add(track, g, new THREE.SphereGeometry(0.004 * s, 6, 4), brass, -0.02 * s + i * 0.01 * s, h.cy - 0.012 * s, h.rz * 1.06 + 0.02 * s);
       return true;
     }
+    case 'royalcrown': {
+      const gold = std(track, 0xf0c43a, { metalness: 1, roughness: 0.18, emissive: 0x5a3a00, emissiveIntensity: 0.45 });
+      const velvet = std(track, 0x8a0a1e, { roughness: 0.9 });
+      const fur = std(track, 0xf8f6f0, { roughness: 1 });
+      const y0 = h.top - 0.01 * s;
+      // Ermine rim
+      const rim = add(track, g, new THREE.TorusGeometry(h.rx * 1.0, 0.02 * s, 10, 30), fur, 0, y0, 0);
+      rim.rotation.x = Math.PI / 2;
+      rim.scale.set(1, h.rz / h.rx, 1);
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        add(track, g, new THREE.SphereGeometry(0.006 * s, 6, 5), std(track, 0x111111), Math.sin(a) * h.rx * 1.02, y0, Math.cos(a) * h.rz * 1.02);
+      }
+      // Tall gold band with fleurons
+      const band = add(track, g, new THREE.CylinderGeometry(h.rx * 0.98, h.rx * 0.94, 0.07 * s, 28, 1, true), gold, 0, y0 + 0.045 * s, 0);
+      band.scale.z = h.rz / h.rx;
+      (band.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+      const gems = [0xff1a3a, 0x2a6aff, 0x1aff6a, 0xb34aff];
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const x = Math.sin(a) * h.rx * 0.96;
+        const z = Math.cos(a) * h.rz * 0.96;
+        add(track, g, new THREE.ConeGeometry(0.016 * s, 0.07 * s, 4), gold, x, y0 + 0.11 * s, z);
+        add(track, g, new THREE.SphereGeometry(0.009 * s, 8, 6), gold, x, y0 + 0.15 * s, z);
+        const gem = gems[i % 4];
+        add(track, g, new THREE.OctahedronGeometry(0.013 * s), std(track, gem, { roughness: 0.05, metalness: 0.2, emissive: gem, emissiveIntensity: 0.9 }), x * 1.04, y0 + 0.045 * s, z * 1.04);
+      }
+      // Velvet dome + golden arches + orb and cross
+      const dome = add(track, g, new THREE.SphereGeometry(h.rx * 0.9, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), velvet, 0, y0 + 0.07 * s, 0);
+      dome.scale.set(1, 0.75, h.rz / h.rx);
+      for (const r of [0, Math.PI / 2]) {
+        const arch = add(track, g, new THREE.TorusGeometry(h.rx * 0.9, 0.008 * s, 6, 24, Math.PI), gold, 0, y0 + 0.07 * s, 0);
+        arch.rotation.y = r;
+        arch.scale.set(1, 0.75, 1);
+      }
+      add(track, g, new THREE.SphereGeometry(0.018 * s, 12, 10), gold, 0, y0 + 0.15 * s, 0);
+      add(track, g, new THREE.BoxGeometry(0.008 * s, 0.05 * s, 0.008 * s), gold, 0, y0 + 0.19 * s, 0);
+      add(track, g, new THREE.BoxGeometry(0.03 * s, 0.008 * s, 0.008 * s), gold, 0, y0 + 0.2 * s, 0);
+      return true;
+    }
     case 'bellcollar': {
       // Red leather collar with golden sleigh bells, under the chin
       const leather = std(track, 0x7a0c0c, { roughness: 0.7 });
@@ -662,19 +704,23 @@ export interface MonsterOutfit {
   gown?: string;
   accs: string[];
   skinFx?: 'bone' | 'inferno' | 'shadow' | 'gold' | 'frost' | 'toxic' | 'abyss';
+  /** pieces on the body: cape, sceptre in hand, shoulder armour, tanks on the back */
+  body?: MonsterBodyExtra[];
+  /** animated effect that comes with the outfit */
+  fx?: string;
 }
 
 export const MONSTER_OUTFITS: Record<string, MonsterOutfit> = {
   skeleton: { skin: '#e0dccb', eyes: '#ff2010', gown: '#151515', accs: [], skinFx: 'bone' },
   zombie: { skin: '#6f8a4a', eyes: '#ffd21a', gown: '#5a4030', accs: ['bandages'] },
   demon: { skin: '#a01818', eyes: '#ffd21a', gown: '#1a0a0a', accs: ['horns'] },
-  inferno: { skin: '#2a1a14', eyes: '#ff8a00', gown: '#1a1010', accs: ['horns'], skinFx: 'inferno' },
-  shadow: { skin: '#0c0c10', eyes: '#c03aff', gown: '#050505', accs: [], skinFx: 'shadow' },
-  goldm: { skin: '#d4a840', eyes: '#ffffff', gown: '#3a2a10', accs: ['chains'], skinFx: 'gold' },
+  inferno: { skin: '#2a1a14', eyes: '#ff8a00', gown: '#1a1010', accs: ['horns'], skinFx: 'inferno', body: ['pauldrons'], fx: 'flames' },
+  shadow: { skin: '#0c0c10', eyes: '#c03aff', gown: '#050505', accs: ['hood'], skinFx: 'shadow', fx: 'smoke' },
+  goldm: { skin: '#d4a840', eyes: '#ffffff', gown: '#3a2a10', accs: ['chains', 'crown'], skinFx: 'gold', body: ['pauldrons'], fx: 'halo' },
   // 🎄 Noël
   yeti: { skin: '#eef4ff', eyes: '#38bdf8', gown: '#c8d8ee', accs: [], skinFx: 'frost' },
   gingerbread: { skin: '#a0522d', eyes: '#ffffff', gown: '#f4f0e8', accs: [] },
-  krampus: { skin: '#3b2a1e', eyes: '#ff2010', gown: '#1a120c', accs: ['horns', 'chains'] },
+  krampus: { skin: '#3b2a1e', eyes: '#ff2010', gown: '#1a120c', accs: ['horns', 'chains'], body: ['royalcape'], fx: 'smoke' },
   fouettard: { skin: '#2a1e18', eyes: '#ff2a1a', gown: '#100a07', accs: ['hood', 'chains', 'bellcollar'] },
   // 🎃 Halloween
   mummy: { skin: '#d6cba8', eyes: '#ffd21a', gown: '#c8bc98', accs: ['bandages'] },
@@ -686,22 +732,22 @@ export const MONSTER_OUTFITS: Record<string, MonsterOutfit> = {
   // 🐟 Poisson d'avril
   clownm: { skin: '#f4f4f0', eyes: '#22d3ee', gown: '#7c3aed', accs: ['clownnose'] },
   // 🏆 Pass de saison / ⭐ niveaux
-  toxic: { skin: '#5adf3a', eyes: '#e8ff3a', gown: '#2a3a10', accs: ['gasmask'], skinFx: 'toxic' },
-  abyss: { skin: '#0a1428', eyes: '#38bdf8', gown: '#050a14', accs: [], skinFx: 'abyss' },
-  legend: { skin: '#4a0808', eyes: '#ffffff', gown: '#140000', accs: ['crown', 'chains'], skinFx: 'inferno' },
+  toxic: { skin: '#5adf3a', eyes: '#e8ff3a', gown: '#2a3a10', accs: ['gasmask'], skinFx: 'toxic', body: ['tanks'] },
+  abyss: { skin: '#0a1428', eyes: '#38bdf8', gown: '#050a14', accs: ['horns'], skinFx: 'abyss', fx: 'aura' },
+  legend: { skin: '#2e2628', eyes: '#ffd21a', gown: '#3a0a4a', accs: ['royalcrown'], body: ['royalcape', 'scepter', 'pauldrons'], fx: 'embers' },
   // 🏆 Histoire : le boss et le chapitre secret
   moreau: { skin: '#cfc8b8', eyes: '#ff1a0a', gown: '#e8e8e2', accs: ['chains'], skinFx: 'bone' },
   ombre: { skin: '#08080c', eyes: '#ffffff', gown: '#030303', accs: [], skinFx: 'shadow' },
   // 🛡️ Coffre de clan
-  clanbeast: { skin: '#3a3f5a', eyes: '#7dd3fc', gown: '#14182a', accs: ['horns', 'chains'], skinFx: 'abyss' },
+  clanbeast: { skin: '#3a3f5a', eyes: '#7dd3fc', gown: '#14182a', accs: ['horns', 'chains'], skinFx: 'abyss', body: ['pauldrons'] },
   // 🏅 Pass classé
-  gladiator: { skin: '#6a4a32', eyes: '#ff3a10', gown: '#3a1a0a', accs: ['hockey', 'chains'], skinFx: 'gold' },
+  gladiator: { skin: '#6a4a32', eyes: '#ff3a10', gown: '#3a1a0a', accs: ['hockey', 'chains'], skinFx: 'gold', body: ['pauldrons'], fx: 'sparks' },
   // 🦌 Nouvelles créatures
   wendigo: { skin: '#d8d0c0', eyes: '#9ef0ff', gown: '#2a2420', accs: ['antlers'], skinFx: 'bone' },
   plaguebeast: { skin: '#3a3a30', eyes: '#ff3a10', gown: '#141414', accs: ['plaguemask'] },
   ghostpirate: { skin: '#7ad0c8', eyes: '#e0fff8', gown: '#203a3a', accs: ['piratehat', 'chains'], skinFx: 'frost' },
   // 🎄 Nuit de Noël
-  evilsanta: { skin: '#d8cfc4', eyes: '#ff1a0a', gown: '#9a0c18', accs: ['santahat', 'beard'] },
+  evilsanta: { skin: '#d8cfc4', eyes: '#ff1a0a', gown: '#9a0c18', accs: ['santahat', 'beard'], body: ['royalcape'], fx: 'embers' },
 };
 
 export const buildMonsterAccessory = (id: string, track: Track): THREE.Group => {
@@ -753,4 +799,115 @@ export const buildMonsterAccessory = (id: string, track: Track): THREE.Group => 
     }
   }
   return g;
+};
+
+// ---------------------------------------------------------------------------
+// 👑 Creature body pieces (spine space: shoulders at y ≈ 0.6, x ≈ ±0.27; or in the right hand)
+// ---------------------------------------------------------------------------
+export type MonsterBodyExtra = 'royalcape' | 'scepter' | 'pauldrons' | 'tanks';
+
+export const buildMonsterBodyExtra = (id: MonsterBodyExtra, track: Track): { group: THREE.Group; at: 'spine' | 'hand' } | null => {
+  const g = new THREE.Group();
+  switch (id) {
+    case 'royalcape': {
+      const velvet = std(track, 0x7a0618, { roughness: 0.85, side: THREE.DoubleSide });
+      const lining = std(track, 0xd4a017, { roughness: 0.4, metalness: 0.6, side: THREE.DoubleSide });
+      const fur = std(track, 0xf6f3ea, { roughness: 1 });
+      // Long mantle hanging from the shoulders, a little curved
+      const geo = track(new THREE.PlaneGeometry(0.78, 1.35, 8, 12));
+      const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i);
+        pos.setZ(i, -Math.pow(x / 0.39, 2) * 0.12 + (0.675 - y) * 0.05 * Math.sin(x * 9));
+        pos.setX(i, x * (1 + (0.675 - y) * 0.25));
+      }
+      pos.needsUpdate = true;
+      geo.computeVertexNormals();
+      const cape = new THREE.Mesh(geo, velvet);
+      cape.position.set(0, 0.62 - 0.675, -0.16);
+      cape.castShadow = true;
+      g.add(cape);
+      const inner = new THREE.Mesh(geo, lining);
+      inner.position.set(0, 0.62 - 0.675, -0.15);
+      inner.scale.set(0.97, 0.99, 1);
+      g.add(inner);
+      // Gold trim along the hem and a golden crest in the middle of the back
+      const goldT = std(track, 0xe8b830, { metalness: 0.95, roughness: 0.25, emissive: 0x3a2600, emissiveIntensity: 0.35 });
+      const hem = add(track, g, new THREE.BoxGeometry(1.0, 0.05, 0.012), goldT, 0, 0.62 - 1.33, -0.27);
+      hem.rotation.x = 0.06;
+      for (const side of [-1, 1]) {
+        const edge = add(track, g, new THREE.BoxGeometry(0.035, 1.32, 0.012), goldT, side * 0.47, 0.62 - 0.68, -0.2);
+        edge.rotation.z = side * 0.12;
+      }
+      const crest = new THREE.Group();
+      crest.position.set(0, 0.2, -0.235);
+      crest.rotation.y = Math.PI;
+      g.add(crest);
+      add(track, crest, new THREE.TorusGeometry(0.09, 0.012, 8, 24), goldT);
+      add(track, crest, new THREE.CircleGeometry(0.08, 24), std(track, 0x2a0a3a, { roughness: 0.6, side: THREE.DoubleSide }), 0, 0, -0.002);
+      for (let i = 0; i < 5; i++) add(track, crest, new THREE.ConeGeometry(0.012, 0.05, 4), goldT, (i - 2) * 0.025, 0.02 + (i % 2 ? 0 : 0.015), 0.005);
+      add(track, crest, new THREE.BoxGeometry(0.11, 0.018, 0.01), goldT, 0, -0.01, 0.005);
+      // Ermine collar with black tails, ruby clasp
+      const collar = add(track, g, new THREE.TorusGeometry(0.22, 0.055, 10, 24), fur, 0, 0.66, -0.02);
+      collar.rotation.x = Math.PI / 2 - 0.15;
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        add(track, g, new THREE.SphereGeometry(0.012, 6, 5), std(track, 0x0a0a0a), Math.cos(a) * 0.23, 0.68, Math.sin(a) * 0.23 - 0.02);
+      }
+      add(track, g, new THREE.SphereGeometry(0.035, 14, 10), std(track, 0xff1a3a, { roughness: 0.05, emissive: 0xaa0018, emissiveIntensity: 0.9 }), 0, 0.62, 0.2);
+      return { group: g, at: 'spine' };
+    }
+    case 'scepter': {
+      const gold = std(track, 0xf0c43a, { metalness: 1, roughness: 0.18, emissive: 0x5a3a00, emissiveIntensity: 0.4 });
+      const ruby = std(track, 0xff1a3a, { roughness: 0.05, emissive: 0xff0a2a, emissiveIntensity: 1.6 });
+      g.position.set(0, -0.64, 0.03);
+      g.rotation.x = 0.25;
+      add(track, g, new THREE.CylinderGeometry(0.014, 0.018, 0.95, 10), gold, 0, 0.05, 0);
+      for (const y of [-0.25, 0.05, 0.35]) add(track, g, new THREE.TorusGeometry(0.022, 0.007, 6, 14), gold, 0, y, 0).rotation.x = Math.PI / 2;
+      add(track, g, new THREE.SphereGeometry(0.06, 16, 12), ruby, 0, 0.6, 0);
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        const prong = add(track, g, new THREE.CylinderGeometry(0.006, 0.006, 0.12, 5), gold, Math.cos(a) * 0.05, 0.6, Math.sin(a) * 0.05);
+        prong.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5);
+      }
+      add(track, g, new THREE.SphereGeometry(0.02, 8, 6), gold, 0, 0.69, 0);
+      add(track, g, new THREE.ConeGeometry(0.02, 0.06, 8), gold, 0, -0.45, 0).rotation.x = Math.PI;
+      // the orb glows
+      const glow = new THREE.PointLight(0xff2a3a, 0.9, 2.2, 2);
+      glow.position.set(0, 0.6, 0);
+      g.add(glow);
+      return { group: g, at: 'hand' };
+    }
+    case 'pauldrons': {
+      const gold = std(track, 0xc8a040, { metalness: 0.95, roughness: 0.25 });
+      const dark = std(track, 0x2a2420, { metalness: 0.8, roughness: 0.35 });
+      for (const side of [-1, 1]) {
+        const p = add(track, g, new THREE.SphereGeometry(0.1, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), gold, side * 0.29, 0.64, 0);
+        p.scale.set(1.15, 0.8, 1.1);
+        add(track, g, new THREE.TorusGeometry(0.1, 0.012, 6, 20), dark, side * 0.29, 0.645, 0).rotation.x = Math.PI / 2;
+        for (let k = 0; k < 3; k++) {
+          const spike = add(track, g, new THREE.ConeGeometry(0.02, 0.1, 6), dark, side * (0.29 + (k - 1) * 0.045), 0.73, (k - 1) * 0.02);
+          spike.rotation.z = -side * 0.35;
+        }
+      }
+      return { group: g, at: 'spine' };
+    }
+    case 'tanks': {
+      const glass = std(track, 0x3aff2a, { roughness: 0.1, transparent: true, opacity: 0.75, emissive: 0x2aff1a, emissiveIntensity: 0.8 });
+      const metal = std(track, 0x4a5040, { metalness: 0.8, roughness: 0.4 });
+      for (const side of [-1, 1]) {
+        add(track, g, new THREE.CylinderGeometry(0.06, 0.06, 0.38, 14), glass, side * 0.09, 0.38, -0.2);
+        add(track, g, new THREE.CylinderGeometry(0.065, 0.065, 0.04, 14), metal, side * 0.09, 0.58, -0.2);
+        add(track, g, new THREE.CylinderGeometry(0.065, 0.065, 0.04, 14), metal, side * 0.09, 0.18, -0.2);
+        const hose = new THREE.Mesh(
+          track(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(side * 0.09, 0.6, -0.2), new THREE.Vector3(side * 0.12, 0.78, -0.1), new THREE.Vector3(side * 0.05, 0.85, 0.08)]), 12, 0.012, 6)),
+          metal
+        );
+        g.add(hose);
+      }
+      return { group: g, at: 'spine' };
+    }
+  }
+  return null;
 };
