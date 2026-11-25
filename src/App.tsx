@@ -18,7 +18,7 @@ import { MultiplayerPanel, LobbyState, MatchSettings } from './components/Multip
 import { VersusResultModal } from './components/VersusResultModal';
 import { CustomizeMenu } from './components/CustomizeMenu';
 import { Appearance, DEFAULT_APPEARANCE } from './appearance';
-import { api, Boost, BoostKind, FriendsView, Session, WalletView } from './net/api';
+import { api, Boost, BoostKind, FriendsView, Outage, Session, WalletView } from './net/api';
 import { LevelUpToast } from './components/LevelUpToast';
 import { WakeScreen } from './components/WakeScreen';
 import { ProgressionMenu, progressionAlerts } from './components/ProgressionMenu';
@@ -36,6 +36,7 @@ import { tierOf } from './ranked';
 import { RankedMenu } from './components/RankedMenu';
 import { CHAT_PRESETS } from './net/NetClient';
 import { PlayerProfile } from './components/PlayerProfile';
+import { SecretRoom } from './components/SecretRoom';
 import { PublicRoomBanner } from './components/PublicRoomBanner';
 import { ShopMenu } from './components/ShopMenu';
 import { HoboShop } from './components/HoboShop';
@@ -242,6 +243,25 @@ export default function App() {
     []
   );
   const [boost, setBoost] = useState<Boost | null>(null);
+  // ⚡ big power cut scheduled by an admin (checked every minute)
+  const outageRef = useRef<Outage | null>(null);
+  const setOutage = (o: Outage | null) => {
+    outageRef.current = o;
+    if (engineRef.current) engineRef.current.outage = o;
+  };
+  useEffect(() => {
+    const id = window.setInterval(async () => {
+      const s = await api.status();
+      if (s) setOutage(s.outage);
+    }, 60000);
+    // the admin panel tells us right away when it schedules one
+    const on = (e: Event) => setOutage((e as CustomEvent<Outage | null>).detail);
+    window.addEventListener('pz-outage', on);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener('pz-outage', on);
+    };
+  }, []);
   // The free host sleeps after 15 min: if the server takes a while, show the "waking up" screen
   const [wakingSince, setWakingSince] = useState<number | null>(null);
   useEffect(() => {
@@ -257,6 +277,7 @@ export default function App() {
         setWakingSince(null);
         setActiveSeason(s.season);
         setBoost(s.boost);
+        setOutage(s.outage);
         return;
       }
       // Still asleep (or no network): retry for up to 4 minutes, then let solo play go on
@@ -583,6 +604,18 @@ export default function App() {
     // 🔧 Atelier: everything you bought, except in ranked games (fair for everyone)
     engine.upgrades = rankedRunRef.current ? {} : upgradesRef.current;
     engine.whisperName = sessionRef.current?.username ?? '';
+    engine.outage = outageRef.current;
+    engine.onOutageFixed = async (id) => {
+      const s = sessionRef.current;
+      if (!s) return 0;
+      try {
+        const r = await api.claimOutage(s.token, id);
+        setWallet(r);
+        return r.gained;
+      } catch {
+        return 0;
+      }
+    };
     if (IS_TOUCH) enterMobileFullscreen();
     // Music is for the menu only
     sound.stopMenuMusic(1.2);
@@ -1125,6 +1158,8 @@ export default function App() {
   const [friendsOpen, setFriendsOpen] = useState(false);
   /** 👤 public profile being viewed */
   const [profileOf, setProfileOf] = useState<string | null>(null);
+  /** 🏚️ whose secret room is open */
+  const [roomOf, setRoomOf] = useState<string | null>(null);
   const [friends, setFriends] = useState<FriendsView | null>(null);
   const refreshFriends = useCallback(async () => {
     const s = sessionRef.current;
@@ -1832,6 +1867,7 @@ export default function App() {
           }}
           onInvite={(n) => friendAct((t) => api.friendInvite(t, n))}
           onProfile={setProfileOf}
+          onRoom={setRoomOf}
           owned={wallet?.wallet.owned ?? []}
           coins={wallet?.wallet.coins ?? 0}
           onGift={async (to, what) => {
@@ -1926,9 +1962,11 @@ export default function App() {
           name={profileOf}
           token={session.token}
           onAddFriend={(n) => friendAct((t) => api.friendAdd(t, n))}
+          onRoom={(n) => setRoomOf(n)}
           onClose={() => setProfileOf(null)}
         />
       )}
+      {roomOf && session && <SecretRoom name={roomOf} token={session.token} onClose={() => setRoomOf(null)} />}
       {runMsg && victory && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[90] px-5 py-2 border border-emerald-600 bg-black/90 text-emerald-300 font-mono text-xs shadow-[0_0_30px_rgba(16,185,129,0.3)] text-center max-w-[92vw]">
           {runMsg}

@@ -468,6 +468,7 @@ type InteractTarget =
   | { kind: 'can'; mesh: THREE.Object3D }
   | { kind: 'pickup'; uid: number }
   | { kind: 'hobo' }
+  | { kind: 'generator' }
   | { kind: 'stairs'; dir: 'up' | 'down'; to: string };
 
 /** An item lying in the world (dropped, or left on a table). */
@@ -2260,6 +2261,7 @@ export class GameEngine {
     this.fear = 0;
     this.blackout = 0;
     this.lightsOutTimer = 0;
+    this.endOutage(true);
     this.revT = 100 + Math.random() * 60;
     this.fogEvt = 0;
     this.resetWounds();
@@ -3124,9 +3126,118 @@ export class GameEngine {
     this.applyRandomEvent(e, x, z);
     this.net?.send({ k: 'rev', e, x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10 });
   }
+  // -----------------------------------------------------------------------
+  // ⚡ Big power cut, scheduled by an admin: the whole place goes dark until
+  // someone restarts the generator (3 pulls on the starter cord).
+  // -----------------------------------------------------------------------
+  /** set by the app: the scheduled power cut (local clock) */
+  public outage: { id: string; at: number } | null = null;
+  /** set by the app: pays the reward, returns the coins won */
+  public onOutageFixed: ((id: string) => Promise<number>) | null = null;
+  private outageDone = new Set<string>();
+  /** id of the power cut going on ('net' = the co-op host's) */
+  private outageOn: string | null = null;
+  private gen: THREE.Group | null = null;
+  private genLed: THREE.MeshStandardMaterial | null = null;
+  private genPulls = 0;
+  private genT = 0;
+  private updateOutage(delta: number) {
+    if (this.outageOn) {
+      this.lightsOutTimer = Math.max(this.lightsOutTimer, 0.3);
+      this.genT += delta;
+      if (this.genLed) this.genLed.emissiveIntensity = Math.sin(this.genT * 6) > 0 ? 4 : 0.2;
+      return;
+    }
+    const o = this.outage;
+    if (!o || this.outageDone.has(o.id) || !this.running || !this.revAllowed || this.map.lights.length < 4) return;
+    const now = Date.now();
+    if (now < o.at || now > o.at + 10 * 60000) return;
+    this.startOutage(o.id);
+  }
+  private startOutage(id: string) {
+    this.outageDone.add(id);
+    this.outageOn = id;
+    this.genPulls = 0;
+    // The generator: in a room 10–28 m away (under a light fixture)
+    const p = this.player.position;
+    const lights = this.map.lights;
+    const far = lights.filter((l) => {
+      const d = Math.hypot(l.position.x - p.x, l.position.z - p.z);
+      return d > 10 && d < 28;
+    });
+    const pool = far.length ? far : lights;
+    const spot = pool.length ? pool[Math.floor(Math.random() * pool.length)].position : p;
+    const g = new THREE.Group();
+    const metal = new THREE.MeshStandardMaterial({ color: 0x8a6a12, roughness: 0.6, metalness: 0.5 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.8 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.7, 0.7), metal);
+    body.position.y = 0.55;
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.12, 0.8), dark);
+    frame.position.y = 0.14;
+    const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.9, 12), new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.5 }));
+    tank.rotation.z = Math.PI / 2;
+    tank.position.y = 1.05;
+    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8), dark);
+    pipe.position.set(-0.4, 1.2, -0.2);
+    this.genLed = new THREE.MeshStandardMaterial({ color: 0x220000, emissive: 0xff2200, emissiveIntensity: 4 });
+    const led = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), this.genLed);
+    led.position.set(0.35, 0.95, 0.36);
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), this.genLed);
+    beacon.position.set(0.45, 1.35, 0);
+    g.add(body, frame, tank, pipe, led, beacon);
+    g.position.set(spot.x, 0, spot.z);
+    g.traverse((o) => (o.userData.isGenerator = true));
+    g.userData.isGenerator = true;
+    this.map.sceneGroup.add(g);
+    this.gen = g;
+    sound.playBreakerClunk();
+    sound.playFlickerHum();
+    this.player.shake = Math.max(this.player.shake, 0.25);
+    this.state.showToast("⚡ GRANDE PANNE ! Tout est plongé dans le noir… Trouve le générateur (sa lumière rouge clignote) et relance-le !", 7000);
+    this.net?.send({ k: 'rev', e: 'outage', x: Math.round(spot.x * 10) / 10, z: Math.round(spot.z * 10) / 10 });
+  }
+  private endOutage(silent: boolean) {
+    const id = this.outageOn;
+    if (!id) return;
+    this.outageOn = null;
+    this.lightsOutTimer = 0;
+    if (this.gen) {
+      this.gen.parent?.remove(this.gen);
+      this.gen.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          (o.material as THREE.Material).dispose();
+        }
+      });
+      this.gen = null;
+      this.genLed = null;
+    }
+    if (silent) return;
+    sound.playPowerUp();
+    this.player.shake = Math.max(this.player.shake, 0.3);
+    this.state.showToast('⚡ Le générateur démarre ! Le courant est rétabli.');
+    if (id !== 'net') this.net?.send({ k: 'rev', e: 'outageEnd', x: 0, z: 0 });
+    const claim = id === 'net' ? this.outage?.id : id;
+    if (claim && this.onOutageFixed)
+      this.onOutageFixed(claim).then((n) => {
+        if (n > 0 && this.running) this.state.showToast(`⚡ Courant rétabli : +${n} pièces !`);
+      });
+  }
+
   private applyRandomEvent(e: string, x: number, z: number) {
     const d = Math.hypot(x - this.player.position.x, z - this.player.position.z);
     switch (e) {
+      case 'outage':
+        // (co-op guest) the host's generator is somewhere in the dark
+        if (!this.outageOn) {
+          this.outageOn = 'net';
+          sound.playBreakerClunk();
+          this.state.showToast("⚡ GRANDE PANNE ! Ton coéquipier doit relancer le générateur… ou va l'aider !", 7000);
+        }
+        break;
+      case 'outageEnd':
+        this.endOutage(false);
+        break;
       case 'power':
         this.lightsOutTimer = Math.max(this.lightsOutTimer, 7);
         sound.playBreakerClunk();
@@ -5562,6 +5673,7 @@ export class GameEngine {
     this.updateShade(delta);
     this.updateCat(delta);
     this.updateWhisper(delta);
+    this.updateOutage(delta);
     this.updateUv(delta);
     this.updateSecret(delta);
     this.updateWounds(delta);
@@ -6270,6 +6382,7 @@ export class GameEngine {
       if (u.isVent) return this.ventOpen ? null : { kind: 'vent' };
       if (u.isPickup) return { kind: 'pickup', uid: u.uid };
       if (u.isHobo) return { kind: 'hobo' };
+      if (u.isGenerator) return { kind: 'generator' };
       if (u.isCan) return { kind: 'can', mesh: o };
       o = o.parent;
     }
@@ -6327,6 +6440,8 @@ export class GameEngine {
       }
       case 'hobo':
         return '[E] Parler au SDF (boutique)';
+      case 'generator':
+        return `[E] Tirer le lanceur du générateur (${this.genPulls}/3)`;
       case 'repair':
         return this.state.hasItem('item-planks') ? '[E] Réparer l\'escalier avec les planches' : 'Escalier effondré — il faut des planches';
     }
@@ -6435,7 +6550,7 @@ export class GameEngine {
       else if (t.kind === 'can') {
         const idx = this.cans.indexOf(t.mesh);
         if (idx >= 0) req = { kind: 'can', idx };
-      } else req = { kind: t.kind };
+      } else if (t.kind !== 'generator') req = { kind: t.kind };
       if (req) this.net.send({ k: 'act', req });
       return;
     }
@@ -6724,6 +6839,21 @@ export class GameEngine {
       case 'door':
         this.interactDoor(t.door);
         break;
+
+      case 'generator': {
+        if (!this.outageOn || !this.gen) return;
+        this.genPulls++;
+        sound.playBreakerClunk();
+        p.shake = Math.max(p.shake, 0.15);
+        // the engine coughs loudly: the creatures hear it
+        this.alertAll(this.gen.position.clone().setY(1), 12);
+        if (this.genPulls < 3) {
+          gs.showToast(this.genPulls === 1 ? '🔧 Le moteur tousse… Encore !' : '🔧 Il crachote… Encore une fois !');
+          break;
+        }
+        this.endOutage(false);
+        break;
+      }
 
       case 'container': {
         const c = this.map.containers.get(t.id);

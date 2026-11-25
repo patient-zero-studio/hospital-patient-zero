@@ -14,10 +14,11 @@ const DIFF = ['', 'Exploration', 'Normal', 'Difficile', 'Cauchemar', 'Enfer'];
 const STATUS: Record<string, [string, string]> = { playing: ['#f59e0b', 'En partie'], online: ['#22c55e', 'En ligne'], offline: ['#71717a', 'Hors ligne'] };
 
 /** 👤 Someone's public card: level, records, achievements, how they look. */
-export const PlayerProfile: React.FC<{ name: string; token: string; onAddFriend?: (name: string) => Promise<string | undefined>; onClose: () => void }> = ({
+export const PlayerProfile: React.FC<{ name: string; token: string; onAddFriend?: (name: string) => Promise<string | undefined>; onRoom?: (name: string) => void; onClose: () => void }> = ({
   name,
   token,
   onAddFriend,
+  onRoom,
   onClose,
 }) => {
   const [p, setP] = useState<PlayerProfileView | null>(null);
@@ -116,6 +117,15 @@ export const PlayerProfile: React.FC<{ name: string; token: string; onAddFriend?
                   );
                 })}
               </div>
+            )}
+            {onRoom && (
+              <button
+                onClick={() => onRoom(p.username)}
+                className="w-full mb-2 py-2 bg-amber-800 hover:bg-amber-700 text-amber-50 font-mono text-xs uppercase tracking-widest"
+              >
+                🏚️ {p.me ? 'Ma chambre secrète' : 'Visiter sa chambre secrète'}
+                {(p.visits ?? 0) > 0 && <span className="opacity-70"> · 👣 {p.visits}</span>}
+              </button>
             )}
             {!p.me && !p.friend && onAddFriend && (
               <button

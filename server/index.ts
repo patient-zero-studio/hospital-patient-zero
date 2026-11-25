@@ -55,7 +55,7 @@ import { grantServerAch } from '../src/achievements.ts';
 import { PushSub, isPushSub, pushPublicKey, pushTo, setupPush } from './push.ts';
 import { LEVEL_SKINS, PASS_TIERS, PASS_XP_PER_TIER, nextWeek, passEnds, passKey, passName, passReward, weekKey, weeklyChallenges } from '../src/progression.ts';
 import { BOXES, SUPPLY_NAMES, TIER_LABEL, TIER_PRICE, cosmetic as cosmeticById } from '../src/economy.ts';
-import { CATALOG, GIFT_SKINS, STORY_SKINS } from '../src/economy.ts';
+import { CATALOG, GIFT_SKINS, STORY_SKINS, isLegendary } from '../src/economy.ts';
 
 /** Admin accounts (lower case): infinite coins, can gift coins to anyone. */
 const ADMINS = new Set(['corrupted_wolf', ...(process.env.PZ_ADMINS ?? '').toLowerCase().split(',').filter(Boolean)]);
@@ -99,6 +99,11 @@ interface User {
   lastTreats?: number;
   /** 🎡 day of the last wheel spin */
   lastWheel?: string;
+  /** ⚡ last big power cut whose generator was restarted (reward paid) */
+  lastOutage?: string;
+  /** 🏚️ secret room: number of visits, and the last visitors */
+  roomVisits?: number;
+  roomVisitors?: { name: string; at: number }[];
   /** Experience points (player level) */
   xp?: number;
   /** last XP for a lost run (anti-spam) */
@@ -416,6 +421,8 @@ const BOOST_KINDS: BoostKind[] = ['coins2', 'treats2', 'xp2', 'all2'];
 const settings: {
   season: SeasonSetting;
   boost?: { kind: BoostKind; until: number };
+  /** ⚡ big power cut scheduled by an admin */
+  outage?: { id: string; at: number };
   notifiedSeason?: string | null;
   weekPaid?: string;
   lastPodium?: { username: string; xp: number; place: number }[];
@@ -437,6 +444,9 @@ const boostMul = (what: 'coins' | 'treats' | 'xp') => {
   const b = activeBoost();
   return b && (b.kind === 'all2' || b.kind === `${what}2`) ? 2 : 1;
 };
+/** ⚡ The big power cut hits the games running when it starts (and those started in the next 10 min). */
+const OUTAGE_WINDOW = 10 * 60000;
+const outageView = () => (settings.outage && settings.outage.at > Date.now() - OUTAGE_WINDOW ? settings.outage : null);
 const settingsSaver = debouncedSaver(store, 'settings', () => JSON.stringify(settings), 300);
 const currentSeason = () => resolveSeason(settings.season, eventNow());
 const adventOf = (u: User) => {
@@ -449,7 +459,7 @@ const adventView = (u: User) =>
   currentSeason() === 'noel' ? { open: adventDay(eventNow()), claimed: adventOf(u).days } : undefined;
 
 app.get('/api/season', (_req, res) => {
-  res.json({ season: currentSeason(), boost: activeBoost() ?? null });
+  res.json({ season: currentSeason(), boost: activeBoost() ?? null, outage: outageView(), now: Date.now() });
 });
 
 /** Adds XP (doubled during an XP surprise event): coins for every level reached, level skins, season pass. */
@@ -1044,6 +1054,15 @@ app.get('/api/player/:name', (req, res) => {
     records: records.sort((a, b) => a.rank - b.rank).slice(0, 8),
     look,
     trophies: u.trophies ?? [],
+    // 🏚️ for the secret room: the showcase (rarest skins) and the lamps
+    rare: walletOf(u)
+      .owned.map((id) => cosmeticById(id))
+      .filter((c): c is NonNullable<typeof c> => !!c && c.slot !== 'lamp' && (c.tier === 'exclusif' || c.tier === 'style'))
+      .sort((a, b) => (isLegendary(b) ? 2 : b.tier === 'exclusif' ? 1 : 0) - (isLegendary(a) ? 2 : a.tier === 'exclusif' ? 1 : 0))
+      .slice(0, 12)
+      .map((c) => c.id),
+    lamps: walletOf(u).owned.filter((id) => cosmeticById(id)?.slot === 'lamp'),
+    visits: u.roomVisits ?? 0,
     friend: friendsOf(me).includes(key),
     me: key === me.username.toLowerCase(),
     ranked: { tier: tierOf(rankOf(u).points).id, points: rankOf(u).points, history: (u.rankHistory ?? []).slice(-6) },
@@ -1301,6 +1320,60 @@ app.post('/api/admin/boost', (req, res) => {
   settingsSaver.save();
   console.log(`[admin] ${user.username} : événement surprise ${settings.boost ? `${kind} ${hours} h` : 'arrêté'}`);
   res.json(walletView(user));
+});
+
+// ⚡ Admin: a big power cut for everyone, now or later (minutes < 0 = cancel)
+app.post('/api/admin/outage', (req, res) => {
+  const user = authUser(req);
+  if (!user || !isAdmin(user)) return res.status(403).json({ error: 'Réservé aux admins.' });
+  const minutes = Number(req.body?.minutes);
+  if (!Number.isFinite(minutes) || minutes > 7 * 24 * 60) return res.status(400).json({ error: 'Délai invalide.' });
+  if (minutes < 0) settings.outage = undefined;
+  else {
+    settings.outage = { id: Date.now().toString(36), at: Date.now() + Math.round(minutes * 60000) };
+    notifyAll(
+      '⚡ Grande panne !',
+      minutes < 1 ? "L'hôpital est plongé dans le noir. Viens relancer le générateur !" : `Une grande panne frappera l'hôpital dans ${minutes >= 60 ? `${Math.round(minutes / 60)} h` : `${minutes} min`}… Sois en partie !`,
+      'outage'
+    );
+  }
+  settingsSaver.save();
+  console.log(`[admin] ${user.username} : grande panne ${settings.outage ? `dans ${minutes} min` : 'annulée'}`);
+  res.json({ outage: outageView(), now: Date.now() });
+});
+
+// ⚡ Generator restarted during the big power cut: a reward, once per power cut
+app.post('/api/outage/claim', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  const o = settings.outage;
+  const now = Date.now();
+  if (!o || req.body?.id !== o.id || now < o.at - 5000 || now > o.at + 60 * 60000) return res.status(400).json({ error: "Il n'y a pas de panne en ce moment." });
+  if (user.lastOutage === o.id) return res.status(400).json({ error: 'Récompense déjà reçue pour cette panne.' });
+  user.lastOutage = o.id;
+  const gained = 60 * boostMul('coins');
+  walletOf(user).coins += gained;
+  addXp(user, 15);
+  saveUsers();
+  res.json({ gained, ...walletView(user) });
+});
+
+// 🏚️ Visiting someone's secret room (counted once every 6 h per visitor)
+app.post('/api/room/visit/:name', (req, res) => {
+  const me = authUser(req);
+  if (!me) return res.status(401).json({ error: 'Session expirée.' });
+  const u = users.get(String(req.params.name).toLowerCase());
+  if (!u || u.banned) return res.status(404).json({ error: "Ce joueur n'existe pas." });
+  if (u !== me) {
+    const list = (u.roomVisitors = Array.isArray(u.roomVisitors) ? u.roomVisitors : []);
+    const last = list.filter((v) => v.name.toLowerCase() === me.username.toLowerCase()).pop();
+    if (!last || Date.now() - last.at > 6 * 3600000) {
+      u.roomVisits = (u.roomVisits ?? 0) + 1;
+      u.roomVisitors = [...list.filter((v) => v.name.toLowerCase() !== me.username.toLowerCase()), { name: me.username, at: Date.now() }].slice(-20);
+      saveUsers();
+    }
+  }
+  res.json({ visits: u.roomVisits ?? 0, visitors: (u.roomVisitors ?? []).slice(-8).reverse() });
 });
 
 // 🎄 Advent calendar: one box per day, December 1 → 25

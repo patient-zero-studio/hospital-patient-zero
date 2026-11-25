@@ -20,6 +20,8 @@ interface Props {
   onInvite: (name: string) => Promise<string | undefined>;
   /** 👤 open a player's profile */
   onProfile?: (name: string) => void;
+  /** 🏚️ open a secret room */
+  onRoom?: (name: string) => void;
   /** 💝 gifts: what you own, and how to send */
   owned?: string[];
   coins?: number;
@@ -35,7 +37,7 @@ interface Props {
 }
 
 /** Friends: add by pseudo, accept requests, see who is online, invite them to your game. */
-export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove, onInvite, onProfile, owned = [], coins = 0, onGift, onCreateRoom, token, me, referrals = 0, onWatch, onClose }) => {
+export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove, onInvite, onProfile, onRoom, owned = [], coins = 0, onGift, onCreateRoom, token, me, referrals = 0, onWatch, onClose }) => {
   const [chatWith, setChatWith] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const refLink = me ? `${location.origin}/?ref=${encodeURIComponent(me)}` : '';
@@ -72,6 +74,14 @@ export const FriendsPanel: React.FC<Props> = ({ view, onAdd, onAccept, onRemove,
           <Users className="w-4 h-4 text-emerald-400" /> Amis
           {view && <span className="text-[10px] text-zinc-500 normal-case tracking-normal">({online} en ligne)</span>}
         </h2>
+        {onRoom && me && (
+          <button
+            onClick={() => onRoom(me)}
+            className="w-full mb-3 py-2 bg-amber-900/60 hover:bg-amber-800/70 border border-amber-700 text-amber-100 font-mono text-xs uppercase tracking-widest"
+          >
+            🏚️ Ma chambre secrète <span className="opacity-60 normal-case tracking-normal">(tes amis peuvent la visiter)</span>
+          </button>
+        )}
 
         {/* Add by pseudo */}
         <form

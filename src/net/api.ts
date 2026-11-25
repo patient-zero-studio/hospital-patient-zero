@@ -202,8 +202,18 @@ export interface WeeklyBoardView {
   lastPodium: { username: string; xp: number; place: number }[];
 }
 
+/** ⚡ big power cut: when it hits (local clock) */
+export interface Outage {
+  id: string;
+  at: number;
+}
+
 export interface PlayerProfileView {
   trophies?: { week: string; place: number }[];
+  /** 🏚️ secret room: rarest skins owned, lamps owned, visits */
+  rare?: string[];
+  lamps?: string[];
+  visits?: number;
   username: string;
   level: LevelInfo;
   admin: boolean;
@@ -362,12 +372,14 @@ export const api = {
   openEventBox: (token: string): Promise<WalletView & { result: BoxResult }> => post('/api/event/box', {}, token),
   claimAdvent: (token: string, day: number): Promise<WalletView & { result: BoxResult }> => post('/api/shop/advent', { day }, token),
   /** Event + surprise boost on for everyone (undefined = server unreachable). */
-  async status(): Promise<{ season: Season | null; boost: Boost | null } | undefined> {
+  async status(): Promise<{ season: Season | null; boost: Boost | null; outage: Outage | null } | undefined> {
     try {
       const res = await fetch('/api/season');
       if (!res.ok) return undefined;
       const d = await res.json();
-      return { season: d.season ?? null, boost: d.boost ?? null };
+      // ⚡ the server's clock may differ from ours: keep the delay, not the hour
+      const outage = d.outage && typeof d.now === 'number' ? { id: d.outage.id, at: Date.now() + (d.outage.at - d.now) } : null;
+      return { season: d.season ?? null, boost: d.boost ?? null, outage };
     } catch {
       return undefined;
     }
@@ -376,6 +388,10 @@ export const api = {
     post('/api/survival', { time, wave }, token),
   xpDeath: (token: string, difficulty = 1, ranked = false): Promise<WalletView & { xp: number; rankLost?: number }> => post('/api/xp/death', { difficulty, ranked }, token),
   adminBoost: (token: string, kind: BoostKind | null, hours: number): Promise<WalletView> => post('/api/admin/boost', { kind, hours }, token),
+  /** ⚡ schedule the big power cut (minutes from now, < 0 = cancel) */
+  adminOutage: (token: string, minutes: number): Promise<{ outage: Outage | null; now: number }> => post('/api/admin/outage', { minutes }, token),
+  claimOutage: (token: string, id: string): Promise<WalletView & { gained: number }> => post('/api/outage/claim', { id }, token),
+  roomVisit: (token: string, name: string): Promise<{ visits: number; visitors: { name: string; at: number }[] }> => post(`/api/room/visit/${encodeURIComponent(name)}`, {}, token),
   /** Event on for everyone (null = none, undefined = server unreachable). */
   async season(): Promise<Season | null | undefined> {
     try {

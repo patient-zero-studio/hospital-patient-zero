@@ -3,7 +3,7 @@ import { Coins, Crown, Gift, Loader2, ShoppingBag, Sparkles, X } from 'lucide-re
 import { ADVENT, BOXES, EVENT_BOX_PRICE, TREATS_PER_CHEST, BoxId, BoxResult, CATALOG, Cosmetic, TIER_COLOR, TIER_LABEL, TIER_PRICE, cosmetic, fmtCoins, isLegendary, rarityColor, rarityLabel } from '../economy';
 import { ChestReveal } from './ChestReveal';
 import { WheelSpin } from './WheelSpin';
-import { api, AdminUser, Boost, BoostKind, WalletView } from '../net/api';
+import { api, AdminUser, Boost, BoostKind, Outage, WalletView } from '../net/api';
 import { SEASON_INFO, Season, SeasonSetting } from '../seasons';
 import { AdminDashboard } from './AdminDashboard';
 import { Preview } from './CustomizeMenu';
@@ -57,6 +57,94 @@ const SeasonSwitch: React.FC<{ value: SeasonSetting; onSet: (s: SeasonSetting) =
         Automatique : Saint-Valentin 7 → 16 février, Poisson d'avril 1er → 3 avril, Pâques ± 7 jours, Halloween 1er octobre → 5 novembre, Noël 1er décembre → 6 janvier. Les cases du calendrier s'ouvrent une par une : case 1 le 1er décembre, case 2 le
         2 décembre… jusqu'à la case 25 le 25 décembre (pour tout le monde, admins compris).
       </p>
+    </div>
+  );
+};
+
+/** Admin: ⚡ the big power cut, now or later. Every game running at that moment goes dark. */
+const OutageSwitch: React.FC<{ token: string }> = ({ token }) => {
+  const [o, setO] = useState<Outage | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [custom, setCustom] = useState('');
+  useEffect(() => {
+    api.status().then((s) => s && setO(s.outage));
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const go = async (minutes: number) => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await api.adminOutage(token, minutes);
+      const local = r.outage ? { id: r.outage.id, at: Date.now() + (r.outage.at - r.now) } : null;
+      setO(local);
+      // the app (and its game engine) learns it right away
+      window.dispatchEvent(new CustomEvent('pz-outage', { detail: local }));
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const left = o ? o.at - now : 0;
+  const fmt = (ms: number) => {
+    const s = Math.max(0, Math.round(ms / 1000));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return h ? `${h} h ${String(m).padStart(2, '0')} min` : `${m} min ${String(s % 60).padStart(2, '0')} s`;
+  };
+  return (
+    <div className="mb-5 p-3 border border-zinc-800 bg-black/40">
+      <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-1">⚡ Grande panne (pour tous les joueurs)</div>
+      <p className="text-[11px] font-mono text-zinc-500 mb-2">
+        Tout devient noir dans les parties en cours : il faut trouver le générateur et le relancer (+60 pièces). Les joueurs qui lancent une partie dans les 10 min suivantes l'ont aussi.
+      </p>
+      {o && (
+        <div className="flex items-center justify-between gap-2 mb-2 p-2 border border-red-600/70 bg-red-950/30 text-[11px] font-mono text-red-200">
+          <span>{left > 0 ? `⏳ Panne dans ${fmt(left)} (à ${new Date(o.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})` : '⚡ Panne en cours !'}</span>
+          <button disabled={busy} onClick={() => go(-1)} className="px-2 py-1 border border-red-700 text-red-300 uppercase">
+            Annuler
+          </button>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-1">
+        {[
+          [0, '⚡ Maintenant'],
+          [5, '5 min'],
+          [15, '15 min'],
+          [30, '30 min'],
+          [60, '1 heure'],
+          [180, '3 heures'],
+        ].map(([m, label]) => (
+          <button
+            key={m}
+            disabled={busy}
+            onClick={() => go(m as number)}
+            className={`px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest font-bold disabled:opacity-40 ${m === 0 ? 'bg-red-600 hover:bg-red-500 text-black' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-100'}`}
+          >
+            {label}
+          </button>
+        ))}
+        <span className="flex items-center gap-1">
+          <input
+            value={custom}
+            onChange={(e) => setCustom(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
+            placeholder="min"
+            inputMode="numeric"
+            className="w-16 bg-black border border-zinc-700 px-2 py-1.5 text-[11px] text-zinc-100 font-mono"
+          />
+          <button
+            disabled={busy || !custom}
+            onClick={() => go(Number(custom))}
+            className="px-2 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-mono text-[11px] uppercase disabled:opacity-40"
+          >
+            OK
+          </button>
+        </span>
+      </div>
+      {err && <p className="text-[11px] font-mono text-red-400 mt-1">{err}</p>}
     </div>
   );
 };
@@ -789,6 +877,7 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
               <>
                 <AdminDashboard token={token} />
                 {onBoost && <BoostSwitch boost={wallet.boost} onBoost={onBoost} />}
+                <OutageSwitch token={token} />
                 {onSetSeason && <SeasonSwitch value={wallet.seasonSetting ?? 'auto'} onSet={onSetSeason} />}
                 <AdminPanel token={token} />
               </>
