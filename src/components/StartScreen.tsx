@@ -764,9 +764,10 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                     ['shadowsEnabled', 'Ombres Dynamiques (Lampe)', null],
                     ['performanceMode', 'Mode Performance 60+ FPS', 'Recommandé pour PC portables'],
                     ['hints', 'Indices quand je suis bloqué', 'Un conseil s\'affiche si tu n\'avances plus pendant 2 min'],
+                    ['whispers', 'Le monstre chuchote mon pseudo', 'Rarement, quand il rôde près de toi…'],
                   ] as const
                 ).map(([key, label, sub]) => {
-                  const on = key === 'hints' ? controlSettings.hints !== false : !!controlSettings[key];
+                  const on = key === 'hints' || key === 'whispers' ? controlSettings[key] !== false : !!controlSettings[key];
                   return (
                     <button
                       key={key}

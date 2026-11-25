@@ -73,6 +73,8 @@ export class FlashlightBeam {
     target.getWorldPosition(FlashlightBeam.tmp);
     this.mesh.lookAt(FlashlightBeam.tmp);
     this.mat.uniforms.strength.value = k * haze;
+    // 🔦 the beam takes the lamp's colour
+    (this.mat.uniforms.color.value as THREE.Color).copy(light.color);
   }
 
   public dispose() {

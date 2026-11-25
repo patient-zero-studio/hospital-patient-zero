@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FxHandle, buildFx, buildPrestige } from './AnimatedFx';
 import { outfitRank } from '../economy';
+import { lampOf } from '../lamps';
 import type { PlayerNetState } from '../net/protocol';
 import { ProceduralTextures } from '../textures/ProceduralTextures';
 import { HUMAN_OUTFITS, buildHumanAccessory, buildHumanBodyExtra } from './Cosmetics';
@@ -909,7 +910,11 @@ export class RemotePlayer {
       }
     }
   }
-  public applyLook(look: { skin: string; gown: string; hair: string; acc?: string; outfit?: string; char?: string; fx?: string }) {
+  public applyLook(look: { skin: string; gown: string; hair: string; acc?: string; outfit?: string; char?: string; fx?: string; lamp?: string }) {
+    // 🔦 their lamp's colour
+    const lamp = lampOf(look.lamp).color;
+    this.light.color.setHex(lamp);
+    this.torchLens.emissive.setHex(lamp);
     const outfit = look.outfit ? HUMAN_OUTFITS[look.outfit] : undefined;
     const gown = this.mats.gown;
     const hair = this.mats.hair;

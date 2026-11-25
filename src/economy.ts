@@ -7,7 +7,7 @@ import { SEASONS, type Season } from './seasons';
 export type Tier = 'petit' | 'moyen' | 'style' | 'exclusif';
 export type Target = 'human' | 'monster';
 /** What a cosmetic changes: a colour slot, an accessory or a whole outfit. */
-export type Slot = 'gown' | 'hair' | 'skin' | 'eyes' | 'acc' | 'outfit' | 'fx' | 'dance';
+export type Slot = 'gown' | 'hair' | 'skin' | 'eyes' | 'acc' | 'outfit' | 'fx' | 'dance' | 'lamp';
 
 export interface Cosmetic {
   id: string;
@@ -212,6 +212,14 @@ export const CATALOG: Cosmetic[] = [
   { ...c('m-lvl-abyss', 'Créature des abysses', 'monster', 'outfit', 'abyss', 'style'), unlock: 'level' },
   { ...c('h-lvl-veteran', 'Vétéran de Saint-Aurore', 'human', 'outfit', 'veteran', 'exclusif'), unlock: 'level' },
   { ...c('m-lvl-legend', 'Patient Zéro Légendaire', 'monster', 'outfit', 'legend', 'exclusif'), unlock: 'level' },
+  // ---- 🔦 Lampes de collection ----
+  c('l-miner', 'Lampe de mineur', 'human', 'lamp', 'lminer', 'petit'),
+  c('l-ice', 'Lampe bleu glacier', 'human', 'lamp', 'lice', 'petit'),
+  c('l-candle', 'Lanterne bougie', 'human', 'lamp', 'lcandle', 'moyen'),
+  c('l-green', 'Lanterne verte', 'human', 'lamp', 'lgreen', 'moyen'),
+  c('l-red', 'Lampe rouge sang', 'human', 'lamp', 'lred', 'style'),
+  c('l-pink', 'Néon rose', 'human', 'lamp', 'lpink', 'style'),
+  c('l-gold', 'Lampe dorée', 'human', 'lamp', 'lgold', 'exclusif'),
 ];
 
 export const cosmetic = (id: string) => CATALOG.find((x) => x.id === id);

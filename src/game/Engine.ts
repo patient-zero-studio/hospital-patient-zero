@@ -32,6 +32,7 @@ import { MimicBody } from './Mimic';
 import { ShadeBody } from './Shade';
 import { CatBody, CatPose } from './Cat';
 const CAT_POSES: CatPose[] = ['sit', 'walk', 'run', 'hiss', 'scratch'];
+import { lampOf } from '../lamps';
 import { upgradeEffects } from '../upgrades';
 import type { RunStats } from '../stars';
 import type { CollisionBox, ContainerObject, FlickerLight, HidingSpot } from './MapBuilder';
@@ -2237,7 +2238,7 @@ export class GameEngine {
     const ch = this.challenge;
     this.player.batteryDrainMul = ch === 'dim' ? 3 : ch === 'dive' ? 2 : 1;
     this.baseDrain = this.player.batteryDrainMul;
-    this.player.flashlight.color.setHex(0xfff1dc);
+    this.player.flashlight.color.setHex(this.lampHex());
     this.player.noSprint = ch === 'nosprint';
     if (ch === 'pack3') this.state.maxInventorySlots = 3;
     // Mutators
@@ -3167,7 +3168,7 @@ export class GameEngine {
   private setUv(on: boolean, quiet = false) {
     this.uvOn = on;
     const p = this.player;
-    p.flashlight.color.setHex(on ? 0x8a5cff : 0xfff1dc);
+    p.flashlight.color.setHex(on ? 0x8a5cff : this.lampHex());
     p.batteryDrainMul = this.baseDrain * (on ? 1.6 : 1);
     if (quiet) return;
     sound.playFlashlightToggle(on);
@@ -5104,6 +5105,58 @@ export class GameEngine {
 
   /** 🔧 Atelier levels for the next run (the app leaves it empty for ranked games) */
   public upgrades: Record<string, number> = {};
+  private lampHex() {
+    return lampOf(this.localLook.human.lamp).color;
+  }
+
+  // -----------------------------------------------------------------------
+  // 🩸 Whispers: now and then, when a creature prowls nearby (not chasing),
+  // a voice whispers your name in the dark.
+  // -----------------------------------------------------------------------
+  /** your username (the app sets it) */
+  public whisperName = '';
+  private whisperCd = 50 + Math.random() * 40;
+  private updateWhisper(delta: number) {
+    if (this.settings.whispers === false || !this.whisperName || this.net || this.vsRole || this.imp || this.survival || this.intro || this.watchOnly || this.photo) return;
+    this.whisperCd -= delta;
+    if (this.whisperCd > 0) return;
+    let best = Infinity;
+    let chasing = false;
+    for (const m of this.monsters) {
+      if (!m.mesh.visible) continue;
+      best = Math.min(best, m.mesh.position.distanceTo(this.player.position));
+      if (m.state === 'CHASE') chasing = true;
+    }
+    if (chasing || best < 5 || best > 20) {
+      this.whisperCd = 6;
+      return;
+    }
+    this.whisperCd = 75 + Math.random() * 75;
+    this.whisper();
+  }
+  public whisper() {
+    const n = this.whisperName;
+    const lines = [`${n}…`, `Je t'entends, ${n}…`, `${n}… je sais où tu es…`, `Viens jouer, ${n}…`, `Tu ne sortiras pas, ${n}…`, `${n}… retourne-toi…`];
+    const line = lines[Math.floor(Math.random() * lines.length)];
+    sound.playBreath(0.8);
+    this.state.showToast(`🩸 « ${line} »`, 3500);
+    const ss = typeof window !== 'undefined' ? window.speechSynthesis : undefined;
+    if (!ss || typeof SpeechSynthesisUtterance === 'undefined') return;
+    try {
+      const u = new SpeechSynthesisUtterance(line.replace(/…/g, '...'));
+      u.lang = 'fr-FR';
+      const v = ss.getVoices().find((x) => x.lang.toLowerCase().startsWith('fr'));
+      if (v) u.voice = v;
+      u.pitch = 0.1;
+      u.rate = 0.7;
+      u.volume = Math.min(1, sound.sfxLevel() * 0.8);
+      ss.cancel();
+      ss.speak(u);
+    } catch {
+      /* no voice: the subtitle is enough */
+    }
+  }
+
   private applyUpgrades() {
     const fx = upgradeEffects(this.vsRole || this.imp ? {} : this.upgrades);
     const p = this.player;
@@ -5111,7 +5164,11 @@ export class GameEngine {
     p.beamMul = fx.beam;
     p.flashlight.distance = 24 * (1 + (fx.beam - 1) * 0.6);
     p.noiseMul = fx.noise;
-    this.baseDrain = (ch === 'dim' ? 3 : ch === 'dive' ? 2 : 1) * fx.drain;
+    // 🔦 your collectible lamp: colour, and a small bonus for the rare ones
+    const lamp = this.vsRole === 'monster' ? lampOf('') : lampOf(this.localLook.human.lamp);
+    p.flashlight.color.setHex(lamp.color);
+    p.flashlight.angle = (Math.PI / 6.2) * lamp.width;
+    this.baseDrain = (ch === 'dim' ? 3 : ch === 'dive' ? 2 : 1) * fx.drain * (this.vsRole || this.imp ? 1 : lamp.drain);
     p.batteryDrainMul = this.baseDrain;
     // 🩹 Starting kit
     const kit: Omit<GameItem, 'id'>[] = [];
@@ -5504,6 +5561,7 @@ export class GameEngine {
     this.updateMimic(delta);
     this.updateShade(delta);
     this.updateCat(delta);
+    this.updateWhisper(delta);
     this.updateUv(delta);
     this.updateSecret(delta);
     this.updateWounds(delta);
@@ -5729,7 +5787,7 @@ export class GameEngine {
     const p = this.player;
     const uv = !!this.site?.uv;
     p.batteryDrainMul = this.baseDrain * (uv && p.flashlightOn ? 6 : 1);
-    p.flashlight.color.setHex(uv ? 0x9a5cff : 0xfff1dc);
+    p.flashlight.color.setHex(uv ? 0x9a5cff : this.lampHex());
   }
 
   /**

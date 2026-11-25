@@ -664,6 +664,11 @@ class SoundSystem {
     });
   }
 
+  /** Effective effects volume (0..1) */
+  public sfxLevel() {
+    return this.settings.masterVolume * this.settings.sfxVolume;
+  }
+
   /** 🎁 A chest shaking: a dull wooden thump with a little metal rattle. */
   public playChestRattle(strength = 0.5) {
     if (!this.ctx || !this.sfxGain) return;

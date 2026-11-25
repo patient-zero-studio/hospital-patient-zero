@@ -242,6 +242,7 @@ export const CustomizeMenu: React.FC<Props> = ({ username, initial, welcome, own
                 <ItemPicker label="Accessoire" items={mine('human', 'acc')} value={look.human.acc} onPick={(v) => set('human', 'acc', v)} />
                 <ItemPicker label="Tenue" items={mine('human', 'outfit')} value={look.human.outfit} onPick={(v) => set('human', 'outfit', v)} />
                 <ItemPicker label="✨ Effet animé" items={mine('human', 'fx')} value={look.human.fx} onPick={(v) => set('human', 'fx', v)} />
+                <ItemPicker label="🔦 Lampe torche (couleur du faisceau)" items={mine('human', 'lamp')} value={look.human.lamp} onPick={(v) => set('human', 'lamp', v)} />
                 <ItemPicker label="💃 Danse de victoire (Aucun = coucou)" items={mine('human', 'dance')} value={look.human.dance} onPick={(v) => set('human', 'dance', v)} />
                 <p className="text-[10px] font-mono text-zinc-600">Vu par votre partenaire en coop, et par le monstre en mode Chasse.</p>
               </>

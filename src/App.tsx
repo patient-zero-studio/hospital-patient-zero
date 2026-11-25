@@ -582,6 +582,7 @@ export default function App() {
     nextRankedRef.current = false;
     // 🔧 Atelier: everything you bought, except in ranked games (fair for everyone)
     engine.upgrades = rankedRunRef.current ? {} : upgradesRef.current;
+    engine.whisperName = sessionRef.current?.username ?? '';
     if (IS_TOUCH) enterMobileFullscreen();
     // Music is for the menu only
     sound.stopMenuMusic(1.2);

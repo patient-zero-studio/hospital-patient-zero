@@ -210,6 +210,7 @@ export const CosmeticBadge: React.FC<{ c: Cosmetic; size?: number }> = ({ c, siz
     cowboy: '🤠', pirate: '🦜', detective: '🔎', plaguedoc: '🐦‍⬛', plaguebeast: '☠️', wendigo: '🦌', ghostpirate: '👻',
     gladiator: '⚔️', stars: '🌟', champion: '🏆',
     aura: '🔮', smoke: '💨', halo: '😇', sparks: '⚡', flames: '🔥', rainbow: '🌈',
+    lminer: '⛏️', lice: '🧊', lcandle: '🕯️', lgreen: '🏮', lred: '🩸', lpink: '💗', lgold: '🔦',
     witchhat: '🧙', pumpkinhead: '🎃', witch: '🧙', vampire: '🧛', reaper: '💀', mummy: '🧻', pumpking: '🎃',
   };
   return (
@@ -460,6 +461,12 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
                 {trying.name} <span className="text-zinc-500 text-xs">· {trying.target === 'human' ? 'Humain' : 'Monstre'}</span>
               </div>
               <Preview look={withItem(look ?? DEFAULT_APPEARANCE, trying)} tab={trying.target === 'human' ? 'human' : 'monster'} />
+              {trying.slot === 'lamp' && (
+                <p className="text-[11px] font-mono text-zinc-400">
+                  🔦 La couleur de ta lampe en jeu.{trying.tier === 'style' && ' Bonus : la pile dure 10 % plus longtemps.'}
+                  {trying.tier === 'exclusif' && ' Bonus : faisceau plus large et pile qui dure 15 % plus longtemps.'}
+                </p>
+              )}
               {trying.slot === 'dance' && <p className="text-[11px] font-mono text-zinc-400">💃 La danse se joue en boucle.</p>}
               <div className="flex gap-2 w-full">
                 <button onClick={() => setTrying(null)} className="flex-1 py-2 border border-zinc-700 text-zinc-300 font-mono text-xs uppercase tracking-wider hover:border-zinc-500">

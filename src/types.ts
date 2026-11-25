@@ -80,6 +80,8 @@ export interface ControlSettings {
   speedrun?: boolean;
   /** 🧭 a hint shows up when you stop making progress (on by default) */
   hints?: boolean;
+  /** 🩸 the creature sometimes whispers your name (on by default) */
+  whispers?: boolean;
   /** 📳 phone vibrates when hit / spotted / caught (on by default) */
   vibration?: boolean;
   /** 📱 size of the on-screen buttons and joystick (1, 1.25, 1.5) */
