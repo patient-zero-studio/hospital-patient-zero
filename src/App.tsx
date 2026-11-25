@@ -1988,7 +1988,7 @@ export default function App() {
           }}
         />
       )}
-      {roomOf && session && <SecretRoom name={roomOf} token={session.token} onClose={() => setRoomOf(null)} />}
+      {roomOf && session && <SecretRoom name={roomOf} token={session.token} room3d={knightsOpen} onClose={() => setRoomOf(null)} />}
       {runMsg && victory && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[90] px-5 py-2 border border-emerald-600 bg-black/90 text-emerald-300 font-mono text-xs shadow-[0_0_30px_rgba(16,185,129,0.3)] text-center max-w-[92vw]">
           {runMsg}

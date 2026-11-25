@@ -5,6 +5,7 @@ import { cosmetic, isLegendary, rarityColor } from '../economy';
 import { levelColor } from '../levels';
 import { LAMPS } from '../lamps';
 import { CosmeticBadge } from './ShopMenu';
+import { Room104 } from './Room104';
 import { Preview } from './CustomizeMenu';
 import { RankBadge } from './RankedMenu';
 
@@ -16,6 +17,8 @@ import { RankBadge } from './RankedMenu';
 interface Props {
   name: string;
   token: string;
+  /** 🔒 the 3D room 104 (Knights' update: admins only until released) */
+  room3d?: boolean;
   onClose: () => void;
 }
 
@@ -36,11 +39,10 @@ const Shelf: React.FC<{ title: string; children: React.ReactNode }> = ({ title, 
   </div>
 );
 
-export const SecretRoom: React.FC<Props> = ({ name, token, onClose }) => {
+export const SecretRoom: React.FC<Props> = ({ name, token, room3d = false, onClose }) => {
   const [p, setP] = useState<PlayerProfileView | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [visit, setVisit] = useState<{ visits: number; visitors: { name: string; at: number }[] } | null>(null);
-  const [tab, setTab] = useState<'human' | 'monster'>('human');
 
   useEffect(() => {
     api.player(token, name).then(setP).catch((e) => setErr((e as Error).message));
@@ -122,9 +124,27 @@ export const SecretRoom: React.FC<Props> = ({ name, token, onClose }) => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 items-start">
+            {/* 🏚️ room 104, in 3D: you, your creature, and your collection on display */}
+            <div className="mb-4" style={{ boxShadow: `0 0 40px ${lamp}33` }}>
+              {room3d ? (
+              <Room104
+                look={p.look}
+                lampColor={LAMPS[p.look.human.lamp]?.color ?? 0xfff1dc}
+                lamps={lamps.map((c) => LAMPS[c.value]?.color ?? 0xfff1dc)}
+                trophies={(p.trophies?.length ?? 0) + ((p.records ?? []).some((r) => r.rank === 1) ? 1 : 0)}
+                rare={rare.map((c) => rarityColor(c))}
+                castle={castle}
+              />
+              ) : (
+                <div className="flex justify-center">
+                  <Preview look={p.look} tab="human" />
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
               {/* left wall: trophies */}
-              <div className="space-y-4 order-2 md:order-1">
+              <div className="space-y-4">
                 <Shelf title="🏆 Trophées">
                   <span className="text-3xl" title={`Niveau ${p.level.level}`}>
                     ⭐
@@ -157,27 +177,8 @@ export const SecretRoom: React.FC<Props> = ({ name, token, onClose }) => {
                 </Shelf>
               </div>
 
-              {/* middle: the character under their lamp */}
-              <div className="flex flex-col items-center order-1 md:order-2">
-                <div className="relative" style={{ filter: `drop-shadow(0 0 30px ${lamp}66)` }}>
-                  <Preview look={p.look} tab={tab} />
-                  <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(ellipse at 50% 0%, ${lamp}33 0%, transparent 60%)` }} />
-                </div>
-                <div className="flex gap-1 mt-2">
-                  {(['human', 'monster'] as const).map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setTab(t)}
-                      className={`px-3 py-1 font-mono text-[11px] uppercase border ${tab === t ? 'border-amber-400 text-amber-200 bg-amber-950/40' : 'border-zinc-700 text-zinc-400'}`}
-                    >
-                      {t === 'human' ? '👤 Perso' : '👹 Créature'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* right wall: showcase + lamps */}
-              <div className="space-y-4 order-3">
+              <div className="space-y-4">
                 <Shelf title="💎 Vitrine (skins les plus rares)">
                   {rare.length === 0 && <span className="text-[10px] font-mono text-zinc-600">(pas encore de skin rare)</span>}
                   {rare.map((c) => (
@@ -206,16 +207,6 @@ export const SecretRoom: React.FC<Props> = ({ name, token, onClose }) => {
               </div>
             </div>
 
-            {/* 🔥 the fireplace (castle) */}
-            {castle && (
-              <div className="flex justify-center mt-4">
-                <div className="relative w-44 h-24" style={{ background: 'linear-gradient(#5a544c, #3a3632)', border: '3px solid #000', borderBottom: 'none', clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0 100%)' }}>
-                  <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-28 h-16" style={{ background: '#0c0806', borderRadius: '40px 40px 0 0' }}>
-                    <div className="absolute inset-x-0 bottom-1 text-center text-3xl animate-pulse">🔥</div>
-                  </div>
-                </div>
-              </div>
-            )}
             {/* guest book */}
             <div className="mt-5 p-3" style={{ background: '#e8dcc0', color: '#2a1a0e', border: '3px solid #000', boxShadow: '0 4px 0 #000' }}>
               <div className="text-[10px] font-mono uppercase tracking-[0.25em] font-bold mb-1">👣 Livre des visiteurs</div>
