@@ -3,11 +3,12 @@
  * server (authoritative for accounts) and the client (display).
  */
 import { SEASONS, type Season } from './seasons';
+import { KNIGHTS_PUBLIC } from './updates';
 
 export type Tier = 'petit' | 'moyen' | 'style' | 'exclusif';
 export type Target = 'human' | 'monster';
 /** What a cosmetic changes: a colour slot, an accessory or a whole outfit. */
-export type Slot = 'gown' | 'hair' | 'skin' | 'eyes' | 'acc' | 'outfit' | 'fx' | 'dance' | 'lamp';
+export type Slot = 'gown' | 'hair' | 'skin' | 'eyes' | 'acc' | 'outfit' | 'fx' | 'dance' | 'lamp' | 'room';
 
 export interface Cosmetic {
   id: string;
@@ -162,6 +163,15 @@ export const CATALOG: Cosmetic[] = [
   ev('chevaliers', 'l-lantern', 'Lanterne de château', 'human', 'lamp', 'llantern', 'moyen'),
   ev('chevaliers', 'l-torch', 'Torche enflammée', 'human', 'lamp', 'ltorch', 'style'),
 
+  // ---- 🏚️ Décors de la chambre secrète, un par événement (édition limitée) ----
+  ev('noel', 'r-noel', 'Chambre de Noël', 'human', 'room', 'noel', 'style'),
+  ev('halloween', 'r-halloween', 'Chambre hantée', 'human', 'room', 'halloween', 'style'),
+  ev('valentin', 'r-valentin', 'Chambre des amoureux', 'human', 'room', 'valentin', 'style'),
+  ev('paques', 'r-paques', 'Chambre de Pâques', 'human', 'room', 'paques', 'style'),
+  ev('poisson', 'r-poisson', 'Chambre du Poisson d\'avril', 'human', 'room', 'poisson', 'style'),
+  // the castle: for a « Sire » of the Tournoi des Chevaliers
+  { ...c('r-castle', 'Château', 'human', 'room', 'castle', 'exclusif'), unlock: 'story' },
+
   // ---- 🏆 Pass de saison (paliers 10, 20, 30) ----
   // 🏅 Ranked pass (earned, never sold)
   { ...c('m-rank-gladiator', 'Gladiateur de l\'arène', 'monster', 'outfit', 'gladiator', 'exclusif'), unlock: 'ranked' },
@@ -241,7 +251,9 @@ export const cosmetic = (id: string) => CATALOG.find((x) => x.id === id);
 const REGULAR = CATALOG.filter((x) => !x.season && !x.unlock);
 
 /** Items sold in the event shop while the event is on. */
-export const seasonShop = (season: Season | null): Cosmetic[] => (season ? CATALOG.filter((x) => x.season === season && !x.calendarOnly) : []);
+/** 🔒 room decors come with the Knights' update (admins only until it's released) */
+const released = (x: Cosmetic) => x.slot !== 'room' || KNIGHTS_PUBLIC;
+export const seasonShop = (season: Season | null): Cosmetic[] => (season ? CATALOG.filter((x) => x.season === season && !x.calendarOnly && released(x)) : []);
 
 // ---------------------------------------------------------------------------
 // Wallet
@@ -682,7 +694,7 @@ export const openEventBox = (w: Wallet, season: Season, rnd: () => number = Math
   }
   // Event skins (not the advent calendar ones): rarer tiers less often
   const weights: Record<Tier, number> = { petit: 40, moyen: 32, style: 20, exclusif: 8 };
-  const pool = CATALOG.filter((x) => x.season === season && !x.calendarOnly);
+  const pool = CATALOG.filter((x) => x.season === season && !x.calendarOnly && released(x));
   const total = pool.reduce((t, x) => t + weights[x.tier], 0);
   let k = rnd() * total;
   let skin = pool[pool.length - 1];

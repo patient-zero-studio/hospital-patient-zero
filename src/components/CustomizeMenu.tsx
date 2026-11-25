@@ -16,6 +16,8 @@ interface Props {
   /** Shop cosmetics owned by the account */
   owned?: string[];
   onOpenShop?: () => void;
+  /** 🔒 room decors picker (Knights' update) */
+  rooms?: boolean;
   onSave: (a: Appearance) => Promise<void>;
   onClose: () => void;
 }
@@ -153,7 +155,7 @@ const ItemPicker: React.FC<{ label: string; items: Cosmetic[]; value: string; on
   </div>
 );
 
-export const CustomizeMenu: React.FC<Props> = ({ username, initial, welcome, owned = [], onOpenShop, onSave, onClose }) => {
+export const CustomizeMenu: React.FC<Props> = ({ username, initial, welcome, owned = [], onOpenShop, rooms = false, onSave, onClose }) => {
   const mine = (target: Target, slot: Slot) => CATALOG.filter((c) => c.target === target && c.slot === slot && owned.includes(c.id));
   const colors = (base: string[], target: Target, slot: Slot) => [...base, ...mine(target, slot).map((c) => c.value)];
   const [look, setLook] = useState<Appearance>(initial);
@@ -243,6 +245,7 @@ export const CustomizeMenu: React.FC<Props> = ({ username, initial, welcome, own
                 <ItemPicker label="Tenue" items={mine('human', 'outfit')} value={look.human.outfit} onPick={(v) => set('human', 'outfit', v)} />
                 <ItemPicker label="✨ Effet animé" items={mine('human', 'fx')} value={look.human.fx} onPick={(v) => set('human', 'fx', v)} />
                 <ItemPicker label="🔦 Lampe torche (couleur du faisceau)" items={mine('human', 'lamp')} value={look.human.lamp} onPick={(v) => set('human', 'lamp', v)} />
+                {rooms && <ItemPicker label="🏚️ Décor de ta chambre secrète (Aucun = chambre 104)" items={mine('human', 'room')} value={look.human.room} onPick={(v) => set('human', 'room', v)} />}
                 <ItemPicker label="💃 Danse de victoire (Aucun = coucou)" items={mine('human', 'dance')} value={look.human.dance} onPick={(v) => set('human', 'dance', v)} />
                 <p className="text-[10px] font-mono text-zinc-600">Vu par votre partenaire en coop, et par le monstre en mode Chasse.</p>
               </>

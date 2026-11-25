@@ -33,6 +33,7 @@ export const UPDATES: GameUpdate[] = [
       "📜 5 parchemins racontent l'histoire de l'armure maudite. Trouve-les tous : un mur s'ouvre sur le trésor de l'ordre (+150 pièces).",
       "⚔️ Duel des Chevaliers : le Donjon à 2 en ligne (menu Multijoueur). Blason = 3 points, parchemin = 1, trésor = 2. Le meilleur gagne !",
       "👑 Quêtes du Roi : sors du Donjon, coince le Chevalier sous une herse, sors en Difficile et en moins de 6 minutes… et tu deviens « Sire » à côté de ton pseudo.",
+      "🏚️ Ta chambre secrète devient la chambre 104 en 3D : toi, ta créature, et ta collection exposée (vitrine, lampes, coupes). Et un décor à choisir dans Personnaliser : Noël, Halloween, Saint-Valentin, Pâques, Poisson d'avril (dans la boutique de chaque événement) et le Château.",
       "⏳ ÉDITION LIMITÉE, seulement pendant le Tournoi des Chevaliers : skins Écuyer, Chevalier, Dragon et heaumes (Trésor du Royaume et boutique du Tournoi), Torche enflammée et Lanterne de château, Chevalier Noir et Patient Zéro Chevalier (sors du Donjon pendant le Tournoi), la musique « Le Donjon », et la chambre en château pour les « Sire ».",
     ],
   },

@@ -3,6 +3,18 @@ import * as THREE from 'three';
 import { Appearance } from '../appearance';
 import { MonsterAI } from '../game/MonsterAI';
 import { RemotePlayer } from '../game/RemotePlayer';
+import { buildPresentModel, buildTreatModel } from '../game/SeasonalDecor';
+import { SEASON_INFO, type Season } from '../seasons';
+
+/** 🎨 Each event decor: neon light, sky light, sheet, blanket and rug colours */
+const THEMES: Record<string, { neon: number; hemi: number; sheet: number; blanket: number; rug: number }> = {
+  noel: { neon: 0xffe8c0, hemi: 0xa89a90, sheet: 0xb91c1c, blanket: 0x15803d, rug: 0xb91c1c },
+  halloween: { neon: 0xa070ff, hemi: 0x6a5a80, sheet: 0x2a1440, blanket: 0xff7a00, rug: 0x3b0764 },
+  valentin: { neon: 0xff9ac8, hemi: 0xb08a9a, sheet: 0xf9a8d4, blanket: 0xe11d48, rug: 0xbe185d },
+  paques: { neon: 0xfff4c0, hemi: 0xb8b8a0, sheet: 0xfde68a, blanket: 0xa7f3d0, rug: 0x86efac },
+  poisson: { neon: 0x9ae0ff, hemi: 0x90a8b8, sheet: 0x38bdf8, blanket: 0xfb923c, rug: 0x0ea5e9 },
+};
+const isSeason = (t: string): t is Season => t in SEASON_INFO;
 
 /**
  * 🏚️ The secret room in 3D: room 104, where every game begins. The hospital
@@ -21,7 +33,8 @@ interface Props {
   trophies: number;
   /** rarity colours of the showcased skins */
   rare: string[];
-  castle: boolean;
+  /** decor: '' = room 104, 'castle', or an event ('noel', 'halloween'…) */
+  theme: string;
 }
 
 /** a texture drawn on a canvas */
@@ -36,7 +49,9 @@ const canvasTex = (w: number, h: number, draw: (g: CanvasRenderingContext2D) => 
   return t;
 };
 
-export const Room104: React.FC<Props> = ({ look, lamps, lampColor, trophies, rare, castle }) => {
+export const Room104: React.FC<Props> = ({ look, lamps, lampColor, trophies, rare, theme }) => {
+  const castle = theme === 'castle';
+  const TH = THEMES[theme];
   const mount = useRef<HTMLDivElement>(null);
   const models = useRef<{ human: RemotePlayer; monster: MonsterAI; spot: THREE.SpotLight } | null>(null);
 
@@ -175,9 +190,9 @@ export const Room104: React.FC<Props> = ({ look, lamps, lampColor, trophies, rar
     bed.position.set(-2.1, 0, -0.6);
     scene.add(bed);
     box(1.0, 0.08, 2.0, bedM, 0, 0.55, 0, bed);
-    box(0.95, 0.18, 1.9, mat(castle ? 0x6a1018 : 0xe8e8e0), 0, 0.68, 0, bed);
+    box(0.95, 0.18, 1.9, mat(TH?.sheet ?? (castle ? 0x6a1018 : 0xe8e8e0)), 0, 0.68, 0, bed);
     box(0.6, 0.12, 0.35, mat(0xf4f4f0), 0, 0.83, -0.7, bed);
-    box(0.97, 0.06, 1.2, mat(castle ? 0x8a1a1a : 0x7aa0c8), 0, 0.79, 0.3, bed);
+    box(0.97, 0.06, 1.2, mat(TH?.blanket ?? (castle ? 0x8a1a1a : 0x7aa0c8)), 0, 0.79, 0.3, bed);
     box(1.0, 0.7, 0.05, bedM, 0, 0.75, -1.0, bed);
     for (const x of [-0.45, 0.45]) for (const z of [-0.95, 0.95]) box(0.05, 0.55, 0.05, bedM, x, 0.27, z, bed);
     // bedside table
@@ -268,12 +283,277 @@ export const Room104: React.FC<Props> = ({ look, lamps, lampColor, trophies, rar
       scene.add(fire);
     }
 
+    // ---- 🎉 event decors ----
+    const anim: ((s: number, dt: number) => void)[] = [];
+    if (isSeason(theme) && theme !== 'chevaliers') {
+      const info = SEASON_INFO[theme];
+      // a garland of blinking bulbs along the walls
+      const bulbs = info.bulbs.map((c) => t(new THREE.MeshBasicMaterial({ color: new THREE.Color(c) })));
+      const bulbGeo = t(new THREE.SphereGeometry(0.045, 8, 6));
+      const garland: THREE.Mesh[] = [];
+      for (let i = 0; i < 26; i++) {
+        const x = -2.9 + i * 0.232;
+        const b = new THREE.Mesh(bulbGeo, bulbs[i % bulbs.length]);
+        b.position.set(x, 2.72 - Math.abs(Math.sin(i * 0.9)) * 0.12, -RD / 2 + 0.05);
+        scene.add(b);
+        garland.push(b);
+      }
+      anim.push((s) => garland.forEach((b, i) => (b.visible = Math.sin(s * 3 + i * 1.7) > -0.4)));
+      // treats (sweets, eggs, hearts, fish…) here and there
+      const spots: [number, number][] = [
+        [-1.2, 1.5],
+        [1.0, 1.6],
+        [-0.7, -1.5],
+        [2.1, 1.2],
+        [-2.6, 0.9],
+        [0.7, -0.5],
+        [-1.6, 0.3],
+        [1.7, 0.4],
+      ];
+      const treats = spots.map(([x, z], i) => {
+        const m = buildTreatModel(theme, t);
+        m.scale.setScalar(2.2);
+        m.position.set(x, 0.18, z);
+        m.rotation.y = i;
+        scene.add(m);
+        return m;
+      });
+      anim.push((s) => treats.forEach((m, i) => (m.position.y = 0.18 + Math.sin(s * 1.5 + i) * 0.04)));
+
+      if (theme === 'noel') {
+        // a Christmas tree in the corner, presents underneath, snow behind the window
+        const tree = new THREE.Group();
+        tree.position.set(-2.45, 0, 1.7);
+        scene.add(tree);
+        const green = mat(0x1f5a2a, { roughness: 0.9 });
+        [0.75, 0.6, 0.45].forEach((r, i) => {
+          const c = new THREE.Mesh(t(new THREE.ConeGeometry(r, 0.8, 12)), green);
+          c.position.y = 0.6 + i * 0.5;
+          tree.add(c);
+        });
+        const star = new THREE.Mesh(t(new THREE.OctahedronGeometry(0.12)), t(new THREE.MeshBasicMaterial({ color: 0xffe060 })));
+        star.position.y = 1.85;
+        tree.add(star);
+        const tb: THREE.Mesh[] = [];
+        for (let i = 0; i < 18; i++) {
+          const lvl = i % 3;
+          const a = i * 2.1;
+          const r = [0.62, 0.48, 0.34][lvl];
+          const b = new THREE.Mesh(bulbGeo, bulbs[i % bulbs.length]);
+          b.position.set(Math.cos(a) * r, 0.4 + lvl * 0.5, Math.sin(a) * r);
+          tree.add(b);
+          tb.push(b);
+        }
+        anim.push((s) => {
+          star.rotation.y = s;
+          tb.forEach((b, i) => (b.visible = Math.sin(s * 2 + i) > -0.5));
+        });
+        for (let i = 0; i < 3; i++) {
+          const p = buildPresentModel(t);
+          p.scale.setScalar(1.4);
+          p.position.set(-2.1 + i * 0.35, 0, 1.2 + (i % 2) * 0.3);
+          p.rotation.y = i;
+          scene.add(p);
+        }
+        const flakes: THREE.Mesh[] = [];
+        const snowM = t(new THREE.MeshBasicMaterial({ color: 0xffffff }));
+        const snowG = t(new THREE.SphereGeometry(0.02, 6, 4));
+        for (let i = 0; i < 40; i++) {
+          const f = new THREE.Mesh(snowG, snowM);
+          f.position.set(-2.2 + Math.random() * 1.2, 1.2 + Math.random() * 1.1, -RD / 2 + 0.03);
+          scene.add(f);
+          flakes.push(f);
+        }
+        anim.push((_s, dt) =>
+          flakes.forEach((f) => {
+            f.position.y -= dt * 0.25;
+            if (f.position.y < 1.22) f.position.y = 2.28;
+          })
+        );
+      } else if (theme === 'halloween') {
+        // glowing pumpkins, candles, cobwebs and bats under the ceiling
+        const pumpkin = (x: number, y: number, z: number, k: number) => {
+          const g = new THREE.Group();
+          g.position.set(x, y, z);
+          g.scale.setScalar(k);
+          scene.add(g);
+          const body = new THREE.Mesh(t(new THREE.SphereGeometry(0.25, 14, 10)), mat(0xff7a00, { emissive: 0x6a2a00, emissiveIntensity: 0.6 }));
+          body.scale.y = 0.8;
+          body.position.y = 0.2;
+          g.add(body);
+          const stem = new THREE.Mesh(t(new THREE.CylinderGeometry(0.03, 0.04, 0.1, 6)), mat(0x3a5a1a));
+          stem.position.y = 0.42;
+          g.add(stem);
+          const face = t(new THREE.MeshBasicMaterial({ color: 0xffe060 }));
+          for (const sx of [-0.08, 0.08]) {
+            const eye = new THREE.Mesh(t(new THREE.ConeGeometry(0.04, 0.06, 3)), face);
+            eye.position.set(sx, 0.26, 0.23);
+            eye.rotation.x = Math.PI / 2;
+            g.add(eye);
+          }
+          const mouth = new THREE.Mesh(t(new THREE.BoxGeometry(0.16, 0.03, 0.02)), face);
+          mouth.position.set(0, 0.14, 0.235);
+          g.add(mouth);
+        };
+        pumpkin(-2.5, 0, 1.5, 1.4);
+        pumpkin(2.4, 0, 1.5, 1.1);
+        pumpkin(-2.3, 0.72, -1.95, 0.6);
+        const glow = new THREE.PointLight(0xff8a20, 4, 4, 1.5);
+        glow.position.set(-2.3, 0.6, 1.3);
+        scene.add(glow);
+        anim.push((s) => (glow.intensity = 3.5 + Math.sin(s * 9) * 0.6 + Math.sin(s * 23) * 0.4));
+        const webTex = canvasTex(128, 128, (g) => {
+          g.strokeStyle = 'rgba(230,230,230,0.7)';
+          g.lineWidth = 1.5;
+          for (let a = 0; a < 6; a++) {
+            g.beginPath();
+            g.moveTo(0, 0);
+            g.lineTo(Math.cos((a * Math.PI) / 10) * 128, Math.sin((a * Math.PI) / 10) * 128);
+            g.stroke();
+          }
+          for (let r = 20; r < 128; r += 20) {
+            g.beginPath();
+            g.arc(0, 0, r, 0, Math.PI / 2);
+            g.stroke();
+          }
+        });
+        for (const sx of [-1, 1]) {
+          const web = new THREE.Mesh(t(new THREE.PlaneGeometry(1, 1)), t(new THREE.MeshBasicMaterial({ map: webTex, transparent: true, depthWrite: false })));
+          web.position.set(sx * 2.5, RH - 0.5, -RD / 2 + 0.02);
+          web.scale.x = -sx;
+          web.rotation.z = Math.PI;
+          scene.add(web);
+        }
+        const batM = mat(0x0a0a0a, { side: THREE.DoubleSide });
+        const bats = [0, 1, 2].map((i) => {
+          const g = new THREE.Group();
+          for (const sx of [-1, 1]) {
+            const w = new THREE.Mesh(t(new THREE.PlaneGeometry(0.22, 0.1)), batM);
+            w.position.x = sx * 0.11;
+            g.add(w);
+          }
+          g.userData.ph = i * 2.1;
+          scene.add(g);
+          return g;
+        });
+        anim.push((s) =>
+          bats.forEach((b) => {
+            const a = s * 0.7 + b.userData.ph;
+            b.position.set(Math.cos(a) * 1.8, 2.5 + Math.sin(a * 2) * 0.15, Math.sin(a) * 1.2 - 0.3);
+            b.rotation.y = -a;
+            (b.children as THREE.Mesh[]).forEach((w, k) => (w.rotation.y = (k ? 1 : -1) * Math.sin(s * 18) * 0.7));
+          })
+        );
+      } else if (theme === 'valentin') {
+        // floating hearts and rose petals
+        const sh = new THREE.Shape();
+        const r = 0.12;
+        sh.moveTo(0, -r);
+        sh.bezierCurveTo(r * 1.3, -r * 0.1, r * 1.1, r * 1.1, 0, r * 0.45);
+        sh.bezierCurveTo(-r * 1.1, r * 1.1, -r * 1.3, -r * 0.1, 0, -r);
+        const hg = t(new THREE.ExtrudeGeometry(sh, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2 }));
+        hg.center();
+        const hm = mat(0xff2a6a, { emissive: 0x8a0020, emissiveIntensity: 0.6, roughness: 0.3 });
+        const hearts = Array.from({ length: 10 }, (_, i) => {
+          const h = new THREE.Mesh(hg, hm);
+          h.position.set(-2.4 + (i % 5) * 1.2, 1.9 + (i % 3) * 0.25, -1.6 + Math.floor(i / 5) * 2.4);
+          h.userData.ph = i;
+          scene.add(h);
+          return h;
+        });
+        anim.push((s) =>
+          hearts.forEach((h) => {
+            h.position.y += Math.sin(s * 1.2 + h.userData.ph) * 0.002;
+            h.rotation.y = s + h.userData.ph;
+          })
+        );
+        const petalM = mat(0xc8102e, { side: THREE.DoubleSide });
+        const petalG = t(new THREE.CircleGeometry(0.05, 6));
+        for (let i = 0; i < 40; i++) {
+          const p = new THREE.Mesh(petalG, petalM);
+          p.rotation.set(-Math.PI / 2, 0, Math.random() * 6);
+          p.position.set((Math.random() - 0.5) * 5, 0.01, (Math.random() - 0.3) * 3.5);
+          scene.add(p);
+        }
+        // two heart balloons tied to the bed
+        for (const [x, z, c] of [
+          [-1.55, -1.5, 0xff2a6a],
+          [-1.5, 0.3, 0xffffff],
+        ] as const) {
+          const b = new THREE.Mesh(hg, mat(c, { roughness: 0.25 }));
+          b.scale.setScalar(2.2);
+          b.position.set(x, 2.1, z);
+          scene.add(b);
+          const str = new THREE.Mesh(t(new THREE.CylinderGeometry(0.004, 0.004, 1.3, 4)), mat(0xdddddd));
+          str.position.set(x, 1.35, z);
+          scene.add(str);
+          anim.push((s) => (b.rotation.z = Math.sin(s + x) * 0.15));
+        }
+      } else if (theme === 'paques') {
+        // a basket of eggs and tulips along the wall
+        const basket = new THREE.Mesh(t(new THREE.CylinderGeometry(0.35, 0.25, 0.3, 14, 1, true)), mat(0x9a6a32, { side: THREE.DoubleSide }));
+        basket.position.set(-2.45, 0.15, 1.6);
+        scene.add(basket);
+        for (let i = 0; i < 6; i++) {
+          const e = buildTreatModel('paques', t);
+          e.scale.setScalar(2);
+          e.position.set(-2.45 + Math.cos(i) * 0.15, 0.32, 1.6 + Math.sin(i) * 0.15);
+          scene.add(e);
+        }
+        const tulipC = [0xf472b6, 0xfacc15, 0xa78bfa, 0xf87171];
+        for (let i = 0; i < 10; i++) {
+          const x = -2.7 + i * 0.6;
+          const stem = new THREE.Mesh(t(new THREE.CylinderGeometry(0.012, 0.012, 0.4, 5)), mat(0x3a8a2a));
+          stem.position.set(x, 0.2, -RD / 2 + 0.15);
+          scene.add(stem);
+          const fl = new THREE.Mesh(t(new THREE.ConeGeometry(0.06, 0.12, 6)), mat(tulipC[i % 4], { emissive: tulipC[i % 4], emissiveIntensity: 0.2 }));
+          fl.position.set(x, 0.45, -RD / 2 + 0.15);
+          fl.rotation.x = Math.PI;
+          scene.add(fl);
+        }
+      } else if (theme === 'poisson') {
+        // a fishbowl on the bedside table, paper fish on the walls, bubbles
+        const bowl = new THREE.Mesh(t(new THREE.SphereGeometry(0.25, 18, 14)), t(new THREE.MeshStandardMaterial({ color: 0x88ccff, transparent: true, opacity: 0.25, roughness: 0.05 })));
+        bowl.position.set(-2.1, 0.97, -1.95);
+        scene.add(bowl);
+        const fish = buildTreatModel('poisson', t);
+        fish.scale.setScalar(1.3);
+        scene.add(fish);
+        anim.push((s) => {
+          fish.position.set(-2.1 + Math.cos(s) * 0.1, 0.97, -1.95 + Math.sin(s) * 0.1);
+          fish.rotation.y = -s;
+        });
+        for (let i = 0; i < 6; i++) {
+          const f = buildTreatModel('poisson', t);
+          f.scale.setScalar(3.5);
+          const left = i < 3;
+          f.position.set(left ? -2.97 : 2.97, 1.3 + (i % 3) * 0.45, -1.6 + (i % 3) * 1.1);
+          f.rotation.set(0, left ? Math.PI / 2 : -Math.PI / 2, (i - 2) * 0.4);
+          scene.add(f);
+        }
+        const bubM = t(new THREE.MeshStandardMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.5, roughness: 0.05 }));
+        const bubG = t(new THREE.SphereGeometry(0.03, 8, 6));
+        const bubbles = Array.from({ length: 24 }, () => {
+          const b = new THREE.Mesh(bubG, bubM);
+          b.position.set((Math.random() - 0.5) * 5, Math.random() * RH, (Math.random() - 0.5) * 3);
+          scene.add(b);
+          return b;
+        });
+        anim.push((_s, dt) =>
+          bubbles.forEach((b) => {
+            b.position.y += dt * 0.35;
+            if (b.position.y > RH) b.position.y = 0;
+          })
+        );
+      }
+    }
+
     // ---- light: a flickering neon tube, and your lamp's spotlight on you ----
-    scene.add(new THREE.HemisphereLight(castle ? 0x8a6a4a : 0x9aa8a0, 0x141210, 1.1));
-    const neon = new THREE.PointLight(castle ? 0xffa050 : 0xe8fff0, 7, 9, 1.4);
+    scene.add(new THREE.HemisphereLight(TH?.hemi ?? (castle ? 0x8a6a4a : 0x9aa8a0), 0x141210, 1.1));
+    const neon = new THREE.PointLight(TH?.neon ?? (castle ? 0xffa050 : 0xe8fff0), 7, 9, 1.4);
     neon.position.set(0, RH - 0.25, 0);
     scene.add(neon);
-    box(1.2, 0.05, 0.12, t(new THREE.MeshBasicMaterial({ color: castle ? 0xffb060 : 0xf0fff4 })), 0, RH - 0.03, 0);
+    box(1.2, 0.05, 0.12, t(new THREE.MeshBasicMaterial({ color: TH?.neon ?? (castle ? 0xffb060 : 0xf0fff4) })), 0, RH - 0.03, 0);
     const spot = new THREE.SpotLight(lampColor, 40, 8, Math.PI / 7, 0.5, 1.5);
     spot.position.set(0.6, RH - 0.2, 2.2);
     spot.target.position.set(0, 0.9, 0.3);
@@ -281,7 +561,7 @@ export const Room104: React.FC<Props> = ({ look, lamps, lampColor, trophies, rar
     scene.add(spot, spot.target);
 
     // ---- you and your creature ----
-    const rug = new THREE.Mesh(t(new THREE.CircleGeometry(0.75, 32)), mat(castle ? 0x6a1018 : 0x7a1414, { roughness: 1 }));
+    const rug = new THREE.Mesh(t(new THREE.CircleGeometry(0.75, 32)), mat(TH?.rug ?? (castle ? 0x6a1018 : 0x7a1414), { roughness: 1 }));
     rug.rotation.x = -Math.PI / 2;
     rug.position.set(0, 0.005, 0.4);
     scene.add(rug);
@@ -307,6 +587,7 @@ export const Room104: React.FC<Props> = ({ look, lamps, lampColor, trophies, rar
       human.idle(dt);
       human.group.rotation.y = Math.sin(s * 0.4) * 0.5;
       monster.tickFx(dt);
+      anim.forEach((f) => f(s, dt));
       // the neon tube flickers now and then
       flick -= dt;
       if (flick <= 0) {
@@ -336,13 +617,13 @@ export const Room104: React.FC<Props> = ({ look, lamps, lampColor, trophies, rar
       models.current = null;
     };
     // the room is rebuilt when what's on display changes
-  }, [lamps.join(','), trophies, rare.join(','), castle]);
+  }, [lamps.join(','), trophies, rare.join(','), theme]);
 
   useEffect(() => {
     models.current?.human.applyLook(look.human);
     models.current?.monster.applyLook(look.monster);
     models.current?.spot.color.setHex(lampColor);
-  }, [look, lampColor, lamps.join(','), trophies, rare.join(','), castle]);
+  }, [look, lampColor, lamps.join(','), trophies, rare.join(','), theme]);
 
   return <div ref={mount} className="w-full h-[300px] sm:h-[400px] border-4 border-black" />;
 };

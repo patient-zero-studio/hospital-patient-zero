@@ -50,7 +50,9 @@ export const SecretRoom: React.FC<Props> = ({ name, token, room3d = false, onClo
     api.roomVisit(token, name).then(setVisit).catch(() => undefined);
   }, [name, token]);
 
-  const castle = !!p?.castle;
+  /** the room decor chosen in Personnaliser */
+  const theme = p?.look.human.room ?? '';
+  const castle = theme === 'castle';
   const lamp = p?.look.human.lamp && LAMPS[p.look.human.lamp] ? hex(LAMPS[p.look.human.lamp].color) : '#fff1dc';
   const rare = (p?.rare ?? []).map((id) => cosmetic(id)).filter((c): c is NonNullable<typeof c> => !!c);
   const lamps = (p?.lamps ?? []).map((id) => cosmetic(id)).filter((c): c is NonNullable<typeof c> => !!c);
@@ -133,7 +135,7 @@ export const SecretRoom: React.FC<Props> = ({ name, token, room3d = false, onClo
                 lamps={lamps.map((c) => LAMPS[c.value]?.color ?? 0xfff1dc)}
                 trophies={(p.trophies?.length ?? 0) + ((p.records ?? []).some((r) => r.rank === 1) ? 1 : 0)}
                 rare={rare.map((c) => rarityColor(c))}
-                castle={castle}
+                theme={theme}
               />
               ) : (
                 <div className="flex justify-center">

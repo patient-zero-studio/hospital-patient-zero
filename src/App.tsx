@@ -1768,6 +1768,7 @@ export default function App() {
           username={session.username}
           initial={look}
           owned={wallet?.wallet.owned ?? []}
+          rooms={knightsOpen}
           onOpenShop={() => {
             setCustomize(null);
             setShopOpen(true);

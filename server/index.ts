@@ -393,9 +393,15 @@ const reportAch = (u: User, unlock: unknown, stats: unknown, trusted: Partial<Re
   }
   grantStorySkins(u);
   // 🏰 became « Sire » during the Tournoi: the castle room (limited edition)
-  if (currentSeason() === 'chevaliers' && isSire(u)) u.castleRoom = true;
+  if (currentSeason() === 'chevaliers' && isSire(u)) giveCastle(u);
   return newly.map((a: AchDef) => a.id);
 };
+/** 🏰 the castle decor for the secret room (a Sire during the Tournoi) */
+function giveCastle(u: User) {
+  u.castleRoom = true;
+  const w = walletOf(u);
+  if (!w.owned.includes('r-castle')) w.owned.push('r-castle');
+}
 /** 🏆 Boss beaten / secret chapter finished: their skins (once) */
 function grantStorySkins(u: User) {
   const done = achOf(u).done;
@@ -709,7 +715,7 @@ app.post('/api/run', (req, res) => {
       user.inbox = [...(user.inbox ?? []), { from: 'Patient Zero', text: '⚔️ Tu es sorti du Donjon pendant le Tournoi ! Tu gagnes les skins « Chevalier Noir » et « Patient Zéro Chevalier » (édition limitée), et la musique « Le Donjon ».', at: Date.now() }].slice(-20);
     }
     if (!(user.tracks ?? []).includes('donjon')) user.tracks = [...(user.tracks ?? []), 'donjon'];
-    if (isSire(user)) user.castleRoom = true;
+    if (isSire(user)) giveCastle(user);
   }
 
   let challengeWon = 0;
