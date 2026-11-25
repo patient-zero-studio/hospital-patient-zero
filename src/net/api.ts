@@ -36,6 +36,8 @@ export interface WalletView {
   dailyAvailable?: boolean;
   /** consecutive days (1..7) */
   dailyStreak?: number;
+  /** 🎡 free wheel spin not used yet today */
+  wheelAvailable?: boolean;
   /** achievements unlocked + counters */
   ach?: AchState;
   /** achievements unlocked by this very request */
@@ -354,6 +356,7 @@ export const api = {
   claimPass: (token: string, tier: number): Promise<WalletView & { result: BoxResult }> => post('/api/pass/claim', { tier }, token),
   xmasReward: (token: string, presents: number): Promise<WalletView & { message: string }> => post('/api/event/xmas', { presents }, token),
   claimDaily: (token: string): Promise<WalletView & { result: BoxResult }> => post('/api/shop/daily', {}, token),
+  spinWheel: (token: string): Promise<WalletView & { index: number; result: BoxResult }> => post('/api/shop/wheel', {}, token),
   /** Event treats picked up during a run (sent when it ends, win or lose). */
   addTreats: (token: string, count: number, chests = 0): Promise<WalletView & { added: number }> => post('/api/event/treats', { count, chests }, token),
   openEventBox: (token: string): Promise<WalletView & { result: BoxResult }> => post('/api/event/box', {}, token),

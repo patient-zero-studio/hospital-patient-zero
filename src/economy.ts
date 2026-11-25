@@ -479,6 +479,58 @@ export const rollDailyGift = (w: Wallet, streak: number, rnd: () => number = Mat
   return { kind: 'coins', coins: n, text: `${n} pièces` };
 };
 
+// ---------------------------------------------------------------------------
+// 🎡 Wheel of fortune: one free spin a day
+// ---------------------------------------------------------------------------
+export interface WheelSlice {
+  label: string;
+  color: string;
+  /** chance weight */
+  w: number;
+  coins?: number;
+  supply?: boolean;
+  skin?: boolean;
+}
+export const WHEEL: WheelSlice[] = [
+  { label: '10 🪙', color: '#3f3f46', w: 22, coins: 10 },
+  { label: '🎒 Objet', color: '#1d4ed8', w: 14, supply: true, coins: 10 },
+  { label: '30 🪙', color: '#52525b', w: 20, coins: 30 },
+  { label: '75 🪙', color: '#7c3aed', w: 12, coins: 75 },
+  { label: '20 🪙', color: '#3f3f46', w: 18, coins: 20 },
+  { label: '🎽 Skin', color: '#db2777', w: 4, skin: true },
+  { label: '150 🪙', color: '#b45309', w: 6, coins: 150 },
+  { label: '💰 500', color: '#ca8a04', w: 2, coins: 500 },
+];
+
+/** Spins the wheel (mutates the wallet): which slice, and what you won. */
+export const spinWheel = (w: Wallet, rnd: () => number = Math.random): { index: number; result: BoxResult } => {
+  const total = WHEEL.reduce((a, s) => a + s.w, 0);
+  let r = rnd() * total;
+  let index = 0;
+  while (index < WHEEL.length - 1 && r >= WHEEL[index].w) r -= WHEEL[index++].w;
+  const s = WHEEL[index];
+  if (s.skin) {
+    const pool = REGULAR.filter((x) => (x.tier === 'petit' || x.tier === 'moyen') && !w.owned.includes(x.id));
+    if (pool.length) {
+      const skin = pool[Math.floor(rnd() * pool.length)];
+      w.owned.push(skin.id);
+      return { index, result: { kind: 'skin', skin: skin.id, text: `${skin.name} — ${rarityLabel(skin)} !` } };
+    }
+    w.coins += 120;
+    return { index, result: { kind: 'coins', coins: 120, text: '120 pièces (tu as déjà tous les skins de la roue)' } };
+  }
+  if (s.supply) {
+    const kinds: SupplyKind[] = ['battery', 'medkit', 'sedative', 'food', 'alarm', 'smoke', 'trap'];
+    const k = kinds[Math.floor(rnd() * kinds.length)];
+    w.stash[k] += 1;
+    w.coins += s.coins ?? 0;
+    return { index, result: { kind: 'supplies', supplies: { [k]: 1 }, coins: s.coins, text: `${s.coins} pièces + 1× ${SUPPLY_NAMES[k]} (à récupérer auprès du SDF)` } };
+  }
+  const n = s.coins ?? 0;
+  w.coins += n;
+  return { index, result: { kind: 'coins', coins: n, text: n >= 500 ? `JACKPOT ! ${n} pièces !` : `${n} pièces` } };
+};
+
 /** Buys one of today's offers (or an event item during its event). Returns an error message, or null on success. */
 export const buyCosmetic = (w: Wallet, id: string, key = todayKey(), season: Season | null = null): string | null => {
   const item = cosmetic(id);

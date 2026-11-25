@@ -1105,6 +1105,10 @@ export default function App() {
     showNewAch(r.newAch);
     return r.result;
   };
+  const spinWheel = async () => {
+    const r = await api.spinWheel(tokenOrThrow());
+    return { index: r.index, result: r.result, apply: () => setWallet(r) };
+  };
   const claimAdvent = async (day: number) => {
     const r = await api.claimAdvent(tokenOrThrow(), day);
     setWallet(r);
@@ -1869,6 +1873,7 @@ export default function App() {
           onBuy={buyCosmetic}
           onOpenBox={openBox}
           onClaimDaily={claimDaily}
+          onSpinWheel={spinWheel}
           onClaimAdvent={claimAdvent}
           onOpenEventBox={openEventBox}
           onExplore={

@@ -26,6 +26,7 @@ import {
   todayKey,
   INFINITE_COINS,
   rollDailyGift,
+  spinWheel,
   ADVENT,
   claimAdvent,
   seasonShop,
@@ -96,6 +97,8 @@ interface User {
   shopUnlocked?: boolean;
   /** last treats banked (anti-spam) */
   lastTreats?: number;
+  /** 🎡 day of the last wheel spin */
+  lastWheel?: string;
   /** Experience points (player level) */
   xp?: number;
   /** last XP for a lost run (anti-spam) */
@@ -540,6 +543,7 @@ const walletView = (u: User) => ({
   nextReset: nextReset(),
   admin: isAdmin(u),
   dailyAvailable: u.lastGift !== todayKey(),
+  wheelAvailable: u.lastWheel !== todayKey(),
   /** streak the next gift will count (or the current one if already opened today) */
   dailyStreak: u.lastGift === todayKey() ? (u.giftStreak ?? 1) : nextStreak(u),
 });
@@ -565,6 +569,18 @@ app.post('/api/shop/daily', (req, res) => {
   const newAch = reportAch(user, [], {}, { boxes: 1 });
   saveUsers();
   res.json({ result, newAch, ...walletView(user) });
+});
+
+// 🎡 Wheel of fortune, one free spin a day
+app.post('/api/shop/wheel', (req, res) => {
+  const user = authUser(req);
+  if (!user) return res.status(401).json({ error: 'Session expirée.' });
+  if (!shopOpenFor(user)) return res.status(403).json({ error: SHOP_LOCKED });
+  if (user.lastWheel === todayKey()) return res.status(400).json({ error: "Tu as déjà tourné la roue aujourd'hui. Reviens demain !" });
+  const { index, result } = spinWheel(walletOf(user));
+  user.lastWheel = todayKey();
+  saveUsers();
+  res.json({ index, result, ...walletView(user) });
 });
 
 // ---------------------------------------------------------------------------

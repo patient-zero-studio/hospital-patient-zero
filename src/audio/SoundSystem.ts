@@ -669,6 +669,24 @@ class SoundSystem {
     return this.settings.masterVolume * this.settings.sfxVolume;
   }
 
+  /** 🎡 Wheel tick: a short plastic click */
+  public playWheelTick() {
+    if (!this.ctx || !this.sfxGain) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(1800, t);
+    o.frequency.exponentialRampToValueAtTime(600, t + 0.03);
+    g.gain.setValueAtTime(0.06, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+    o.connect(g);
+    g.connect(this.sfxGain);
+    o.start(t);
+    o.stop(t + 0.05);
+  }
+
   /** 🎁 A chest shaking: a dull wooden thump with a little metal rattle. */
   public playChestRattle(strength = 0.5) {
     if (!this.ctx || !this.sfxGain) return;

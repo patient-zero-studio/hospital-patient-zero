@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Coins, Crown, Gift, Loader2, ShoppingBag, Sparkles, X } from 'lucide-react';
 import { ADVENT, BOXES, EVENT_BOX_PRICE, TREATS_PER_CHEST, BoxId, BoxResult, CATALOG, Cosmetic, TIER_COLOR, TIER_LABEL, TIER_PRICE, cosmetic, fmtCoins, isLegendary, rarityColor, rarityLabel } from '../economy';
 import { ChestReveal } from './ChestReveal';
+import { WheelSpin } from './WheelSpin';
 import { api, AdminUser, Boost, BoostKind, WalletView } from '../net/api';
 import { SEASON_INFO, Season, SeasonSetting } from '../seasons';
 import { AdminDashboard } from './AdminDashboard';
@@ -247,6 +248,8 @@ interface Props {
   onOpenBox: (box: BoxId) => Promise<BoxResult>;
   /** free gift of the day */
   onClaimDaily?: () => Promise<BoxResult>;
+  /** 🎡 free daily wheel spin */
+  onSpinWheel?: () => Promise<{ index: number; result: BoxResult; apply: () => void }>;
   /** 🎄 advent calendar box of the day */
   onClaimAdvent?: (day: number) => Promise<BoxResult>;
   /** admin: start / stop an event for everyone */
@@ -354,12 +357,13 @@ const AdminPanel: React.FC<{ token: string }> = ({ token }) => {
 };
 
 /** Cosmetics shop: today's offers (change every day) and mystery boxes. */
-export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, onClaimDaily, onClaimAdvent, onSetSeason, onExplore, onOpenEventBox, onBoost, onLogin, onCustomize, onClose, token, look }) => {
+export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, onClaimDaily, onSpinWheel, onClaimAdvent, onSetSeason, onExplore, onOpenEventBox, onBoost, onLogin, onCustomize, onClose, token, look }) => {
   const [trying, setTrying] = useState<Cosmetic | null>(null);
   const season: Season | null = wallet?.season ?? null;
   const [tab, setTab] = useState<'event' | 'shop' | 'boxes' | 'mine' | 'admin'>(season ? 'event' : 'shop');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [wheelOpen, setWheelOpen] = useState(false);
   const [reveal, setReveal] = useState<{ box: BoxId | 'daily' | 'advent' | 'event'; result: BoxResult | null } | null>(null);
   // The event can start / stop while the shop is open (admin switch)
   useEffect(() => {
@@ -584,6 +588,34 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
                 )}
               </div>
             )}
+            {/* 🎡 Wheel of fortune */}
+            {onSpinWheel && (
+              <div
+                className={`flex items-center gap-3 p-3 mb-3 border ${
+                  wallet.wheelAvailable ? 'border-fuchsia-500 bg-fuchsia-950/30 shadow-[0_0_24px_rgba(217,70,239,0.25)]' : 'border-zinc-800 bg-black/40'
+                }`}
+              >
+                <div className={`text-3xl ${wallet.wheelAvailable ? 'animate-spin [animation-duration:4s]' : 'grayscale opacity-50'}`}>🎡</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-zinc-100">Roue de la chance</div>
+                  <div className="text-[10px] font-mono text-zinc-400">Un tour gratuit par jour : pièces, objets, skins… et le jackpot de 500 🪙 !</div>
+                </div>
+                {wallet.wheelAvailable ? (
+                  <button
+                    disabled={!!busy}
+                    onClick={() => setWheelOpen(true)}
+                    className="px-4 py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-black font-mono text-xs uppercase tracking-widest font-bold"
+                  >
+                    Tourner
+                  </button>
+                ) : (
+                  <span className="text-[10px] font-mono text-zinc-500 text-right">
+                    Tournée ✓<br />Prochaine dans {fmtCountdown(wallet.nextReset - now)}
+                  </span>
+                )}
+              </div>
+            )}
+            {wheelOpen && onSpinWheel && <WheelSpin onSpin={onSpinWheel} onClose={() => setWheelOpen(false)} />}
             <p className="text-[11px] font-mono text-zinc-500 mb-3">
               🪙 Sortez de l'hôpital pour gagner des pièces (20 à 40 selon la difficulté, + les pièces trouvées). Rien en Exploration.
             </p>
