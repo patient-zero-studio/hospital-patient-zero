@@ -1674,6 +1674,7 @@ export default function App() {
           donjonOpen={knightsOpen}
           achHidden={knightsOpen ? 0 : KNIGHTS_ACHS.length}
           sire={!!wallet?.sire}
+          onMyProfile={session ? () => setProfileOf(session.username) : undefined}
           newsUnseen={!newsSeen}
           onGallery={session ? () => setGalleryOpen(true) : undefined}
           onBestiary={session ? () => setBestiaryOpen(true) : undefined}
@@ -2004,6 +2005,14 @@ export default function App() {
           token={session.token}
           onAddFriend={(n) => friendAct((t) => api.friendAdd(t, n))}
           onRoom={(n) => setRoomOf(n)}
+          onCustomize={() => {
+            setProfileOf(null);
+            setCustomize('edit');
+          }}
+          onLogout={() => {
+            setProfileOf(null);
+            logout();
+          }}
           onClose={() => setProfileOf(null)}
         />
       )}

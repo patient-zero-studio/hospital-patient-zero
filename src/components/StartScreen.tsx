@@ -103,6 +103,8 @@ interface StartScreenProps {
   onNews?: () => void;
   /** 👑 the title « Sire » (King's quests done) */
   sire?: boolean;
+  /** 👤 your own profile (click on your name) */
+  onMyProfile?: () => void;
   /** 🔒 chapter 10 (Knights' update) visible */
   donjonOpen?: boolean;
   /** achievements not shown yet (count) */
@@ -245,6 +247,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onMusic,
   onNews,
   sire,
+  onMyProfile,
   donjonOpen = false,
   achHidden = 0,
   newsUnseen,
@@ -540,7 +543,12 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                 </span>
               )}
             </button>
-            <div className="min-w-0">
+            <div
+              className={`min-w-0 ${onMyProfile ? 'cursor-pointer hover:opacity-80' : ''}`}
+              onClick={onMyProfile}
+              title={onMyProfile ? 'Voir mon profil (et me déconnecter)' : undefined}
+              role={onMyProfile ? 'button' : undefined}
+            >
               <div data-no-i18n className="font-game outl text-[18px] leading-tight max-w-[140px] truncate">
                 {username && sire ? <span className="text-amber-300">Sire </span> : null}
                 {username ?? 'Invité'}

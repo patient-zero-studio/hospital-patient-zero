@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, UserPlus, X } from 'lucide-react';
+import { Loader2, LogOut, UserPlus, X } from 'lucide-react';
 import { ClanBadge } from './ClansPanel';
 import { RankBadge } from './RankedMenu';
 import { api, PlayerProfileView } from '../net/api';
@@ -14,11 +14,13 @@ const DIFF = ['', 'Exploration', 'Normal', 'Difficile', 'Cauchemar', 'Enfer'];
 const STATUS: Record<string, [string, string]> = { playing: ['#f59e0b', 'En partie'], online: ['#22c55e', 'En ligne'], offline: ['#71717a', 'Hors ligne'] };
 
 /** 👤 Someone's public card: level, records, achievements, how they look. */
-export const PlayerProfile: React.FC<{ name: string; token: string; onAddFriend?: (name: string) => Promise<string | undefined>; onRoom?: (name: string) => void; onClose: () => void }> = ({
+export const PlayerProfile: React.FC<{ name: string; token: string; onAddFriend?: (name: string) => Promise<string | undefined>; onRoom?: (name: string) => void; onCustomize?: () => void; onLogout?: () => void; onClose: () => void }> = ({
   name,
   token,
   onAddFriend,
   onRoom,
+  onCustomize,
+  onLogout,
   onClose,
 }) => {
   const [p, setP] = useState<PlayerProfileView | null>(null);
@@ -65,6 +67,49 @@ export const PlayerProfile: React.FC<{ name: string; token: string; onAddFriend?
                 </div>
               </div>
             </div>
+            {(() => {
+              const best = [...p.records].sort((a, b) => a.time - b.time)[0];
+              const [bc, bd] = best ? best.board.split('-') : ['', ''];
+              return (
+                <div className="mb-3 grid grid-cols-2 gap-1.5 text-[11px] font-mono">
+                  <div className="px-2 py-1.5 border border-zinc-800 bg-black/40">
+                    <div className="text-zinc-500 uppercase text-[9px]">⭐ Niveau</div>
+                    <div className="text-zinc-100 font-bold" style={{ color: levelColor(p.level.level) }}>
+                      {p.level.level}
+                      {p.level.need > 0 && <span className="text-zinc-500 font-normal"> · {p.level.into}/{p.level.need} XP</span>}
+                    </div>
+                  </div>
+                  <div className="px-2 py-1.5 border border-zinc-800 bg-black/40">
+                    <div className="text-zinc-500 uppercase text-[9px]">🏅 Classé</div>
+                    <div className="text-zinc-100 font-bold flex items-center gap-1">
+                      {p.ranked ? (
+                        <>
+                          <RankBadge tier={p.ranked.tier} /> {p.ranked.points} pts
+                        </>
+                      ) : (
+                        '—'
+                      )}
+                    </div>
+                  </div>
+                  <div className="px-2 py-1.5 border border-zinc-800 bg-black/40">
+                    <div className="text-zinc-500 uppercase text-[9px]">⏱️ Meilleure sortie</div>
+                    <div className="text-amber-300 font-bold">
+                      {best ? (
+                        <>
+                          {fmtTime(best.time)} <span className="text-zinc-500 font-normal">· {BOARD_NAMES[bc] ?? bc} {DIFF[Number(bd)] ?? ''}</span>
+                        </>
+                      ) : (
+                        <span className="text-zinc-500 font-normal">pas encore</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="px-2 py-1.5 border border-zinc-800 bg-black/40">
+                    <div className="text-zinc-500 uppercase text-[9px]">📅 Compte créé le</div>
+                    <div className="text-zinc-100 font-bold">{p.since ? new Date(p.since).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</div>
+                  </div>
+                </div>
+              );
+            })()}
             <div className="grid grid-cols-4 gap-1.5 mb-4 text-center">
               {[
                 ['🚪', p.stats.escapes ?? 0, 'sorties'],
@@ -143,6 +188,25 @@ export const PlayerProfile: React.FC<{ name: string; token: string; onAddFriend?
               </button>
             )}
             {p.friend && <p className="text-xs font-mono text-emerald-400 text-center">🤝 Vous êtes amis</p>}
+            {p.me && (onCustomize || onLogout) && (
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                {onCustomize && (
+                  <button onClick={onCustomize} className="py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-mono text-xs uppercase tracking-widest">
+                    👕 Personnaliser
+                  </button>
+                )}
+                {onLogout && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Te déconnecter de ce compte ?')) onLogout();
+                    }}
+                    className="py-2 bg-red-800 hover:bg-red-700 text-white font-mono text-xs uppercase tracking-widest flex items-center justify-center gap-1.5"
+                  >
+                    <LogOut className="w-4 h-4" /> Se déconnecter
+                  </button>
+                )}
+              </div>
+            )}
             {!p.me && <ReportBox name={p.username} token={token} />}
             {msg && <p className="text-xs font-mono text-zinc-300 text-center mt-2">{msg}</p>}
           </>
