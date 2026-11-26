@@ -8,7 +8,7 @@ import { KNIGHTS_PUBLIC } from './updates';
 export type Tier = 'petit' | 'moyen' | 'style' | 'exclusif';
 export type Target = 'human' | 'monster';
 /** What a cosmetic changes: a colour slot, an accessory or a whole outfit. */
-export type Slot = 'gown' | 'hair' | 'skin' | 'eyes' | 'acc' | 'outfit' | 'fx' | 'dance' | 'lamp' | 'room';
+export type Slot = 'gown' | 'hair' | 'skin' | 'eyes' | 'acc' | 'outfit' | 'fx' | 'dance' | 'lamp' | 'room' | 'pet';
 
 export interface Cosmetic {
   id: string;
@@ -163,6 +163,11 @@ export const CATALOG: Cosmetic[] = [
   ev('chevaliers', 'l-lantern', 'Lanterne de château', 'human', 'lamp', 'llantern', 'moyen'),
   ev('chevaliers', 'l-torch', 'Torche enflammée', 'human', 'lamp', 'ltorch', 'style'),
 
+  // ---- 🐾 Familiers : dorment sur ton lit, te suivent et te préviennent des monstres ----
+  c('p-rat', 'Rat d\'égout', 'human', 'pet', 'rat', 'petit'),
+  c('p-cat', 'Chat noir', 'human', 'pet', 'cat', 'moyen'),
+  c('p-raven', 'Corbeau', 'human', 'pet', 'raven', 'style'),
+
   // ---- 🏚️ Décors de la chambre secrète, un par événement (édition limitée) ----
   ev('noel', 'r-noel', 'Chambre de Noël', 'human', 'room', 'noel', 'style'),
   ev('halloween', 'r-halloween', 'Chambre hantée', 'human', 'room', 'halloween', 'style'),
@@ -248,7 +253,7 @@ export const CATALOG: Cosmetic[] = [
 
 export const cosmetic = (id: string) => CATALOG.find((x) => x.id === id);
 /** Everyday items (daily shop, boxes, free gift): no event items. */
-const REGULAR = CATALOG.filter((x) => !x.season && !x.unlock);
+const REGULAR = CATALOG.filter((x) => !x.season && !x.unlock && (x.slot !== 'pet' || KNIGHTS_PUBLIC));
 
 /** Items sold in the event shop while the event is on. */
 /** 🔒 room decors come with the Knights' update (admins only until it's released) */

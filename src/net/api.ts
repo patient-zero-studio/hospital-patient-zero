@@ -40,6 +40,9 @@ export interface WalletView {
   wheelAvailable?: boolean;
   /** 👑 finished the King's quests: the title « Sire » */
   sire?: boolean;
+  /** 🖼️ best moments (for room 104) and 🏆 contests won */
+  frames?: { e: string; t: string }[];
+  crowns?: number;
   /** achievements unlocked + counters */
   ach?: AchState;
   /** achievements unlocked by this very request */
@@ -216,6 +219,11 @@ export interface PlayerProfileView {
   rare?: string[];
   lamps?: string[];
   visits?: number;
+  /** 🖼️ best moments on the walls, 🎵 jukebox record, 🏆 contests won, votes this week */
+  frames?: { e: string; t: string }[];
+  jukebox?: string;
+  crowns?: number;
+  votes?: number;
   username: string;
   level: LevelInfo;
   admin: boolean;
@@ -397,6 +405,14 @@ export const api = {
   /** ⚡ schedule the big power cut (minutes from now, < 0 = cancel) */
   adminOutage: (token: string, minutes: number): Promise<{ outage: Outage | null; now: number }> => post('/api/admin/outage', { minutes }, token),
   claimOutage: (token: string, id: string): Promise<WalletView & { gained: number }> => post('/api/outage/claim', { id }, token),
+  roomVote: (token: string, name: string): Promise<{ ok: boolean; votes: number }> => post(`/api/room/vote/${encodeURIComponent(name)}`, {}, token),
+  async roomContest(token: string): Promise<{ top: { username: string; votes: number }[]; mine: string | null; last: { username: string; votes: number; week: string } | null; ends: number }> {
+    const res = await fetch('/api/room/contest', { headers: { Authorization: `Bearer ${token}` } });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error ?? 'Erreur');
+    return d;
+  },
+  setJukebox: (token: string, track: string): Promise<{ ok: boolean }> => post('/api/jukebox', { track }, token),
   roomVisit: (token: string, name: string): Promise<{ visits: number; visitors: { name: string; at: number }[] }> => post(`/api/room/visit/${encodeURIComponent(name)}`, {}, token),
   /** Event on for everyone (null = none, undefined = server unreachable). */
   async season(): Promise<Season | null | undefined> {

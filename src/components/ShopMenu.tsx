@@ -300,6 +300,7 @@ export const CosmeticBadge: React.FC<{ c: Cosmetic; size?: number }> = ({ c, siz
     cowboy: '🤠', pirate: '🦜', detective: '🔎', plaguedoc: '🐦‍⬛', plaguebeast: '☠️', wendigo: '🦌', ghostpirate: '👻',
     gladiator: '⚔️', stars: '🌟', champion: '🏆',
     aura: '🔮', smoke: '💨', halo: '😇', sparks: '⚡', flames: '🔥', rainbow: '🌈',
+    cat: '🐈‍⬛', raven: '🐦‍⬛', rat: '🐀',
     noel: '🎄', halloween: '🎃', valentin: '💘', paques: '🐰', poisson: '🐟', castle: '🏰',
     llantern: '🏮', ltorch: '🔥', squire: '🛡️', knight: '⚔️', blackknight: '🖤', knightpz: '⚔️', dragon: '🐉', knighthelm: '🪖',
     lminer: '⛏️', lice: '🧊', lcandle: '🕯️', lgreen: '🏮', lred: '🩸', lpink: '💗', lgold: '🔦',
@@ -556,6 +557,7 @@ export const ShopMenu: React.FC<Props> = ({ username, wallet, onBuy, onOpenBox, 
                 {trying.name} <span className="text-zinc-500 text-xs">· {trying.target === 'human' ? 'Humain' : 'Monstre'}</span>
               </div>
               <Preview look={withItem(look ?? DEFAULT_APPEARANCE, trying)} tab={trying.target === 'human' ? 'human' : 'monster'} />
+              {trying.slot === 'pet' && <p className="text-[11px] font-mono text-zinc-400">🐾 Il dort sur ton lit dans la chambre 104, te suit partout et te prévient quand un monstre approche.</p>}
               {trying.slot === 'room' && <p className="text-[11px] font-mono text-zinc-400">🏚️ Un décor pour ta chambre secrète (la chambre 104). À choisir dans Personnaliser.</p>}
               {trying.slot === 'lamp' && (
                 <p className="text-[11px] font-mono text-zinc-400">

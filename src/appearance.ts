@@ -3,18 +3,18 @@ import { CHARACTERS, isCharacter } from './characters';
 
 /** Player customisation: colours, accessory and outfit of your human and your creature. */
 export interface Appearance {
-  human: { skin: string; gown: string; hair: string; acc: string; outfit: string; char: string; fx: string; dance: string; lamp: string; room: string };
+  human: { skin: string; gown: string; hair: string; acc: string; outfit: string; char: string; fx: string; dance: string; lamp: string; room: string; pet: string; wardrobe: string };
   monster: { skin: string; eyes: string; gown: string; acc: string; outfit: string; fx: string };
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
-  human: { skin: '#d9b59a', gown: '#7f9aa8', hair: '#1d1d22', acc: '', outfit: '', char: 'alex', fx: '', dance: '', lamp: '', room: '' },
+  human: { skin: '#d9b59a', gown: '#7f9aa8', hair: '#1d1d22', acc: '', outfit: '', char: 'alex', fx: '', dance: '', lamp: '', room: '', pet: '', wardrobe: '' },
   monster: { skin: '#8f968d', eyes: '#ff2a10', gown: '#6a6a60', acc: '', outfit: '', fx: '' },
 };
 
 const HEX = /^#[0-9a-f]{6}$/i;
 const ID = /^[a-z0-9]{0,16}$/;
-const COSMETIC_KEYS = ['acc', 'outfit', 'char', 'fx', 'dance', 'lamp', 'room'];
+const COSMETIC_KEYS = ['acc', 'outfit', 'char', 'fx', 'dance', 'lamp', 'room', 'pet', 'wardrobe'];
 
 /** Keeps only valid colours / ids, falling back to the defaults. */
 export const sanitizeAppearance = (a: unknown): Appearance => {
@@ -62,6 +62,13 @@ export const enforceOwned = (a: Appearance, owned: string[]): Appearance => {
       // Characters are free for everyone
       if (key === 'char' && isCharacter(v)) continue;
       if (FREE[`${target}.${key}`]?.includes(v)) continue;
+      // 🚪 the wardrobe shows one outfit you own: 'h' + human outfit, or 'm' + creature outfit
+      if (key === 'wardrobe') {
+        const t = v[0] === 'm' ? 'monster' : 'human';
+        if (CATALOG.some((x) => owned.includes(x.id) && x.target === t && x.slot === 'outfit' && x.value === v.slice(1))) continue;
+        part[key] = '';
+        continue;
+      }
       const ok = CATALOG.some((x) => owned.includes(x.id) && x.target === target && x.slot === key && x.value === v);
       if (!ok) part[key] = def[key];
     }

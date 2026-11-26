@@ -670,6 +670,45 @@ class SoundSystem {
     return this.settings.masterVolume * this.settings.sfxVolume;
   }
 
+  /** 🐾 Your pet's call: a cat's hiss-meow, a raven's caw, a rat's squeaks */
+  public playPetCall(kind: string) {
+    if (!this.ctx || !this.sfxGain) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const voice = (type: OscillatorType, f0: number, f1: number, at: number, dur: number, vol: number, q = 0) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, t + at);
+      o.frequency.exponentialRampToValueAtTime(f1, t + at + dur);
+      g.gain.setValueAtTime(0.0001, t + at);
+      g.gain.exponentialRampToValueAtTime(vol, t + at + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + dur);
+      let out: AudioNode = o;
+      if (q) {
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = f0 * 1.5;
+        bp.Q.value = q;
+        o.connect(bp);
+        out = bp;
+      }
+      out.connect(g);
+      g.connect(this.sfxGain!);
+      o.start(t + at);
+      o.stop(t + at + dur + 0.05);
+    };
+    if (kind === 'cat') {
+      voice('sawtooth', 620, 900, 0, 0.25, 0.12, 3);
+      voice('sawtooth', 900, 480, 0.25, 0.45, 0.12, 3);
+    } else if (kind === 'raven') {
+      voice('sawtooth', 520, 380, 0, 0.22, 0.18, 2);
+      voice('sawtooth', 500, 360, 0.32, 0.22, 0.18, 2);
+    } else {
+      for (let i = 0; i < 3; i++) voice('sine', 2600, 3400, i * 0.12, 0.08, 0.06);
+    }
+  }
+
   /** 🐉 The dragon's roar: a deep growl that rises, with a rattle */
   public playDragonRoar() {
     if (!this.ctx || !this.sfxGain) return;

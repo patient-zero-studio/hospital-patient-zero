@@ -6,6 +6,8 @@ import { levelColor } from '../levels';
 import { LAMPS } from '../lamps';
 import { CosmeticBadge } from './ShopMenu';
 import { Room104 } from './Room104';
+import { sound } from '../audio/SoundSystem';
+import { trackById } from '../music';
 import { Preview } from './CustomizeMenu';
 import { RankBadge } from './RankedMenu';
 
@@ -43,6 +45,22 @@ export const SecretRoom: React.FC<Props> = ({ name, token, room3d = false, onClo
   const [p, setP] = useState<PlayerProfileView | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [visit, setVisit] = useState<{ visits: number; visitors: { name: string; at: number }[] } | null>(null);
+
+  // 🎵 the jukebox plays the owner's favourite track while you're here
+  useEffect(() => {
+    if (!room3d || !p?.jukebox || !trackById(p.jukebox)) return;
+    const before = sound.menuTrack;
+    sound.init();
+    sound.resume();
+    sound.setMenuTrack(p.jukebox);
+    if (!sound.menuMusicPlaying) sound.startMenuMusic();
+    return () => sound.setMenuTrack(before);
+  }, [room3d, p?.jukebox]);
+  const [vote, setVote] = useState<string | null>(null);
+  const [contest, setContest] = useState<Awaited<ReturnType<typeof api.roomContest>> | null>(null);
+  useEffect(() => {
+    if (room3d) api.roomContest(token).then(setContest).catch(() => undefined);
+  }, [room3d, token]);
 
   useEffect(() => {
     api.player(token, name).then(setP).catch((e) => setErr((e as Error).message));
@@ -136,6 +154,10 @@ export const SecretRoom: React.FC<Props> = ({ name, token, room3d = false, onClo
                 trophies={(p.trophies?.length ?? 0) + ((p.records ?? []).some((r) => r.rank === 1) ? 1 : 0)}
                 rare={rare.map((c) => rarityColor(c))}
                 theme={theme}
+                frames={p.frames ?? []}
+                pet={p.look.human.pet}
+                wardrobe={p.look.human.wardrobe}
+                crowns={p.crowns ?? 0}
               />
               ) : (
                 <div className="flex justify-center">
@@ -208,6 +230,49 @@ export const SecretRoom: React.FC<Props> = ({ name, token, room3d = false, onClo
                 </Shelf>
               </div>
             </div>
+
+            {/* 🏆 contest: vote for this room, and this week's ranking */}
+            {room3d && (
+              <div className="mt-5 p-3 border-2 border-amber-600/60 bg-black/50">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="text-[11px] font-mono uppercase tracking-[0.25em] text-amber-300">🏆 Concours de la plus belle chambre</div>
+                  <div className="text-[11px] font-mono text-zinc-400">
+                    🎵 Juke-box : <span className="text-zinc-100">{trackById(p.jukebox ?? 'aurore')?.name ?? '—'}</span>
+                  </div>
+                </div>
+                {!p.me && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await api.roomVote(token, p.username);
+                        setVote(`❤️ Tu as voté pour la chambre de ${p.username} cette semaine !`);
+                        api.roomContest(token).then(setContest).catch(() => undefined);
+                      } catch (e) {
+                        setVote((e as Error).message);
+                      }
+                    }}
+                    className="mt-2 w-full py-2 bg-amber-600 hover:bg-amber-500 text-black font-mono text-xs uppercase tracking-widest font-bold"
+                  >
+                    {contest?.mine === p.username.toLowerCase() ? '❤️ Tu as voté pour cette chambre' : '❤️ Voter pour cette chambre'}
+                  </button>
+                )}
+                {vote && <p className="text-[11px] font-mono text-amber-200 mt-1">{vote}</p>}
+                <div className="text-[10px] font-mono text-zinc-500 mt-2">Un vote par semaine (tu peux le changer). La chambre gagnante reçoit 300 pièces et une couronne d'or exposée.</div>
+                {contest && contest.top.length > 0 && (
+                  <ol className="mt-2 space-y-0.5 text-xs font-mono">
+                    {contest.top.slice(0, 5).map((r, i) => (
+                      <li key={r.username} className="flex justify-between text-zinc-300">
+                        <span>
+                          {['🥇', '🥈', '🥉'][i] ?? `${i + 1}.`} {r.username}
+                        </span>
+                        <span className="text-amber-300">❤️ {r.votes}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                {contest?.last && <div className="text-[10px] font-mono text-zinc-500 mt-1">Gagnant de la semaine dernière : <b className="text-amber-300">{contest.last.username}</b> ({contest.last.votes} votes)</div>}
+              </div>
+            )}
 
             {/* guest book */}
             <div className="mt-5 p-3" style={{ background: '#e8dcc0', color: '#2a1a0e', border: '3px solid #000', boxShadow: '0 4px 0 #000' }}>

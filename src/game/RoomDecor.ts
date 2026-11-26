@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { CollisionBox } from './MapBuilder';
 import { buildPresentModel, buildTreatModel } from './SeasonalDecor';
 import { SEASON_INFO, type Season } from '../seasons';
+import { buildFrame, buildJukebox, buildWardrobe } from './RoomExtras';
 
 /**
  * 🏚️ Your room 104, in the game: the room where every game starts gets the
@@ -22,6 +23,14 @@ export interface RoomShow {
   rare: string[];
   /** gold cups */
   trophies: number;
+  /** 🖼️ best moments on the walls */
+  frames: { e: string; t: string }[];
+  /** 🐾 pet ('' none): sleeps on the bed, then follows you (handled by the engine) */
+  pet: string;
+  /** 🚪 the outfit in the wardrobe ('h…' / 'm…', '' = no wardrobe) */
+  wardrobe: string;
+  /** 🏆 « plus belle chambre » contests won (a gold crown on the cabinet) */
+  crowns: number;
 }
 
 const CX = -10;
@@ -29,7 +38,8 @@ const CZ = -7;
 const HALF = 2.85;
 const H = 3.5;
 
-export const roomShowKey = (r: RoomShow | null) => (r ? `${r.theme}|${r.lamps.join(',')}|${r.rare.join(',')}|${r.trophies}` : '');
+export const roomShowKey = (r: RoomShow | null) =>
+  r ? `${r.theme}|${r.lamps.join(',')}|${r.rare.join(',')}|${r.trophies}|${r.frames.map((f) => f.t).join(',')}|${r.wardrobe}|${r.crowns}` : '';
 
 export const buildRoomDecor = (show: RoomShow) => {
   const disposables: { dispose: () => void }[] = [];
@@ -108,6 +118,55 @@ export const buildRoomDecor = (show: RoomShow) => {
       mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.07, 6), gold, 0, 0.06, 0, g);
       mesh(new THREE.CylinderGeometry(0.05, 0.025, 0.08, 10), gold, 0, 0.13, 0, g);
     }
+  }
+
+  // 🏆 contest winner: a gold crown on top of the cabinet
+  if (show.crowns > 0) {
+    const crown = new THREE.Group();
+    crown.position.set(-0.6, 2.12, HALF - 0.28);
+    root.add(crown);
+    mesh(new THREE.CylinderGeometry(0.16, 0.14, 0.12, 20, 1, true), t(new THREE.MeshStandardMaterial({ color: 0xffcc33, metalness: 0.95, roughness: 0.2, emissive: 0x6a4a00, emissiveIntensity: 0.8, side: THREE.DoubleSide })), 0, 0.06, 0, crown);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      mesh(new THREE.ConeGeometry(0.03, 0.08, 4), gold, Math.sin(a) * 0.15, 0.15, Math.cos(a) * 0.15, crown);
+    }
+    anim.push((s) => (crown.rotation.y = s * 0.5));
+  }
+
+  // 🖼️ your best moments, framed on the east wall (either side of the door) and the south wall
+  const frameSpots: [number, number, number, number][] = [
+    [HALF - 0.01, 1.8, -2.1, -Math.PI / 2],
+    [HALF - 0.01, 1.8, -1.35, -Math.PI / 2],
+    [HALF - 0.01, 1.8, 1.35, -Math.PI / 2],
+    [HALF - 0.01, 1.8, 2.1, -Math.PI / 2],
+    [1.75, 1.95, HALF - 0.01, Math.PI],
+    [2.4, 1.95, HALF - 0.01, Math.PI],
+  ];
+  show.frames.slice(0, 6).forEach((f, i) => {
+    const [x, y, z, ry] = frameSpots[i];
+    const fr = buildFrame(f.e, f.t, t);
+    fr.position.set(x, y, z);
+    fr.rotation.y = ry;
+    root.add(fr);
+  });
+
+  // 🎵 the jukebox in the south-east corner
+  const juke = buildJukebox(t);
+  juke.group.position.set(2.25, 0, 2.25);
+  juke.group.rotation.y = Math.PI * 1.25;
+  root.add(juke.group);
+  anim.push((s, dt) => juke.tick(s, dt));
+  collide(2.25, 2.25, 0.35, 0.35, 0.8);
+
+  // 🚪 the wardrobe against the north wall, with your favourite outfit
+  let wardrobe: ReturnType<typeof buildWardrobe> | null = null;
+  if (show.wardrobe) {
+    wardrobe = buildWardrobe(show.wardrobe, t);
+    wardrobe.group.position.set(0.7, 0, -HALF + 0.31);
+    root.add(wardrobe.group);
+    const w = wardrobe;
+    anim.push((_s, dt) => w.tick(dt));
+    collide(0.7, -HALF + 0.31, 0.65, 0.32, 2.5);
   }
 
   // ---------------------------------------------------------------------
@@ -449,6 +508,9 @@ export const buildRoomDecor = (show: RoomShow) => {
       on = THREE.MathUtils.damp(on, inside ? 1 : 0, 3, dt);
       for (const { l, max } of lights) l.intensity = max * on;
     },
-    dispose: () => disposables.forEach((d) => d.dispose()),
+    dispose: () => {
+      wardrobe?.dispose();
+      disposables.forEach((d) => d.dispose());
+    },
   };
 };

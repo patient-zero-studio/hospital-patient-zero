@@ -21,6 +21,7 @@ import { DreamHouse, MEMORY_IDS } from './DreamHouse';
 import { CircusTent } from './CircusTent';
 import { Dungeon, BLASON_IDS, PARCH_IDS, duelPoints } from './Dungeon';
 import { buildRoomDecor, roomShowKey, type RoomShow } from './RoomDecor';
+import { buildPet, PET_INFO } from './RoomExtras';
 import { GameState } from './GameState';
 import { ProceduralTextures } from '../textures/ProceduralTextures';
 import { MicListener, MicStatus } from '../audio/MicListener';
@@ -2202,6 +2203,7 @@ export class GameEngine {
       this.player.reset(lv.start.clone().add(off), lv.startYaw);
     } else this.player.reset(start, sewers ? this.map.sewer.startYaw : this.map.playerStartYaw);
     this.applyRoomDecor();
+    this.applyPet();
     this.chapterToast = null;
     if (this.site instanceof CircusTent)
       this.queueChapterToast(
@@ -3163,7 +3165,10 @@ export class GameEngine {
   }
   public set roomShow(v: RoomShow | null) {
     this._roomShow = v;
-    if (this.map && this.player) this.applyRoomDecor();
+    if (this.map && this.player) {
+      this.applyRoomDecor();
+      if ((this.pet?.kind ?? '') !== (v?.pet ?? '')) this.applyPet();
+    }
   }
   private roomDecor: ReturnType<typeof buildRoomDecor> | null = null;
   private roomDecorKey = '';
@@ -3186,6 +3191,87 @@ export class GameEngine {
     // in the scene (not the level group): it never gets in the way of [E]
     this.scene.add(this.roomDecor.group);
     this.map.collisionBoxes.push(...this.roomDecor.boxes);
+  }
+
+  // -----------------------------------------------------------------------
+  // 🐾 Your pet: asleep on the bed of room 104, wakes up when you walk away,
+  // then follows you everywhere and warns you when a creature comes close.
+  // -----------------------------------------------------------------------
+  private pet: { kind: string; group: THREE.Group; tick: (s: number, moving: boolean, asleep?: boolean) => void; dispose: () => void } | null = null;
+  private petAsleep = false;
+  private petWarnCd = 0;
+  private petVel = new THREE.Vector3();
+  private applyPet() {
+    if (this.pet) {
+      this.scene.remove(this.pet.group);
+      this.pet.dispose();
+      this.pet = null;
+    }
+    const kind = this.roomShow?.pet;
+    if (!kind || !PET_INFO[kind] || this.survival || this.vsRole || this.imp || this.watchOnly || this.net?.mode === 'versus') return;
+    const disposables: { dispose: () => void }[] = [];
+    const built = buildPet(kind, (o) => {
+      disposables.push(o);
+      return o;
+    });
+    this.pet = { kind, ...built, dispose: () => disposables.forEach((d) => d.dispose()) };
+    this.pet.group.scale.setScalar(1.6);
+    this.scene.add(this.pet.group);
+    this.petWarnCd = 20;
+    // room 104 (chapter 1): curled up on the bed; elsewhere: right next to you
+    this.petAsleep = this.chapter === 1;
+    if (this.petAsleep) {
+      this.pet.group.position.set(-11.2, kind === 'raven' ? 0.84 : 0.8, -8.0);
+      this.pet.group.rotation.y = 0.8;
+    } else {
+      const p = this.player.position;
+      this.pet.group.position.set(p.x + 0.8, kind === 'raven' ? 1.9 : 0, p.z + 0.8);
+    }
+  }
+  private updatePet(delta: number) {
+    const pet = this.pet;
+    if (!pet || !this.running) return;
+    const s = performance.now() * 0.001;
+    const p = this.player.position;
+    const g = pet.group.position;
+    const flyer = pet.kind === 'raven';
+    if (this.petAsleep) {
+      pet.tick(s, false, true);
+      // wakes up when you walk away from the bed
+      if (Math.hypot(p.x - g.x, p.z - g.z) > 2.6) {
+        this.petAsleep = false;
+        sound.playPetCall(pet.kind);
+      }
+      return;
+    }
+    // follow: catch up when you're more than ~1.8 m away, then stop next to you
+    // (it doesn't glue itself behind you: turn around and you'll see it)
+    const dx = g.x - p.x;
+    const dz = g.z - p.z;
+    const dist = Math.hypot(dx, dz) || 1;
+    const keep = 1.3;
+    const back = new THREE.Vector3(p.x + (dx / dist) * keep, flyer ? 1.9 + Math.sin(s * 2) * 0.15 : 0, p.z + (dz / dist) * keep);
+    const to = back.clone().sub(g);
+    const d = dist > 1.8 ? Math.hypot(to.x, to.z) : 0;
+    if (dist > 15) g.copy(back);
+    const moving = d > 0.3;
+    if (moving) {
+      const sp = Math.min(9, d * 3);
+      g.x += (to.x / d) * sp * delta;
+      g.z += (to.z / d) * sp * delta;
+      pet.group.rotation.y = Math.atan2(-to.x, -to.z);
+    }
+    g.y = THREE.MathUtils.damp(g.y, back.y, 6, delta);
+    pet.tick(s, moving);
+    // 🐾 warning: a creature within 12 m
+    this.petWarnCd -= delta;
+    if (this.petWarnCd > 0) return;
+    const near = this.monsters.some((m) => m.mesh.visible && m.mesh.position.distanceTo(p) < 12);
+    if (near) {
+      this.petWarnCd = 25;
+      sound.playPetCall(pet.kind);
+      this.state.showToast(PET_INFO[pet.kind].warn, 3500);
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -5738,6 +5824,7 @@ export class GameEngine {
     this.updateWhisper(delta);
     this.updateOutage(delta);
     this.roomDecor?.tick(delta, this.player.position);
+    this.updatePet(delta);
     this.updateUv(delta);
     this.updateSecret(delta);
     this.updateWounds(delta);

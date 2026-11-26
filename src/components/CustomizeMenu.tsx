@@ -245,6 +245,28 @@ export const CustomizeMenu: React.FC<Props> = ({ username, initial, welcome, own
                 <ItemPicker label="Tenue" items={mine('human', 'outfit')} value={look.human.outfit} onPick={(v) => set('human', 'outfit', v)} />
                 <ItemPicker label="✨ Effet animé" items={mine('human', 'fx')} value={look.human.fx} onPick={(v) => set('human', 'fx', v)} />
                 <ItemPicker label="🔦 Lampe torche (couleur du faisceau)" items={mine('human', 'lamp')} value={look.human.lamp} onPick={(v) => set('human', 'lamp', v)} />
+                {rooms && <ItemPicker label="🐾 Familier (dort sur ton lit, te suit, te prévient des monstres)" items={mine('human', 'pet')} value={look.human.pet} onPick={(v) => set('human', 'pet', v)} />}
+                {rooms && (
+                  <div>
+                    <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-zinc-500 mb-1.5">🚪 Armoire de ta chambre : le skin exposé</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        onClick={() => set('human', 'wardrobe', '')}
+                        className={`h-9 px-2 border-2 text-[10px] font-mono uppercase ${look.human.wardrobe === '' ? 'border-white text-zinc-100' : 'border-zinc-700 text-zinc-500'}`}
+                      >
+                        Aucune
+                      </button>
+                      {[...mine('human', 'outfit'), ...mine('monster', 'outfit')].map((c) => {
+                        const v = (c.target === 'monster' ? 'm' : 'h') + c.value;
+                        return (
+                          <button key={c.id} title={c.name} onClick={() => set('human', 'wardrobe', v)} className={look.human.wardrobe === v ? 'ring-2 ring-white' : ''}>
+                            <CosmeticBadge c={c} size={36} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {rooms && <ItemPicker label="🏚️ Décor de ta chambre secrète (Aucun = chambre 104)" items={mine('human', 'room')} value={look.human.room} onPick={(v) => set('human', 'room', v)} />}
                 <ItemPicker label="💃 Danse de victoire (Aucun = coucou)" items={mine('human', 'dance')} value={look.human.dance} onPick={(v) => set('human', 'dance', v)} />
                 <p className="text-[10px] font-mono text-zinc-600">Vu par votre partenaire en coop, et par le monstre en mode Chasse.</p>

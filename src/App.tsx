@@ -626,6 +626,10 @@ export default function App() {
             .slice(0, 12)
             .map((c) => rarityColor(c)),
           trophies: w.trophies?.length ?? 0,
+          frames: w.frames ?? [],
+          pet: lk.human.pet ?? '',
+          wardrobe: lk.human.wardrobe ?? '',
+          crowns: w.crowns ?? 0,
         };
       } else engine.roomShow = null;
     }

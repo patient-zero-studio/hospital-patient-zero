@@ -54,6 +54,8 @@ export const MusicMenu: React.FC<Props> = ({ token, wallet, onWallet, onClose })
     }
     setChosen(id);
     listen(id);
+    // 🎵 it's also the record on your room's jukebox
+    if (token) api.setJukebox(token, id).catch(() => undefined);
   };
 
   return (

@@ -44,7 +44,7 @@ import { DAILY_XP, DEATH_XP, ESCAPE_XP, levelOf, levelReward } from '../src/leve
 import { censorText, isBadName } from '../src/moderation.ts';
 import { RANK_TIERS, RPASS_TIERS, RPASS_XP_PER_TIER, RPassReward, nextTier, rankLoss, rankWin, rpassReward, rpassWinXp, tierOf } from '../src/ranked.ts';
 import { CLAN_CHEST_LEVELS, CLAN_COLORS, CLAN_EMBLEMS, CLAN_MAX, CLAN_NAME_RE, CLAN_PRICE, CLAN_PRIZES, CLAN_TAG_RE, WAR_LOSS, WAR_TIE, WAR_WIN, nextWarStart, warEnds, warKey } from '../src/clans.ts';
-import { MENU_TRACKS } from '../src/music.ts';
+import { MENU_TRACKS, trackUnlocked } from '../src/music.ts';
 import { STAR_REWARD } from '../src/stars.ts';
 import { MAX_UPGRADE, UPGRADE_PRICES, isUpgradeId } from '../src/upgrades.ts';
 import { QUEST_BONUS, QuestStat, dailyQuests } from '../src/quests.ts';
@@ -99,6 +99,10 @@ interface User {
   lastTreats?: number;
   /** 🎡 day of the last wheel spin */
   lastWheel?: string;
+  /** 🎵 the record on the jukebox of the secret room (favourite menu track) */
+  jukebox?: string;
+  /** 🏆 « plus belle chambre » contests won */
+  roomCrowns?: number;
   /** 🏰 castle decor for the secret room (Sire during the Tournoi des Chevaliers) */
   castleRoom?: boolean;
   /** ⚡ last big power cut whose generator was restarted (reward paid) */
@@ -396,6 +400,26 @@ const reportAch = (u: User, unlock: unknown, stats: unknown, trusted: Partial<Re
   if (currentSeason() === 'chevaliers' && isSire(u)) giveCastle(u);
   return newly.map((a: AchDef) => a.id);
 };
+/** 🖼️ the best moments, hung on the walls of the secret room */
+function roomFrames(u: User): { e: string; t: string }[] {
+  const ach = achOf(u);
+  const done = ach.done;
+  const out: { e: string; t: string }[] = [];
+  const key = u.username.toLowerCase();
+  if ((ach.stats.escapes ?? 0) > 0) out.push({ e: '🚪', t: 'Première sortie' });
+  if (Object.values(boards).some((l) => l[0]?.username.toLowerCase() === key)) out.push({ e: '👑', t: 'Record n°1' });
+  if (done.ch10_end) out.push({ e: '🏰', t: 'Le Donjon' });
+  if (done.ch7_end) out.push({ e: '💉', t: 'Moreau vaincu' });
+  if (done.ch8_end) out.push({ e: '🌳', t: 'Le rêve de Lucas' });
+  if (isSire(u)) out.push({ e: '⚔️', t: 'Sire' });
+  if ((u.roomCrowns ?? 0) > 0) out.push({ e: '🏆', t: 'Plus belle chambre' });
+  if ((u.trophies ?? []).length) out.push({ e: '🥇', t: 'Podium' });
+  const lvl = levelOf(u.xp ?? 0).level;
+  if (lvl >= 5) out.push({ e: '⭐', t: `Niveau ${lvl}` });
+  return out.slice(0, 6);
+}
+/** 🏆 votes this week for someone's room */
+const roomVotesFor = (name: string) => Object.values(settings.roomVotes?.[weekKey()] ?? {}).filter((t) => t === name.toLowerCase()).length;
 /** 🏰 the castle decor for the secret room (a Sire during the Tournoi) */
 function giveCastle(u: User) {
   u.castleRoom = true;
@@ -437,6 +461,9 @@ const settings: {
   outage?: { id: string; at: number };
   notifiedSeason?: string | null;
   weekPaid?: string;
+  /** 🏆 secret room contest: votes per week (voter → room owner) */
+  roomVotes?: Record<string, Record<string, string>>;
+  lastRoomWinner?: { username: string; votes: number; week: string } | null;
   lastPodium?: { username: string; xp: number; place: number }[];
   /** 🏅 last ranked season paid */
   rankPaid?: string;
@@ -559,6 +586,8 @@ const walletView = (u: User) => ({
   advent: adventView(u),
   ach: achOf(u),
   sire: isSire(u),
+  frames: roomFrames(u),
+  crowns: u.roomCrowns ?? 0,
   challenge: { id: dailyChallenge().id, done: u.lastChallenge === todayKey() },
   wallet: walletOf(u),
   shop: dailyShop().map((x) => x.id),
@@ -1089,6 +1118,10 @@ app.get('/api/player/:name', (req, res) => {
       .map((c) => c.id),
     lamps: walletOf(u).owned.filter((id) => cosmeticById(id)?.slot === 'lamp'),
     visits: u.roomVisits ?? 0,
+    frames: roomFrames(u),
+    jukebox: u.jukebox ?? 'aurore',
+    crowns: u.roomCrowns ?? 0,
+    votes: roomVotesFor(u.username),
     friend: friendsOf(me).includes(key),
     me: key === me.username.toLowerCase(),
     ranked: { tier: tierOf(rankOf(u).points).id, points: rankOf(u).points, history: (u.rankHistory ?? []).slice(-6) },
@@ -1173,6 +1206,22 @@ const payLastWeek = () => {
       u.inbox = [...(u.inbox ?? []), { from: c.name, text: `🛡️ Ton clan [${c.tag}] finit ${i + 1}${i ? 'e' : 'er'} de la semaine : +${CLAN_PRIZES[i]} pièces !`, at: Date.now() }].slice(-20);
     }
   });
+  // 🏆 the most beautiful secret room of last week
+  const rv = settings.roomVotes?.[prev];
+  if (rv) {
+    const count = new Map<string, number>();
+    for (const t of Object.values(rv)) count.set(t, (count.get(t) ?? 0) + 1);
+    const best = [...count.entries()].sort((a, b) => b[1] - a[1])[0];
+    const w = best ? users.get(best[0]) : undefined;
+    if (w && best) {
+      w.roomCrowns = (w.roomCrowns ?? 0) + 1;
+      walletOf(w).coins += 300;
+      w.inbox = [...(w.inbox ?? []), { from: 'Patient Zero', text: `🏆 Ta chambre secrète a été élue la plus belle de la semaine (${best[1]} vote${best[1] > 1 ? 's' : ''}) : +300 pièces et un trophée exposé dans ta chambre !`, at: Date.now() }].slice(-20);
+      notify(w, '🏆 Plus belle chambre !', 'Ta chambre secrète gagne le concours de la semaine : +300 pièces.', 'room');
+      settings.lastRoomWinner = { username: w.username, votes: best[1], week: prev };
+    }
+  }
+  if (settings.roomVotes) for (const k of Object.keys(settings.roomVotes)) if (k !== cur && k !== prev) delete settings.roomVotes[k];
   settings.weekPaid = cur;
   settingsSaver.save();
   if (ranking.length || clanRank.length) saveUsers();
@@ -1400,6 +1449,44 @@ app.post('/api/room/visit/:name', (req, res) => {
     }
   }
   res.json({ visits: u.roomVisits ?? 0, visitors: (u.roomVisitors ?? []).slice(-8).reverse() });
+});
+
+// 🏆 Vote for the most beautiful secret room (one vote a week, you can change it)
+app.post('/api/room/vote/:name', (req, res) => {
+  const me = authUser(req);
+  if (!me) return res.status(401).json({ error: 'Session expirée.' });
+  const u = users.get(String(req.params.name).toLowerCase());
+  if (!u || u.banned) return res.status(404).json({ error: "Ce joueur n'existe pas." });
+  if (u === me) return res.status(400).json({ error: 'Tu ne peux pas voter pour ta propre chambre !' });
+  const wk = weekKey();
+  settings.roomVotes ??= {};
+  const votes = (settings.roomVotes[wk] ??= {});
+  votes[me.username.toLowerCase()] = u.username.toLowerCase();
+  settingsSaver.save();
+  res.json({ ok: true, votes: roomVotesFor(u.username) });
+});
+// 🏆 This week's most beautiful rooms
+app.get('/api/room/contest', (req, res) => {
+  const me = authUser(req);
+  if (!me) return res.status(401).json({ error: 'Session expirée.' });
+  const votes = settings.roomVotes?.[weekKey()] ?? {};
+  const count = new Map<string, number>();
+  for (const t of Object.values(votes)) count.set(t, (count.get(t) ?? 0) + 1);
+  const top = [...count.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([k, n]) => ({ username: users.get(k)?.username ?? k, votes: n }));
+  res.json({ top, mine: votes[me.username.toLowerCase()] ?? null, last: settings.lastRoomWinner ?? null, ends: nextWeek() });
+});
+// 🎵 The record on your jukebox: your favourite menu track (one you have unlocked)
+app.post('/api/jukebox', (req, res) => {
+  const u = authUser(req);
+  if (!u) return res.status(401).json({ error: 'Session expirée.' });
+  const t = MENU_TRACKS.find((x) => x.id === req.body?.track);
+  if (!t || !trackUnlocked(t, { level: levelOf(u.xp ?? 0).level, ach: achOf(u).done, owned: u.tracks ?? [], admin: isAdmin(u) })) return res.status(400).json({ error: 'Musique non débloquée.' });
+  u.jukebox = t.id;
+  saveUsers();
+  res.json({ ok: true });
 });
 
 // 🎄 Advent calendar: one box per day, December 1 → 25

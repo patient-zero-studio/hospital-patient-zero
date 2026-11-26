@@ -4,6 +4,7 @@ import { Appearance } from '../appearance';
 import { MonsterAI } from '../game/MonsterAI';
 import { RemotePlayer } from '../game/RemotePlayer';
 import { buildPresentModel, buildTreatModel } from '../game/SeasonalDecor';
+import { buildFrame, buildJukebox, buildPet, buildWardrobe } from '../game/RoomExtras';
 import { SEASON_INFO, type Season } from '../seasons';
 
 /** 🎨 Each event decor: neon light, sky light, sheet, blanket and rug colours */
@@ -35,6 +36,11 @@ interface Props {
   rare: string[];
   /** decor: '' = room 104, 'castle', or an event ('noel', 'halloween'…) */
   theme: string;
+  /** 🖼️ best moments, 🐾 pet, 🚪 wardrobe outfit, 🏆 contests won */
+  frames?: { e: string; t: string }[];
+  pet?: string;
+  wardrobe?: string;
+  crowns?: number;
 }
 
 /** a texture drawn on a canvas */
@@ -49,7 +55,7 @@ const canvasTex = (w: number, h: number, draw: (g: CanvasRenderingContext2D) => 
   return t;
 };
 
-export const Room104: React.FC<Props> = ({ look, lamps, lampColor, trophies, rare, theme }) => {
+export const Room104: React.FC<Props> = ({ look, lamps, lampColor, trophies, rare, theme, frames = [], pet = '', wardrobe = '', crowns = 0 }) => {
   const castle = theme === 'castle';
   const TH = THEMES[theme];
   const mount = useRef<HTMLDivElement>(null);
@@ -221,9 +227,9 @@ export const Room104: React.FC<Props> = ({ look, lamps, lampColor, trophies, rar
 
     // ---- the locker (right) and the lamp shelf above it ----
     const lockerM = mat(castle ? 0x3a2a1a : 0x5a6a7a, { metalness: castle ? 0 : 0.5, roughness: 0.5 });
-    box(0.7, 1.9, 0.5, lockerM, 2.55, 0.95, -0.2);
+    if (!wardrobe) box(0.7, 1.9, 0.5, lockerM, 2.55, 0.95, -0.2);
     // air vents on the locker door
-    for (let i = 0; i < 4; i++) box(0.01, 0.02, 0.3, mat(0x222222), 2.19, 1.5 + i * 0.05, -0.2);
+    if (!wardrobe) for (let i = 0; i < 4; i++) box(0.01, 0.02, 0.3, mat(0x222222), 2.19, 1.5 + i * 0.05, -0.2);
     const shelfY = 2.15;
     box(0.35, 0.04, 2.2, mat(castle ? 0x4a2a12 : 0x8a7a6a), RW / 2 - 0.18, shelfY, 0.2);
     lamps.slice(0, 10).forEach((c, i) => {
@@ -285,6 +291,54 @@ export const Room104: React.FC<Props> = ({ look, lamps, lampColor, trophies, rar
 
     // ---- 🎉 event decors ----
     const anim: ((s: number, dt: number) => void)[] = [];
+    // 🖼️ best moments: above the bed (left wall) and on the right wall
+    const spots: [number, number, number, number][] = [
+      [-RW / 2 + 0.01, 2.05, -1.5, Math.PI / 2],
+      [-RW / 2 + 0.01, 2.05, -0.75, Math.PI / 2],
+      [-RW / 2 + 0.01, 2.05, 0.0, Math.PI / 2],
+      [RW / 2 - 0.01, 1.6, 1.3, -Math.PI / 2],
+      [RW / 2 - 0.01, 1.6, 2.0, -Math.PI / 2],
+      [-RW / 2 + 0.01, 2.05, 0.75, Math.PI / 2],
+    ];
+    frames.slice(0, 6).forEach((f, i) => {
+      const fr = buildFrame(f.e, f.t, t);
+      const [x, y, z, ry] = spots[i];
+      fr.position.set(x, y, z);
+      fr.rotation.y = ry;
+      scene.add(fr);
+    });
+    // 🎵 the jukebox, front right
+    const juke = buildJukebox(t);
+    juke.group.position.set(2.2, 0, 1.6);
+    juke.group.rotation.y = -Math.PI / 2 - 0.4;
+    scene.add(juke.group);
+    anim.push((s, dt) => juke.tick(s, dt));
+    // 🐾 your pet, asleep on the bed
+    if (pet) {
+      const pt = buildPet(pet, t);
+      pt.group.position.set(-2.1, pet === 'raven' ? 0.84 : 0.82, -0.2);
+      pt.group.rotation.y = 0.8;
+      scene.add(pt.group);
+      anim.push((s) => pt.tick(s, false, true));
+    }
+    // 🚪 the wardrobe with your favourite outfit (instead of the locker)
+    let wr: ReturnType<typeof buildWardrobe> | null = null;
+    if (wardrobe) {
+      wr = buildWardrobe(wardrobe, t);
+      wr.group.position.set(RW / 2 - 0.35, 0, -1.5);
+      wr.group.rotation.y = -Math.PI / 2;
+      scene.add(wr.group);
+      const w = wr;
+      anim.push((_s, dt) => w.tick(dt));
+      disposables.push({ dispose: () => w.dispose() });
+    }
+    // 🏆 a gold crown on the cabinet for a contest winner
+    if (crowns > 0) {
+      const crown = new THREE.Mesh(t(new THREE.CylinderGeometry(0.16, 0.14, 0.12, 20, 1, true)), mat(0xffcc33, { metalness: 0.95, roughness: 0.2, emissive: 0x6a4a00, emissiveIntensity: 0.8, side: THREE.DoubleSide }));
+      crown.position.set(-0.1, 2.15, -RD / 2 + 0.35);
+      scene.add(crown);
+      anim.push((s) => (crown.rotation.y = s * 0.5));
+    }
     if (isSeason(theme) && theme !== 'chevaliers') {
       const info = SEASON_INFO[theme];
       // a garland of blinking bulbs along the walls
@@ -617,7 +671,7 @@ export const Room104: React.FC<Props> = ({ look, lamps, lampColor, trophies, rar
       models.current = null;
     };
     // the room is rebuilt when what's on display changes
-  }, [lamps.join(','), trophies, rare.join(','), theme]);
+  }, [lamps.join(','), trophies, rare.join(','), theme, frames.map((f) => f.t).join(','), pet, wardrobe, crowns]);
 
   useEffect(() => {
     models.current?.human.applyLook(look.human);
