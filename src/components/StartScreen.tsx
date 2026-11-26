@@ -27,7 +27,7 @@ import { DIFFICULTIES, Difficulty } from '../game/Difficulty';
 import { fmtCoins } from '../economy';
 import { InstallButton } from './InstallButton';
 import { SeasonalOverlay } from './SeasonalOverlay';
-import { getLang, setLang } from '../i18n';
+import { LANGS, getLang, setLang } from '../i18n';
 import { SEASON_INFO, Season } from '../seasons';
 import { LevelInfo, levelColor } from '../levels';
 import type { Boost } from '../net/api';
@@ -573,9 +573,12 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                 </span>
               </button>
             )}
-            <TopBtn onClick={() => setLang(getLang() === 'fr' ? 'en' : 'fr')} title={getLang() === 'fr' ? 'Play in English' : 'Jouer en français'}>
+            <TopBtn
+              onClick={() => setLang(LANGS[(LANGS.indexOf(getLang()) + 1) % LANGS.length])}
+              title={getLang() === 'fr' ? 'Play in English' : getLang() === 'en' ? 'Joacă în română' : 'Jouer en français'}
+            >
               <span data-no-i18n className="font-game outl text-[13px]">
-                {getLang() === 'fr' ? 'FR' : 'EN'}
+                {getLang().toUpperCase()}
               </span>
             </TopBtn>
             {notifications && notifications !== 'unsupported' && onToggleNotifications && (

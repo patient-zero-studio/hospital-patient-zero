@@ -1134,6 +1134,25 @@ export const EN: Record<string, string> = {
   'Envoyer un message à un ami.': 'Send a message to a friend.',
   '🎟️ Codes cadeaux': '🎟️ Gift codes',
   'Créer le code': 'Create code',
+  // ---- menu buttons & HUD (added with the Romanian translation) ----
+  "Atelier": "Workshop",
+  "L'Atelier": "The Workshop",
+  "Quêtes": "Quests",
+  "Nouveautés": "What's new",
+  "PARTIE CLASSÉE": "RANKED GAME",
+  "Connecte-toi pour jouer en classé": "Log in to play ranked",
+  "Désactivée : aucune perte de points": "Off: no points lost",
+  "▸ CHANGER": "▸ CHANGE",
+  "DÉFI DU JOUR": "DAILY CHALLENGE",
+  "[F] ÉTEINDRE": "[F] TURN OFF",
+  "[F] ALLUMER": "[F] TURN ON",
+  "LAMPE": "LAMP",
+  "STRESS —": "STRESS —",
+  "PANIQUE": "PANIC",
+  "ANGOISSE": "DREAD",
+  "NERVEUX": "NERVOUS",
+  "CALME": "CALM",
+  "PATIENT ZÉRO": "PATIENT ZERO",
 };
 
 /** Texts built with numbers: [French pattern, English replacement]. */

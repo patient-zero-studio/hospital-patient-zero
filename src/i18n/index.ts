@@ -1,22 +1,26 @@
 /**
- * 🌐 Language: French (original) or English.
+ * 🌐 Language: French (original), English or Romanian.
  * The game is written in French; in English, the texts shown on screen are
  * swapped on the fly with the dictionary (src/i18n/en.ts). Unknown texts stay
  * in French, so nothing ever breaks.
  */
 import { EN, EN_PATTERNS } from './en';
+import { RO, RO_PATTERNS } from './ro';
 
-export type Lang = 'fr' | 'en';
+export type Lang = 'fr' | 'en' | 'ro';
+/** the order of the language button: FR → EN → RO → FR */
+export const LANGS: Lang[] = ['fr', 'en', 'ro'];
 const KEY = 'pz-lang';
 
 export const getLang = (): Lang => {
   try {
     const v = localStorage.getItem(KEY);
-    if (v === 'fr' || v === 'en') return v;
+    if (v === 'fr' || v === 'en' || v === 'ro') return v;
   } catch {
     /* private mode */
   }
-  return typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('fr') ? 'fr' : 'en';
+  const nav = typeof navigator !== 'undefined' ? navigator.language?.toLowerCase() ?? '' : '';
+  return nav.startsWith('fr') ? 'fr' : nav.startsWith('ro') ? 'ro' : 'en';
 };
 
 /** Changes the language (reloads the page so everything is redrawn). */
@@ -31,13 +35,17 @@ export const setLang = (l: Lang) => {
 
 const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
 
-/** English for a French text, or null if unknown. */
+const CUR = getLang();
+const DICT = CUR === 'ro' ? RO : EN;
+const PATTERNS = CUR === 'ro' ? RO_PATTERNS : EN_PATTERNS;
+
+/** The current language (English or Romanian) for a French text, or null if unknown. */
 export const toEnglish = (fr: string): string | null => {
   const k = norm(fr);
   if (!k) return null;
-  const hit = EN[k];
+  const hit = DICT[k];
   if (hit !== undefined) return hit;
-  for (const [re, rep] of EN_PATTERNS) if (re.test(k)) return k.replace(re, rep);
+  for (const [re, rep] of PATTERNS) if (re.test(k)) return k.replace(re, rep);
   return null;
 };
 
@@ -88,11 +96,11 @@ const translateNode = (n: Node) => {
   }
 };
 
-/** Starts the on-the-fly translation (English only). */
+/** Starts the on-the-fly translation (English or Romanian). */
 export const startI18n = () => {
   const lang = getLang();
   document.documentElement.lang = lang;
-  if (lang !== 'en') return;
+  if (lang === 'fr') return;
   translateNode(document.body);
   const obs = new MutationObserver((list) => {
     for (const m of list) {
