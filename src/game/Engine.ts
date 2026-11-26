@@ -5737,7 +5737,7 @@ export class GameEngine {
     this.updateCat(delta);
     this.updateWhisper(delta);
     this.updateOutage(delta);
-    this.roomDecor?.tick(delta);
+    this.roomDecor?.tick(delta, this.player.position);
     this.updateUv(delta);
     this.updateSecret(delta);
     this.updateWounds(delta);

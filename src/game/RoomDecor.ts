@@ -406,6 +406,32 @@ export const buildRoomDecor = (show: RoomShow) => {
     }
   }
 
+  // ---------------------------------------------------------------------
+  // 💡 Plenty of light, only in this room (on when you're inside)
+  // ---------------------------------------------------------------------
+  const tint: Record<string, [number, number, number]> = {
+    '': [0xfff1dc, 0xffe0b0, 0xd8f0ff],
+    castle: [0xffb060, 0xff7a1a, 0xffd090],
+    noel: [0xfff0d0, 0xff3a3a, 0x3aff6a],
+    halloween: [0xffb060, 0xff7a00, 0xa060ff],
+    valentin: [0xffd0e0, 0xff3a8a, 0xff80c0],
+    paques: [0xfff8d0, 0xfde047, 0x86efac],
+    poisson: [0xe0f8ff, 0x38bdf8, 0xfb923c],
+  };
+  const [cMain, cA, cB] = tint[theme] ?? tint[''];
+  const lights: { l: THREE.PointLight; max: number }[] = [];
+  const light = (c: number, max: number, x: number, y: number, z: number, dist: number) => {
+    const l = new THREE.PointLight(c, 0, dist, 1.2);
+    l.position.set(x, y, z);
+    root.add(l);
+    lights.push({ l, max });
+  };
+  light(cMain, 22, 0, 3.1, 0, 9);
+  light(cA, 10, -1.9, 2.3, 1.9, 6);
+  light(cB, 10, 1.9, 2.3, -1.7, 6);
+  light(0xfff4e0, 7, -0.6, 2.4, HALF - 0.8, 4);
+  let on = 0;
+
   root.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) {
       o.castShadow = false;
@@ -415,9 +441,13 @@ export const buildRoomDecor = (show: RoomShow) => {
   return {
     group: root,
     boxes,
-    tick: (dt: number) => {
+    tick: (dt: number, player?: THREE.Vector3) => {
       const s = performance.now() * 0.001;
       anim.forEach((f) => f(s, dt));
+      // the lights fade in when you're in the room, out when you leave it
+      const inside = !!player && Math.abs(player.x - CX) < HALF + 0.3 && Math.abs(player.z - CZ) < HALF + 0.3;
+      on = THREE.MathUtils.damp(on, inside ? 1 : 0, 3, dt);
+      for (const { l, max } of lights) l.intensity = max * on;
     },
     dispose: () => disposables.forEach((d) => d.dispose()),
   };
