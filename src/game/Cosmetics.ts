@@ -27,10 +27,17 @@ export interface HumanOutfit {
   /** extra material tweaks */
   gownFx?: 'gold' | 'neon' | 'white' | 'ghost';
   hairFx?: 'neon';
-  extras?: ('stethoscope' | 'mohawk' | 'stripes' | 'belt' | 'xmasbands' | 'cape' | 'wings' | 'medal' | 'armor' | 'blackarmor')[];
+  extras?: ('stethoscope' | 'mohawk' | 'stripes' | 'belt' | 'xmasbands' | 'cape' | 'wings' | 'medal' | 'armor' | 'blackarmor' | 'santacoat' | 'santabelt' | 'sack' | 'elfcollar' | 'uglysweater' | 'birch' | 'coalsack')[];
   /** animated effect that comes with the outfit (unless you wear another one) */
   fx?: string;
 }
+
+/**
+ * 🎄 The reworked Christmas skins (fur, sack, bells, Krampus horns, yeti fur…) appear on
+ * December 1st 2026 at midnight (Paris). Before that, the old versions are shown.
+ */
+export const XMAS_V2 = Date.now() >= Date.UTC(2026, 10, 30, 23);
+const XMAS_FESTIVE = new Set(['santahat', 'elfhat', 'beard', 'antlers', 'bellcollar']);
 
 export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
   surgeon: { gown: '#4f8a6a', accs: ['surgcap', 'mask'] },
@@ -40,10 +47,10 @@ export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
   gold: { gown: '#d4a840', hair: '#e8c860', accs: ['shades', 'crown'], gownFx: 'gold', extras: ['cape', 'medal'], fx: 'halo' },
   neon: { gown: '#0a1a20', hair: '#ff3ad8', accs: ['headphones', 'shades'], gownFx: 'neon', hairFx: 'neon', fx: 'sparks' },
   // 🎄 Noël
-  santa: { gown: '#c8102e', hair: '#f4f4f4', accs: ['santahat', 'beard'], extras: ['belt', 'cape'], fx: 'stars' },
-  elf: { gown: '#15803d', accs: ['elfhat'], extras: ['belt'] },
-  sweater: { gown: '#b91c1c', accs: [], extras: ['xmasbands'] },
-  fouettard: { gown: '#1a120c', hair: '#0a0a0a', accs: ['hood', 'bellcollar'], extras: ['belt', 'cape'], fx: 'smoke' },
+  santa: { gown: '#c8102e', hair: '#f4f4f4', accs: ['santahat', 'beard'], extras: ['santacoat', 'santabelt', 'sack'], fx: 'snow' },
+  elf: { gown: '#15803d', accs: ['elfhat', 'elfears'], extras: ['santabelt', 'elfcollar'] },
+  sweater: { gown: '#b91c1c', accs: [], extras: ['uglysweater'] },
+  fouettard: { gown: '#1a120c', hair: '#0a0a0a', accs: ['hood', 'bellcollar'], extras: ['belt', 'cape', 'birch', 'coalsack'], fx: 'smoke' },
   // 🎃 Halloween
   witch: { gown: '#1e1430', hair: '#7c3aed', accs: ['witchhat'] },
   vampire: { gown: '#0c0c0e', hair: '#0a0a0a', accs: ['fangs'], extras: ['cape'] },
@@ -74,6 +81,14 @@ export const HUMAN_OUTFITS: Record<string, HumanOutfit> = {
   blackknight: { gown: '#0c0c0e', hair: '#0a0a0a', accs: ['blackhelm'], extras: ['blackarmor', 'cape'], fx: 'flames' },
 };
 
+if (!XMAS_V2)
+  Object.assign(HUMAN_OUTFITS, {
+    santa: { gown: '#c8102e', hair: '#f4f4f4', accs: ['santahat', 'beard'], extras: ['belt', 'cape'], fx: 'stars' },
+    elf: { gown: '#15803d', accs: ['elfhat'], extras: ['belt'] },
+    sweater: { gown: '#b91c1c', accs: [], extras: ['xmasbands'] },
+    fouettard: { gown: '#1a120c', hair: '#0a0a0a', accs: ['hood', 'bellcollar'], extras: ['belt', 'cape'], fx: 'smoke' },
+  } satisfies Record<string, HumanOutfit>);
+
 /** Size of a head, so the event hats fit both the human and the creature. */
 interface HeadSpec {
   /** centre height, top of the skull, half width, half depth, overall scale */
@@ -97,8 +112,7 @@ const heartGeo = (track: Track, r: number) => {
   return track(geo);
 };
 
-/** Event hats & heads (Christmas / Halloween…), shared by both models. Returns false if unknown. */
-const buildFestive = (id: string, h: HeadSpec, track: Track, g: THREE.Group): boolean => {
+const buildFestiveOld = (id: string, h: HeadSpec, track: Track, g: THREE.Group): boolean => {
   const { s } = h;
   const cone = (color: number, rimColor: number, height: number, tip: number, tipEmissive = 0) => {
     const pivot = new THREE.Group();
@@ -151,6 +165,245 @@ const buildFestive = (id: string, h: HeadSpec, track: Track, g: THREE.Group): bo
       }
       // Rudolph's nose
       add(track, g, new THREE.SphereGeometry(0.02 * s, 14, 10), std(track, 0xff1a1a, { emissive: 0xff0000, emissiveIntensity: 0.9, roughness: 0.3 }), 0, h.cy - 0.012 * s, h.rz + 0.012 * s);
+      return true;
+    }
+    case 'bellcollar': {
+      // Red leather collar with golden sleigh bells, under the chin
+      const leather = std(track, 0x7a0c0c, { roughness: 0.7 });
+      const collar = add(track, g, new THREE.TorusGeometry(h.rx * 0.85, 0.012 * s, 8, 26), leather, 0, h.cy - 0.12 * s, 0);
+      collar.rotation.x = Math.PI / 2;
+      collar.scale.set(1, h.rz / h.rx, 1);
+      const gold = std(track, 0xd4a017, { metalness: 0.9, roughness: 0.25, emissive: 0x3a2a00, emissiveIntensity: 0.4 });
+      for (let i = 0; i < 5; i++) {
+        const a = Math.PI / 2 + (i - 2) * 0.45;
+        add(track, g, new THREE.SphereGeometry(0.016 * s, 10, 8), gold, Math.cos(a) * h.rx * 0.88, h.cy - 0.14 * s, Math.sin(a) * h.rz * 0.88);
+      }
+      return true;
+    }
+  }
+  return false;
+};
+
+// ---------------------------------------------------------------------------
+// 🎄 Christmas helpers
+// ---------------------------------------------------------------------------
+/** A fluffy ball of fur (pompom, fur trims): a sphere with smaller bumps around it. */
+const fluff = (track: Track, parent: THREE.Object3D, r: number, mat: THREE.Material, x = 0, y = 0, z = 0, n = 9) => {
+  const grp = new THREE.Group();
+  grp.position.set(x, y, z);
+  parent.add(grp);
+  add(track, grp, new THREE.SphereGeometry(r, 12, 10), mat);
+  for (let i = 0; i < n; i++) {
+    const phi = Math.acos(1 - (2 * (i + 0.5)) / n);
+    const th = i * 2.399;
+    add(track, grp, new THREE.SphereGeometry(r * 0.55, 8, 6), mat, Math.sin(phi) * Math.cos(th) * r * 0.72, Math.cos(phi) * r * 0.72, Math.sin(phi) * Math.sin(th) * r * 0.72).castShadow = false;
+  }
+  return grp;
+};
+/** A ring of fur along an ellipse (hat rims, cuffs, coat hems). */
+const furRing = (track: Track, parent: THREE.Object3D, rx: number, rz: number, tube: number, mat: THREE.Material, y: number, n = 22, z0 = 0) => {
+  const ring = add(track, parent, new THREE.TorusGeometry(rx, tube, 8, 32), mat, 0, y, z0);
+  ring.rotation.x = Math.PI / 2;
+  ring.scale.set(1, rz / rx, 1);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    add(track, parent, new THREE.SphereGeometry(tube * 0.95, 7, 5), mat, Math.cos(a) * rx, y + Math.sin(i * 1.7) * tube * 0.25, z0 + Math.sin(a) * rz).castShadow = false;
+  }
+  return ring;
+};
+/** A golden sleigh bell: a ball with a dark slit and a little loop on top. */
+const jingle = (track: Track, parent: THREE.Object3D, r: number, x: number, y: number, z: number) => {
+  const gold = std(track, 0xe8b820, { metalness: 0.95, roughness: 0.2, emissive: 0x4a3000, emissiveIntensity: 0.35 });
+  const grp = new THREE.Group();
+  grp.position.set(x, y, z);
+  parent.add(grp);
+  add(track, grp, new THREE.SphereGeometry(r, 14, 10), gold);
+  const slit = add(track, grp, new THREE.TorusGeometry(r * 0.99, r * 0.09, 4, 20), std(track, 0x1a1000, { roughness: 0.8 }), 0, -r * 0.15, 0);
+  slit.rotation.x = Math.PI / 2;
+  add(track, grp, new THREE.TorusGeometry(r * 0.3, r * 0.1, 4, 10), gold, 0, r * 1.05, 0);
+  return grp;
+};
+/** A little church-shaped bell (elf hat tip). */
+const bellGeo = (track: Track, r: number) =>
+  track(
+    new THREE.LatheGeometry(
+      [
+        [0, r * 1.0], [r * 0.3, r * 0.98], [r * 0.48, r * 0.75], [r * 0.55, r * 0.35], [r * 0.68, -r * 0.05], [r * 0.95, -r * 0.35], [r * 0.92, -r * 0.42], [0.001, -r * 0.42],
+      ].map(([a, b]) => new THREE.Vector2(a, b)),
+      16
+    )
+  );
+/** A bundle of birch twigs tied with a ribbon (Père Fouettard, Krampus); points down -y from the origin. */
+const twigBundle = (track: Track, parent: THREE.Object3D, len: number, n: number, ribbon: number) => {
+  const wood = std(track, 0x5a3a22, { roughness: 0.9 });
+  const pale = std(track, 0x8a6a4a, { roughness: 0.9 });
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const spread = 0.12 + (i % 3) * 0.05;
+    const piv = new THREE.Group();
+    piv.rotation.set(Math.sin(a) * spread, 0, Math.cos(a) * spread);
+    parent.add(piv);
+    const l = len * (0.85 + ((i * 37) % 10) / 40);
+    const tw = add(track, piv, new THREE.CylinderGeometry(len * 0.006, len * 0.014, l, 5), i % 2 ? wood : pale, 0, -l / 2, 0);
+    tw.castShadow = false;
+    // little side branches near the end
+    const br = add(track, piv, new THREE.CylinderGeometry(len * 0.003, len * 0.006, l * 0.22, 4), wood, len * 0.02, -l * 0.8, 0);
+    br.rotation.z = 0.6;
+  }
+  const tie = add(track, parent, new THREE.TorusGeometry(len * 0.05, len * 0.016, 6, 16), std(track, ribbon, { roughness: 0.6 }), 0, -len * 0.12, 0);
+  tie.rotation.x = Math.PI / 2;
+  // ribbon tails
+  for (const side of [-1, 1]) {
+    const t = add(track, parent, new THREE.BoxGeometry(len * 0.025, len * 0.16, len * 0.006), std(track, ribbon, { roughness: 0.6 }), side * len * 0.03, -len * 0.2, len * 0.05);
+    t.rotation.z = side * 0.35;
+  }
+};
+/** A cloth sack, lumpy, gathered and tied at the top. Built around its centre. */
+const sack = (track: Track, parent: THREE.Object3D, r: number, cloth: THREE.Material, rope: THREE.Material) => {
+  const geo = new THREE.SphereGeometry(r, 18, 14);
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const k = 1 + 0.06 * Math.sin(x * 40 + y * 23) * Math.sin(z * 31) - (y > r * 0.5 ? ((y - r * 0.5) / r) * 0.7 : 0);
+    p.setXYZ(i, x * k, y * (y < 0 ? 0.92 : 1), z * k);
+  }
+  geo.computeVertexNormals();
+  const body = add(track, parent, track(geo), cloth);
+  body.scale.set(1, 1.15, 0.8);
+  const neck = add(track, parent, new THREE.CylinderGeometry(r * 0.32, r * 0.18, r * 0.35, 12), cloth, 0, r * 1.15, 0);
+  neck.scale.z = 0.8;
+  const tie = add(track, parent, new THREE.TorusGeometry(r * 0.22, r * 0.05, 6, 14), rope, 0, r * 1.1, 0);
+  tie.rotation.x = Math.PI / 2;
+  // the opening flops over
+  add(track, parent, new THREE.ConeGeometry(r * 0.4, r * 0.3, 12, 1, true), cloth, 0, r * 1.38, 0).rotation.x = Math.PI;
+};
+/** A wrapped present with a ribbon cross and a bow. */
+const present = (track: Track, parent: THREE.Object3D, w: number, color: number, ribbon: number, x: number, y: number, z: number, ry = 0, rz = 0) => {
+  const grp = new THREE.Group();
+  grp.position.set(x, y, z);
+  grp.rotation.set(0, ry, rz);
+  parent.add(grp);
+  const rib = std(track, ribbon, { roughness: 0.4, metalness: 0.3 });
+  add(track, grp, new THREE.BoxGeometry(w, w * 0.8, w), std(track, color, { roughness: 0.6 }));
+  add(track, grp, new THREE.BoxGeometry(w * 1.02, w * 0.82, w * 0.18), rib);
+  add(track, grp, new THREE.BoxGeometry(w * 0.18, w * 0.82, w * 1.02), rib);
+  for (const side of [-1, 1]) {
+    const loop = add(track, grp, new THREE.TorusGeometry(w * 0.16, w * 0.05, 5, 10), rib, side * w * 0.14, w * 0.48, 0);
+    loop.rotation.y = Math.PI / 2;
+    loop.scale.set(1, 1, 0.6);
+  }
+};
+
+/** Event hats & heads (Christmas / Halloween…), shared by both models. Returns false if unknown. */
+const buildFestive = (id: string, h: HeadSpec, track: Track, g: THREE.Group): boolean => {
+  const { s } = h;
+  const cone = (color: number, rimColor: number, height: number, tip: number, tipEmissive = 0, style: 'santa' | 'elf' | '' = '') => {
+    const pivot = new THREE.Group();
+    pivot.position.set(0, h.top - 0.055 * s, -0.012 * s);
+    pivot.rotation.x = -0.5;
+    g.add(pivot);
+    const cloth = std(track, color, { roughness: 0.95 });
+    // Two parts so the tip flops backwards
+    add(track, pivot, new THREE.CylinderGeometry(h.rx * 0.55, h.rx * 1.02, height * 0.55, 20), cloth, 0, height * 0.27, 0);
+    const top = new THREE.Group();
+    top.position.y = height * 0.54;
+    top.rotation.x = -0.6;
+    pivot.add(top);
+    add(track, top, new THREE.ConeGeometry(h.rx * 0.55, height * 0.5, 18), cloth, 0, height * 0.24, 0);
+    const tipMat = std(track, tip, { roughness: 0.9, emissive: tipEmissive, emissiveIntensity: tipEmissive ? 0.6 : 0 });
+    if (style === 'santa') fluff(track, top, 0.026 * s, tipMat, 0, height * 0.5, 0);
+    else if (style === 'elf') {
+      // a little golden bell at the tip
+      const bell = add(track, top, bellGeo(track, 0.026 * s), std(track, 0xf0c030, { metalness: 0.95, roughness: 0.2, emissive: 0x5a3a00, emissiveIntensity: 0.5 }), 0, height * 0.5, 0);
+      bell.rotation.x = Math.PI * 0.85;
+    } else add(track, top, new THREE.SphereGeometry(0.028 * s, 12, 10), tipMat, 0, height * 0.5, 0);
+    const rimMat = std(track, rimColor, { roughness: 1 });
+    const rimG = new THREE.Group();
+    rimG.position.set(0, h.top - 0.06 * s, -0.012 * s);
+    rimG.rotation.x = -0.5;
+    g.add(rimG);
+    if (style === 'santa') furRing(track, rimG, h.rx * 1.04, h.rz * 1.04, 0.024 * s, rimMat, 0, 20);
+    else {
+      const rim = add(track, rimG, new THREE.TorusGeometry(h.rx * 1.02, 0.02 * s, 10, 30), rimMat);
+      rim.rotation.x = Math.PI / 2;
+      rim.scale.set(1, h.rz / h.rx, 1);
+      if (style === 'elf') {
+        // jester points all around the rim, alternating colours
+        const alt = std(track, 0xf4f4f0, { roughness: 1 });
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * Math.PI * 2;
+          const pt = add(track, rimG, new THREE.ConeGeometry(0.018 * s, 0.045 * s, 4), i % 2 ? rimMat : alt, Math.cos(a) * h.rx * 1.06, -0.025 * s, Math.sin(a) * h.rz * 1.06);
+          pt.rotation.set(Math.PI + Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5);
+          pt.scale.z = 0.4;
+        }
+      }
+    }
+  };
+  switch (id) {
+    case 'santahat':
+      cone(0xc8102e, 0xf6f6f2, 0.22 * s, 0xffffff, 0, 'santa');
+      return true;
+    case 'elfhat':
+      cone(0x15803d, 0xc8102e, 0.3 * s, 0xffd21a, 0x806000, 'elf');
+      return true;
+    case 'beard': {
+      const white = std(track, 0xf4f4f0, { roughness: 1 });
+      const beard = add(track, g, new THREE.SphereGeometry(0.075 * s, 16, 12), white, 0, h.cy - 0.065 * s, h.rz * 0.62);
+      beard.scale.set(1.05, 1.25, 0.6);
+      // curly locks down to the chest
+      for (let i = 0; i < 9; i++) {
+        const a = -1.1 + (i / 8) * 2.2;
+        fluff(track, g, 0.022 * s, white, Math.sin(a) * 0.058 * s, h.cy - 0.1 * s - Math.cos(a) * 0.04 * s, h.rz * 0.62 + Math.cos(a) * 0.035 * s, 5);
+      }
+      fluff(track, g, 0.026 * s, white, 0, h.cy - 0.155 * s, h.rz * 0.66, 6);
+      // a big curled moustache
+      for (const side of [-1, 1]) {
+        const m = add(track, g, new THREE.CapsuleGeometry(0.013 * s, 0.04 * s, 4, 8), white, side * 0.027 * s, h.cy - 0.022 * s, h.rz * 0.99);
+        m.rotation.z = side * 1.25;
+        const curl = add(track, g, new THREE.TorusGeometry(0.012 * s, 0.006 * s, 5, 10, Math.PI * 1.3), white, side * 0.057 * s, h.cy - 0.01 * s, h.rz * 0.96);
+        curl.rotation.z = side > 0 ? -0.3 : Math.PI + 0.3;
+      }
+      // bushy white eyebrows
+      for (const side of [-1, 1]) {
+        const b = add(track, g, new THREE.CapsuleGeometry(0.008 * s, 0.026 * s, 3, 6), white, side * 0.032 * s, h.cy + 0.045 * s, h.rz * 0.97);
+        b.rotation.z = side * (Math.PI / 2 - 0.25);
+      }
+      return true;
+    }
+    case 'antlers': {
+      const wood = std(track, 0x6b4423, { roughness: 0.8 });
+      for (const side of [-1, 1]) {
+        const base = new THREE.Group();
+        base.position.set(side * h.rx * 0.55, h.top - 0.03 * s, -0.01 * s);
+        base.rotation.z = -side * 0.45;
+        g.add(base);
+        // a curved beam made of segments, with tines
+        let px = 0, py = 0, ang = 0;
+        for (let k = 0; k < 5; k++) {
+          const len = 0.042 * s;
+          const r0 = (0.012 - k * 0.0015) * s;
+          const seg = add(track, base, new THREE.CylinderGeometry(r0 * 0.85, r0, len, 7), wood, 0, 0, 0);
+          seg.geometry.translate(0, len / 2, 0);
+          seg.position.set(px, py, 0);
+          seg.rotation.z = ang;
+          px += -Math.sin(ang) * len;
+          py += Math.cos(ang) * len;
+          ang += side * 0.18;
+          if (k >= 1) {
+            const tl = (0.05 - k * 0.006) * s;
+            const tine = add(track, base, new THREE.CylinderGeometry(0.003 * s, r0 * 0.7, tl, 5), wood, px, py, 0);
+            tine.geometry.translate(0, tl / 2, 0);
+            tine.rotation.z = ang - side * (0.75 + (k % 2) * 0.3);
+          }
+        }
+        // velvet base ring
+        const ringB = add(track, base, new THREE.TorusGeometry(0.014 * s, 0.006 * s, 6, 12), std(track, 0x3a2410, { roughness: 1 }), 0, 0.004 * s, 0);
+        ringB.rotation.x = Math.PI / 2;
+      }
+      // Rudolph's nose, with a soft glow around it
+      add(track, g, new THREE.SphereGeometry(0.02 * s, 14, 10), std(track, 0xff1a1a, { emissive: 0xff0000, emissiveIntensity: 1.3, roughness: 0.25 }), 0, h.cy - 0.012 * s, h.rz + 0.012 * s);
+      const halo = add(track, g, new THREE.SphereGeometry(0.034 * s, 14, 10), track(new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0.22, depthWrite: false })), 0, h.cy - 0.012 * s, h.rz + 0.012 * s);
+      halo.castShadow = false;
       return true;
     }
     case 'witchhat': {
@@ -529,10 +782,133 @@ const buildFestive = (id: string, h: HeadSpec, track: Track, g: THREE.Group): bo
       const collar = add(track, g, new THREE.TorusGeometry(h.rx * 0.85, 0.012 * s, 8, 26), leather, 0, h.cy - 0.12 * s, 0);
       collar.rotation.x = Math.PI / 2;
       collar.scale.set(1, h.rz / h.rx, 1);
-      const gold = std(track, 0xd4a017, { metalness: 0.9, roughness: 0.25, emissive: 0x3a2a00, emissiveIntensity: 0.4 });
-      for (let i = 0; i < 5; i++) {
-        const a = Math.PI / 2 + (i - 2) * 0.45;
-        add(track, g, new THREE.SphereGeometry(0.016 * s, 10, 8), gold, Math.cos(a) * h.rx * 0.88, h.cy - 0.14 * s, Math.sin(a) * h.rz * 0.88);
+      for (let i = 0; i < 7; i++) {
+        const a = Math.PI / 2 + (i - 3) * 0.42;
+        if (i === 3) continue; // the bow is in the middle
+        jingle(track, g, 0.014 * s, Math.cos(a) * h.rx * 0.9, h.cy - 0.142 * s, Math.sin(a) * h.rz * 0.9);
+      }
+      // a red velvet bow with a big bell under it
+      const velvet = std(track, 0xd0101e, { roughness: 0.7 });
+      const fz = h.rz * 0.9;
+      for (const side of [-1, 1]) {
+        const loop = add(track, g, new THREE.ConeGeometry(0.02 * s, 0.04 * s, 10), velvet, side * 0.022 * s, h.cy - 0.12 * s, fz + 0.01 * s);
+        loop.rotation.z = side * Math.PI / 2;
+        loop.scale.z = 0.5;
+      }
+      add(track, g, new THREE.SphereGeometry(0.01 * s, 8, 6), velvet, 0, h.cy - 0.12 * s, fz + 0.014 * s);
+      jingle(track, g, 0.02 * s, 0, h.cy - 0.15 * s, fz + 0.012 * s);
+      return true;
+    }
+    case 'elfears': {
+      // long pointy elf ears
+      const skinM = std(track, 0xe0b496, { roughness: 0.7 });
+      for (const side of [-1, 1]) {
+        const ear = add(track, g, new THREE.ConeGeometry(0.022 * s, 0.09 * s, 8), skinM, side * (h.rx + 0.018 * s), h.cy + 0.03 * s, -0.01 * s);
+        ear.rotation.set(-0.3, 0, -side * 1.05);
+        ear.scale.z = 0.45;
+      }
+      return true;
+    }
+    case 'goathorns': {
+      // 😈 Krampus: long ridged goat horns sweeping back and curling out
+      const horn = std(track, 0x2a1d14, { roughness: 0.55 });
+      const tipM = std(track, 0xd8c8a8, { roughness: 0.4 });
+      for (const side of [-1, 1]) {
+        const base = new THREE.Group();
+        base.position.set(side * h.rx * 0.55, h.top - 0.035 * s, 0.01 * s);
+        g.add(base);
+        let px = 0, py = 0, pz = 0;
+        const N = 12;
+        for (let k = 0; k < N; k++) {
+          const u = k / N;
+          const r0 = (0.03 - u * 0.026) * s;
+          const len = 0.034 * s;
+          // up, then back, then out and curling forward
+          const dir = new THREE.Vector3(side * (0.25 + u * 0.9), Math.cos(u * 2.6) * 0.9, -Math.sin(u * 2.4) * 1.0 + u * u * 0.4).normalize();
+          const seg = add(track, base, new THREE.CylinderGeometry(r0 * 0.88, r0, len * 1.15, 8), u > 0.8 ? tipM : horn, px + (dir.x * len) / 2, py + (dir.y * len) / 2, pz + (dir.z * len) / 2);
+          seg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+          // ridges
+          if (k % 2 === 0 && k < N - 2) {
+            const ridge = add(track, base, new THREE.TorusGeometry(r0 * 0.95, r0 * 0.12, 4, 12), horn, px, py, pz);
+            ridge.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+          }
+          px += dir.x * len;
+          py += dir.y * len;
+          pz += dir.z * len;
+        }
+      }
+      return true;
+    }
+    case 'tongue': {
+      // a long red forked tongue hanging out of the mouth
+      const flesh = std(track, 0xb01020, { roughness: 0.35, emissive: 0x300004, emissiveIntensity: 0.4 });
+      const grp = new THREE.Group();
+      grp.position.set(0, h.cy - 0.1 * s, h.rz * 0.82);
+      grp.rotation.x = 0.35;
+      g.add(grp);
+      let y = 0, z = 0;
+      for (let k = 0; k < 6; k++) {
+        const seg = add(track, grp, new THREE.CapsuleGeometry((0.018 - k * 0.002) * s, 0.02 * s, 4, 8), flesh, 0, y, z);
+        seg.scale.z = 0.45;
+        y -= 0.026 * s;
+        z += k * 0.003 * s;
+      }
+      for (const side of [-1, 1]) {
+        const fork = add(track, grp, new THREE.ConeGeometry(0.006 * s, 0.03 * s, 6), flesh, side * 0.007 * s, y - 0.008 * s, z);
+        fork.rotation.set(Math.PI, 0, side * 0.35);
+      }
+      return true;
+    }
+    case 'icing': {
+      // 🍪 gingerbread: white icing around the face, a smile, pink cheeks and eyebrows
+      const icing = std(track, 0xfbfbf6, { roughness: 0.35 });
+      const pts: THREE.Vector3[] = [];
+      const R = 1.02;
+      for (let i = 0; i <= 48; i++) {
+        const a = (i / 48) * Math.PI * 2;
+        const zig = 1 + (i % 2 ? 0.07 : -0.03);
+        const x = Math.cos(a) * h.rx * 0.82 * zig;
+        const y = Math.sin(a) * (h.top - h.cy) * 0.82 * zig;
+        const zz = Math.sqrt(Math.max(0, 1 - (x / (h.rx * R)) ** 2 - (y / ((h.top - h.cy) * 1.15)) ** 2)) * h.rz * R;
+        pts.push(new THREE.Vector3(x, h.cy + y, zz));
+      }
+      add(track, g, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 96, 0.006 * s, 5, true), icing);
+      const smile: THREE.Vector3[] = [];
+      for (let i = 0; i <= 12; i++) {
+        const a = Math.PI * 1.15 + (i / 12) * Math.PI * 0.7;
+        smile.push(new THREE.Vector3(Math.cos(a) * 0.05 * s, h.cy - 0.03 * s + Math.sin(a) * 0.035 * s, h.rz * 1.0 + 0.004 * s));
+      }
+      add(track, g, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(smile), 24, 0.006 * s, 5), icing);
+      const pink = std(track, 0xff7aa8, { roughness: 0.5 });
+      for (const side of [-1, 1]) {
+        const cheek = add(track, g, new THREE.SphereGeometry(0.016 * s, 10, 8), pink, side * 0.062 * s, h.cy - 0.02 * s, h.rz * 0.9);
+        cheek.scale.z = 0.35;
+        const brow = add(track, g, new THREE.CapsuleGeometry(0.005 * s, 0.03 * s, 3, 6), icing, side * 0.04 * s, h.cy + 0.07 * s, h.rz * 0.97);
+        brow.rotation.z = side * (Math.PI / 2 + 0.25);
+      }
+      return true;
+    }
+    case 'yetifur': {
+      // ❄️ shaggy white fur over the skull and a heavy brow, with icicles
+      const fur = std(track, 0xf4f8ff, { roughness: 1, emissive: 0x3a6aa0, emissiveIntensity: 0.12 });
+      for (let i = 0; i < 46; i++) {
+        const phi = Math.acos(1 - (i + 0.5) / 46) * 0.95; // upper half and the back
+        const th = i * 2.399;
+        const dir = new THREE.Vector3(Math.sin(phi) * Math.cos(th), Math.cos(phi), Math.sin(phi) * Math.sin(th));
+        if (dir.z > 0.55 && dir.y < 0.75) continue; // leave the face free
+        const tuft = add(track, g, new THREE.ConeGeometry(0.03 * s, 0.09 * s, 6), fur, dir.x * h.rx * 0.95, h.cy + dir.y * (h.top - h.cy) * 0.98, dir.z * h.rz * 0.95);
+        const out = dir.clone().add(new THREE.Vector3(0, -0.9, -0.3)).normalize();
+        tuft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), out);
+        tuft.castShadow = false;
+      }
+      const brow = add(track, g, new THREE.CapsuleGeometry(0.03 * s, h.rx * 1.2, 4, 10), fur, 0, h.cy + 0.07 * s, h.rz * 0.82);
+      brow.rotation.z = Math.PI / 2;
+      brow.scale.z = 0.7;
+      const ice = std(track, 0xbfe6ff, { roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.85, emissive: 0x2a6aa0, emissiveIntensity: 0.3 });
+      for (let i = 0; i < 6; i++) {
+        const x = (i - 2.5) * 0.028 * s;
+        const ic = add(track, g, new THREE.ConeGeometry(0.008 * s, (0.035 + (i % 2) * 0.02) * s, 5), ice, x, h.cy + 0.03 * s, h.rz * 0.98);
+        ic.rotation.x = Math.PI;
       }
       return true;
     }
@@ -561,6 +937,7 @@ const buildFestive = (id: string, h: HeadSpec, track: Track, g: THREE.Group): bo
 
 export const buildHumanAccessory = (id: string, track: Track): THREE.Group => {
   const g = new THREE.Group();
+  if (!XMAS_V2 && XMAS_FESTIVE.has(id) && buildFestiveOld(id, HUMAN_HEAD, track, g)) return g;
   if (buildFestive(id, HUMAN_HEAD, track, g)) return g;
   switch (id) {
     case 'cap': {
@@ -727,6 +1104,130 @@ export const buildHumanBodyExtra = (id: string, track: Track): THREE.Group => {
     }
     add(track, g, new THREE.BoxGeometry(0.03, 0.2, 0.012), trim, 0, 0.33, 0.183);
     add(track, g, new THREE.BoxGeometry(0.12, 0.03, 0.012), trim, 0, 0.37, 0.183);
+  } else if (id === 'santacoat') {
+    // 🎅 white fur down the front, around the hem and the collar, gold buttons
+    const fur = std(track, 0xfafaf6, { roughness: 1 });
+    for (let i = 0; i < 16; i++) fluff(track, g, 0.026, fur, 0, 0.5 - i * 0.058, 0.185 + Math.max(0, -(0.5 - i * 0.058)) * 0.16, 4);
+    furRing(track, g, 0.262, 0.215, 0.028, fur, -0.345, 26);
+    furRing(track, g, 0.13, 0.11, 0.03, fur, 0.55, 14, 0.01);
+    const gold = std(track, 0xe8c040, { metalness: 0.95, roughness: 0.25 });
+    for (const y of [0.38, 0.24]) add(track, g, new THREE.SphereGeometry(0.014, 10, 8), gold, 0.045, y, 0.19);
+  } else if (id === 'santabelt') {
+    // a wide black leather belt with a big square gold buckle
+    const leather = std(track, 0x0c0c0c, { roughness: 0.35, metalness: 0.1, side: THREE.DoubleSide });
+    const belt = add(track, g, new THREE.CylinderGeometry(0.228, 0.23, 0.075, 36, 1, true), leather, 0, 0.02, 0);
+    belt.scale.set(1.03, 1, 0.84);
+    const gold = std(track, 0xf0c43a, { metalness: 1, roughness: 0.2, emissive: 0x4a3000, emissiveIntensity: 0.3 });
+    const bz = 0.197;
+    for (const [w, h2, x, y] of [[0.085, 0.014, 0, 0.052], [0.085, 0.014, 0, -0.012], [0.014, 0.078, -0.036, 0.02], [0.014, 0.078, 0.036, 0.02]] as const) add(track, g, new THREE.BoxGeometry(w, h2, 0.012), gold, x, y, bz);
+    add(track, g, new THREE.BoxGeometry(0.008, 0.05, 0.014), gold, 0, 0.02, bz + 0.004);
+  } else if (id === 'sack') {
+    // 🎁 the sack of presents on the back
+    const grp = new THREE.Group();
+    grp.position.set(0.04, 0.27, -0.33);
+    grp.rotation.set(0.15, 0, -0.18);
+    g.add(grp);
+    sack(track, grp, 0.17, std(track, 0x8a5a2a, { roughness: 1 }), std(track, 0xd4a840, { roughness: 0.7 }));
+    present(track, grp, 0.09, 0x1d6b2a, 0xe8c040, -0.06, 0.3, 0.01, 0.4, 0.3);
+    present(track, grp, 0.075, 0xc8102e, 0xf4f4f0, 0.07, 0.28, -0.02, -0.3, -0.35);
+    // candy cane sticking out
+    const cane = new THREE.Group();
+    cane.position.set(0.0, 0.3, 0.05);
+    cane.rotation.z = 0.2;
+    grp.add(cane);
+    const red = std(track, 0xd0101e, { roughness: 0.4 });
+    const white = std(track, 0xf8f8f4, { roughness: 0.4 });
+    for (let k = 0; k < 8; k++) add(track, cane, new THREE.CylinderGeometry(0.012, 0.012, 0.025, 8), k % 2 ? red : white, 0, k * 0.025, 0);
+    const hook = add(track, cane, new THREE.TorusGeometry(0.035, 0.012, 8, 14, Math.PI), red, -0.035, 0.2, 0);
+    hook.rotation.z = 0;
+    // shoulder strap across the chest
+    const strap = add(track, g, new THREE.TorusGeometry(0.25, 0.012, 6, 36), std(track, 0x5a3a1a, { roughness: 0.8 }), 0, 0.3, 0);
+    strap.rotation.set(Math.PI / 2, 0.75, 0);
+    strap.scale.set(1, 0.82, 1);
+  } else if (id === 'elfcollar') {
+    // 🧝 a pointed red & white collar, gold buttons and a candy-stripe hem
+    const red = std(track, 0xc8102e, { roughness: 0.9, side: THREE.DoubleSide });
+    const white = std(track, 0xf4f4f0, { roughness: 0.9, side: THREE.DoubleSide });
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const pt = add(track, g, new THREE.ConeGeometry(0.04, 0.11, 4), i % 2 ? red : white, Math.cos(a) * 0.15, 0.49, Math.sin(a) * 0.13);
+      pt.rotation.set(Math.PI - Math.sin(a) * 0.9, 0, Math.cos(a) * 0.9);
+      pt.scale.z = 0.35;
+    }
+    const gold = std(track, 0xf0c030, { metalness: 0.95, roughness: 0.25 });
+    for (const y of [0.36, 0.24, 0.12]) jingle(track, g, 0.014, 0, y, 0.19);
+    for (let i = 0; i < 20; i++) {
+      const a0 = (i / 20) * Math.PI * 2;
+      const band = add(track, g, new THREE.CylinderGeometry(0.262, 0.268, 0.055, 4, 1, true, a0, (Math.PI * 2) / 20 + 0.01), i % 2 ? red : white, 0, -0.33, 0);
+      band.scale.z = 0.84;
+    }
+    void gold;
+  } else if (id === 'uglysweater') {
+    // 🧶 a proper ugly Christmas sweater: rolled collar, zig-zag bands, a reindeer, snowflakes
+    const white = std(track, 0xf4f4f0, { roughness: 1, side: THREE.DoubleSide });
+    const green = std(track, 0x15803d, { roughness: 1, side: THREE.DoubleSide });
+    const collar = add(track, g, new THREE.TorusGeometry(0.115, 0.028, 8, 24), green, 0, 0.54, 0.01);
+    collar.rotation.x = Math.PI / 2;
+    collar.scale.set(1, 0.85, 1);
+    for (const [y, r] of [[0.42, 0.205], [-0.3, 0.255]] as const) {
+      const band = add(track, g, new THREE.CylinderGeometry(r, r, 0.05, 36, 1, true, 0.32 + Math.PI, Math.PI * 2 - 0.64), green, 0, y, 0);
+      band.scale.set(1.02, 1, 0.82);
+      for (let i = 0; i < 14; i++) {
+        const a = Math.PI + 0.45 + (i / 13) * (Math.PI * 2 - 0.9);
+        const tri = add(track, g, new THREE.ConeGeometry(0.016, 0.03, 3), white, Math.sin(a) * r * 1.03, y + (i % 2 ? 0.035 : -0.035), Math.cos(a) * r * 0.85);
+        tri.rotation.set(0, a, i % 2 ? Math.PI : 0);
+        tri.scale.z = 0.3;
+      }
+    }
+    // the reindeer on the chest
+    const deer = new THREE.Group();
+    deer.position.set(0, 0.17, 0.2);
+    g.add(deer);
+    const brown = std(track, 0x7a4a22, { roughness: 1 });
+    const head = add(track, deer, new THREE.SphereGeometry(0.045, 14, 10), brown);
+    head.scale.set(0.85, 1.1, 0.3);
+    const snout = add(track, deer, new THREE.SphereGeometry(0.03, 12, 8), std(track, 0x9a6a3a, { roughness: 1 }), 0, -0.04, 0.008);
+    snout.scale.set(1, 0.8, 0.35);
+    add(track, deer, new THREE.SphereGeometry(0.014, 10, 8), std(track, 0xff1a1a, { emissive: 0xff0000, emissiveIntensity: 0.8 }), 0, -0.05, 0.02);
+    for (const side of [-1, 1]) {
+      add(track, deer, new THREE.SphereGeometry(0.007, 8, 6), std(track, 0x111111), side * 0.017, 0.008, 0.014);
+      const ant = add(track, deer, new THREE.BoxGeometry(0.008, 0.06, 0.006), std(track, 0x4a2a10, { roughness: 1 }), side * 0.035, 0.065, 0);
+      ant.rotation.z = -side * 0.5;
+      const t2 = add(track, deer, new THREE.BoxGeometry(0.007, 0.03, 0.006), std(track, 0x4a2a10, { roughness: 1 }), side * 0.05, 0.07, 0);
+      t2.rotation.z = side * 0.6;
+    }
+    // snowflakes
+    for (const [x, y] of [[-0.12, 0.25], [0.12, 0.27], [-0.13, 0.02], [0.13, 0.0], [0, -0.06]] as const) {
+      const flake = new THREE.Group();
+      const zf = Math.sqrt(Math.max(0, 1 - (x / 0.23) ** 2)) * 0.19 + 0.005;
+      flake.position.set(x, y, zf);
+      flake.rotation.y = Math.asin(x / 0.23);
+      g.add(flake);
+      for (let k = 0; k < 3; k++) add(track, flake, new THREE.BoxGeometry(0.04, 0.006, 0.004), white).rotation.z = (k * Math.PI) / 3;
+    }
+    // pompoms on the collar
+    for (const side of [-1, 1]) {
+      const cord = add(track, g, new THREE.CylinderGeometry(0.003, 0.003, 0.08, 4), white, side * 0.04, 0.47, 0.16);
+      cord.rotation.x = 0.2;
+      fluff(track, g, 0.014, white, side * 0.04, 0.42, 0.17, 6);
+    }
+  } else if (id === 'birch') {
+    // 🌿 a bundle of switches slung on the back
+    const grp = new THREE.Group();
+    grp.position.set(-0.13, 0.48, -0.24);
+    grp.rotation.set(0.2, 0, 0.55);
+    g.add(grp);
+    twigBundle(track, grp, 0.6, 11, 0xa00010);
+  } else if (id === 'coalsack') {
+    // ⚫ a black sack full of coal for the naughty children
+    const grp = new THREE.Group();
+    grp.position.set(0.06, 0.22, -0.32);
+    grp.rotation.set(0.1, 0, -0.12);
+    g.add(grp);
+    sack(track, grp, 0.15, std(track, 0x1a1612, { roughness: 1 }), std(track, 0x5a4a3a, { roughness: 0.9 }));
+    const coal = std(track, 0x141414, { roughness: 0.6, metalness: 0.3 });
+    for (let i = 0; i < 5; i++) add(track, grp, new THREE.DodecahedronGeometry(0.03, 0), coal, (i - 2) * 0.025, 0.25 + (i % 2) * 0.02, (i % 3) * 0.015);
+    add(track, grp, new THREE.DodecahedronGeometry(0.022, 0), std(track, 0xff5a1a, { emissive: 0xff3a00, emissiveIntensity: 1.2 }), 0.02, 0.27, 0.03);
   } else if (id === 'stripes') {
     const black = std(track, 0x151515, { roughness: 0.9, side: THREE.DoubleSide });
     for (let i = 0; i < 6; i++) {
@@ -760,10 +1261,10 @@ export const MONSTER_OUTFITS: Record<string, MonsterOutfit> = {
   shadow: { skin: '#0c0c10', eyes: '#c03aff', gown: '#050505', accs: ['hood'], skinFx: 'shadow', fx: 'smoke' },
   goldm: { skin: '#d4a840', eyes: '#ffffff', gown: '#3a2a10', accs: ['chains', 'crown'], skinFx: 'gold', body: ['pauldrons'], fx: 'halo' },
   // 🎄 Noël
-  yeti: { skin: '#eef4ff', eyes: '#38bdf8', gown: '#c8d8ee', accs: [], skinFx: 'frost' },
-  gingerbread: { skin: '#a0522d', eyes: '#ffffff', gown: '#f4f0e8', accs: [] },
-  krampus: { skin: '#3b2a1e', eyes: '#ff2010', gown: '#1a120c', accs: ['horns', 'chains'], body: ['royalcape'], fx: 'smoke' },
-  fouettard: { skin: '#2a1e18', eyes: '#ff2a1a', gown: '#100a07', accs: ['hood', 'chains', 'bellcollar'] , fx: 'smoke' },
+  yeti: { skin: '#eef4ff', eyes: '#38bdf8', gown: '#c8d8ee', accs: ['yetifur'], skinFx: 'frost', body: ['yetimane'], fx: 'snow' },
+  gingerbread: { skin: '#a0522d', eyes: '#ffffff', gown: '#f4f0e8', accs: ['icing'], body: ['gumdrops'] },
+  krampus: { skin: '#3b2a1e', eyes: '#ff2010', gown: '#1a120c', accs: ['goathorns', 'tongue', 'chains'], body: ['furcoat', 'birch'], fx: 'smoke' },
+  fouettard: { skin: '#2a1e18', eyes: '#ff2a1a', gown: '#100a07', accs: ['hood', 'chains', 'bellcollar'], body: ['birch', 'coalsack'], fx: 'smoke' },
   // 🎃 Halloween
   mummy: { skin: '#d6cba8', eyes: '#ffd21a', gown: '#c8bc98', accs: ['bandages'] },
   pumpking: { skin: '#1a1208', eyes: '#ff9a00', gown: '#2a1a0a', accs: ['pumpkinhead'], skinFx: 'inferno' , fx: 'embers' },
@@ -792,11 +1293,21 @@ export const MONSTER_OUTFITS: Record<string, MonsterOutfit> = {
   knightpz: { eyes: '#ff2010', gown: '#22222a', accs: ['blackhelm'], body: ['chestplate', 'pauldrons', 'sword'], fx: 'embers' },
   dragon: { skin: '#2f6b2a', eyes: '#ffcc00', gown: '#14301a', accs: ['horns'], body: ['dragonwings'], fx: 'flames' },
   // 🎄 Nuit de Noël
-  evilsanta: { skin: '#d8cfc4', eyes: '#ff1a0a', gown: '#9a0c18', accs: ['santahat', 'beard'], body: ['royalcape'], fx: 'embers' },
+  evilsanta: { skin: '#d8cfc4', eyes: '#ff1a0a', gown: '#9a0c18', accs: ['santahat', 'beard'], body: ['msantacoat', 'evilsack'], fx: 'embers' },
 };
+
+if (!XMAS_V2)
+  Object.assign(MONSTER_OUTFITS, {
+    yeti: { skin: '#eef4ff', eyes: '#38bdf8', gown: '#c8d8ee', accs: [], skinFx: 'frost' },
+    gingerbread: { skin: '#a0522d', eyes: '#ffffff', gown: '#f4f0e8', accs: [] },
+    krampus: { skin: '#3b2a1e', eyes: '#ff2010', gown: '#1a120c', accs: ['horns', 'chains'], body: ['royalcape'], fx: 'smoke' },
+    fouettard: { skin: '#2a1e18', eyes: '#ff2a1a', gown: '#100a07', accs: ['hood', 'chains', 'bellcollar'], fx: 'smoke' },
+    evilsanta: { skin: '#d8cfc4', eyes: '#ff1a0a', gown: '#9a0c18', accs: ['santahat', 'beard'], body: ['royalcape'], fx: 'embers' },
+  } satisfies Record<string, MonsterOutfit>);
 
 export const buildMonsterAccessory = (id: string, track: Track): THREE.Group => {
   const g = new THREE.Group();
+  if (!XMAS_V2 && XMAS_FESTIVE.has(id) && buildFestiveOld(id, MONSTER_HEAD, track, g)) return g;
   if (buildFestive(id, MONSTER_HEAD, track, g)) return g;
   switch (id) {
     case 'horns': {
@@ -849,7 +1360,7 @@ export const buildMonsterAccessory = (id: string, track: Track): THREE.Group => 
 // ---------------------------------------------------------------------------
 // 👑 Creature body pieces (spine space: shoulders at y ≈ 0.6, x ≈ ±0.27; or in the right hand)
 // ---------------------------------------------------------------------------
-export type MonsterBodyExtra = 'royalcape' | 'scepter' | 'pauldrons' | 'tanks' | 'chestplate' | 'dragonwings' | 'sword';
+export type MonsterBodyExtra = 'royalcape' | 'scepter' | 'pauldrons' | 'tanks' | 'chestplate' | 'dragonwings' | 'sword' | 'birch' | 'coalsack' | 'evilsack' | 'yetimane' | 'gumdrops' | 'furcoat' | 'msantacoat';
 
 export const buildMonsterBodyExtra = (id: MonsterBodyExtra, track: Track): { group: THREE.Group; at: 'spine' | 'hand' } | null => {
   const g = new THREE.Group();
@@ -976,6 +1487,138 @@ export const buildMonsterBodyExtra = (id: MonsterBodyExtra, track: Track): { gro
       add(track, g, new THREE.BoxGeometry(0.24, 0.04, 0.05), grip, 0, -0.12, 0.05);
       add(track, g, new THREE.CylinderGeometry(0.02, 0.02, 0.16, 8), grip, 0, -0.03, 0.05);
       return { group: g, at: 'hand' };
+    }
+    case 'birch': {
+      // 🌿 a bundle of switches in the right hand
+      g.position.set(0, -0.6, 0.04);
+      g.rotation.x = 0.25;
+      const handle = new THREE.Group();
+      handle.rotation.x = Math.PI; // twigs point down from the fist
+      handle.position.y = 0.15;
+      g.add(handle);
+      twigBundle(track, handle, 0.75, 13, 0x8a0010);
+      return { group: g, at: 'hand' };
+    }
+    case 'coalsack':
+    case 'evilsack': {
+      const evil = id === 'evilsack';
+      const grp = new THREE.Group();
+      grp.position.set(0.05, 0.38, -0.36);
+      grp.rotation.set(0.15, 0, -0.15);
+      g.add(grp);
+      sack(track, grp, 0.22, std(track, evil ? 0x5a1a12 : 0x1a1612, { roughness: 1 }), std(track, evil ? 0x2a1a10 : 0x5a4a3a, { roughness: 0.9 }));
+      if (evil) {
+        // blood stains and a broken toy poking out
+        const blood = std(track, 0x5a0006, { roughness: 0.4 });
+        for (let i = 0; i < 5; i++) {
+          const b = add(track, grp, new THREE.SphereGeometry(0.05, 10, 8), blood, Math.sin(i * 2.1) * 0.15, -0.05 + (i % 3) * 0.08, 0.13);
+          b.scale.set(1, 0.6, 0.15);
+        }
+        const bear = new THREE.Group();
+        bear.position.set(-0.05, 0.36, 0.02);
+        bear.rotation.z = 0.5;
+        grp.add(bear);
+        const plush = std(track, 0x8a5a32, { roughness: 1 });
+        add(track, bear, new THREE.SphereGeometry(0.06, 12, 10), plush);
+        for (const side of [-1, 1]) add(track, bear, new THREE.SphereGeometry(0.022, 8, 6), plush, side * 0.045, 0.045, 0);
+        add(track, bear, new THREE.SphereGeometry(0.01, 6, 4), std(track, 0x0a0a0a), 0.02, 0.01, 0.055);
+        present(track, grp, 0.12, 0x1a3a1a, 0x8a0010, 0.09, 0.33, -0.02, -0.4, -0.4);
+      } else {
+        const coal = std(track, 0x141414, { roughness: 0.6, metalness: 0.3 });
+        for (let i = 0; i < 6; i++) add(track, grp, new THREE.DodecahedronGeometry(0.045, 0), coal, (i - 2.5) * 0.035, 0.34 + (i % 2) * 0.03, (i % 3) * 0.02);
+        add(track, grp, new THREE.DodecahedronGeometry(0.03, 0), std(track, 0xff5a1a, { emissive: 0xff3a00, emissiveIntensity: 1.3 }), 0.03, 0.37, 0.04);
+      }
+      // strap over the shoulder
+      const strap = add(track, g, new THREE.TorusGeometry(0.3, 0.016, 6, 36), std(track, 0x2a1a10, { roughness: 0.8 }), 0, 0.42, 0);
+      strap.rotation.set(Math.PI / 2, 0.8, 0);
+      strap.scale.set(1, 0.8, 1);
+      return { group: g, at: 'spine' };
+    }
+    case 'yetimane':
+    case 'furcoat': {
+      // ❄️ shaggy fur over the shoulders and the back (white for the yeti, black for Krampus)
+      const yeti = id === 'yetimane';
+      const fur = std(track, yeti ? 0xf2f6ff : 0x1c140e, { roughness: 1, emissive: yeti ? 0x3a6aa0 : 0x000000, emissiveIntensity: yeti ? 0.12 : 0 });
+      const fur2 = std(track, yeti ? 0xdce8f8 : 0x2e2016, { roughness: 1 });
+      // soft clumps first, then shaggy locks of different lengths hanging down
+      for (let i = 0; i < 22; i++) {
+        const a = (i / 22) * Math.PI * 2;
+        const c = add(track, g, new THREE.SphereGeometry(0.075, 10, 8), i % 2 ? fur : fur2, Math.cos(a) * 0.25, 0.6 + Math.sin(i * 2.3) * 0.03, Math.sin(a) * 0.2);
+        c.scale.set(1, 0.75, 1);
+      }
+      for (let i = 0; i < 110; i++) {
+        const a = i * 2.399;
+        const ring = (i % 4) / 4;
+        const jit = Math.sin(i * 12.9898) * 0.5 + 0.5;
+        const y = 0.66 - ring * 0.26 - jit * 0.04;
+        const r = 0.245 + ring * 0.03 + jit * 0.03;
+        const x = Math.cos(a) * r * 1.12;
+        const z = Math.sin(a) * r * 0.86;
+        const len = 0.08 + jit * 0.12;
+        const lock = add(track, g, new THREE.ConeGeometry(0.022 + jit * 0.014, len, 5), i % 3 ? fur : fur2, x, y - len * 0.35, z);
+        const out = new THREE.Vector3(x * (0.25 + jit * 0.35), -1, z * (0.25 + jit * 0.35)).normalize();
+        lock.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), out);
+        lock.rotation.y += jit;
+        lock.castShadow = false;
+      }
+      if (!yeti) {
+        // Krampus: chains with rusty bells across the chest
+        const steel = std(track, 0x6a6a6a, { roughness: 0.4, metalness: 0.9 });
+        for (let i = 0; i < 16; i++) {
+          const u = i / 15;
+          const link = add(track, g, new THREE.TorusGeometry(0.022, 0.006, 5, 10), steel, -0.24 + u * 0.48, 0.55 - u * 0.35, 0.22 + Math.sin(u * Math.PI) * 0.03);
+          link.rotation.set(0, i % 2 ? Math.PI / 2 : 0, 0.6);
+        }
+        for (const u of [0.25, 0.5, 0.75]) jingle(track, g, 0.026, -0.24 + u * 0.48, 0.5 - u * 0.35, 0.26);
+      } else {
+        // icicles hanging from the fur
+        const ice = std(track, 0xbfe6ff, { roughness: 0.05, transparent: true, opacity: 0.85, emissive: 0x2a6aa0, emissiveIntensity: 0.35 });
+        for (let i = 0; i < 10; i++) {
+          const a = (i / 10) * Math.PI * 2;
+          const ic = add(track, g, new THREE.ConeGeometry(0.012, 0.07 + (i % 3) * 0.03, 5), ice, Math.cos(a) * 0.3, 0.38, Math.sin(a) * 0.24);
+          ic.rotation.x = Math.PI;
+        }
+      }
+      return { group: g, at: 'spine' };
+    }
+    case 'gumdrops': {
+      // 🍬 gumdrop buttons and icing zig-zags on the chest
+      const colors = [0xff2a4a, 0x2ad05a, 0xffd21a];
+      [0.48, 0.36, 0.24].forEach((y, i) => {
+        const gd = add(track, g, new THREE.SphereGeometry(0.035, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.6), std(track, colors[i], { roughness: 0.15, emissive: colors[i], emissiveIntensity: 0.15 }), 0, y, 0.21);
+        gd.rotation.x = Math.PI / 2;
+        gd.scale.set(1, 1, 0.9);
+      });
+      const icing = std(track, 0xfbfbf6, { roughness: 0.35 });
+      for (const [y, r] of [[0.6, 0.24], [0.1, 0.24]] as const) {
+        const pts: THREE.Vector3[] = [];
+        for (let i = 0; i <= 30; i++) {
+          const a = -1.2 + (i / 30) * 2.4;
+          pts.push(new THREE.Vector3(Math.sin(a) * r, y + (i % 2 ? 0.025 : -0.025), Math.cos(a) * r * 0.85 + 0.01));
+        }
+        add(track, g, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 90, 0.008, 5), icing);
+      }
+      // a red bow tie
+      const red = std(track, 0xd0101e, { roughness: 0.5 });
+      for (const side of [-1, 1]) {
+        const w = add(track, g, new THREE.ConeGeometry(0.035, 0.07, 10), red, side * 0.04, 0.66, 0.17);
+        w.rotation.z = side * Math.PI / 2;
+        w.scale.z = 0.5;
+      }
+      add(track, g, new THREE.SphereGeometry(0.018, 8, 6), red, 0, 0.66, 0.18);
+      return { group: g, at: 'spine' };
+    }
+    case 'msantacoat': {
+      // 🎅 evil Santa's coat: fur collar, fur down the front, black belt and gold buckle
+      const fur = std(track, 0xe8e2d8, { roughness: 1 });
+      furRing(track, g, 0.2, 0.17, 0.05, fur, 0.66, 16, -0.01);
+      for (let i = 0; i < 10; i++) fluff(track, g, 0.035, fur, 0, 0.6 - i * 0.055, 0.2, 4);
+      const leather = std(track, 0x0c0c0c, { roughness: 0.35, side: THREE.DoubleSide });
+      const belt = add(track, g, new THREE.CylinderGeometry(0.255, 0.255, 0.08, 30, 1, true), leather, 0, 0.12, 0);
+      belt.scale.z = 0.85;
+      const gold = std(track, 0xf0c43a, { metalness: 1, roughness: 0.2 });
+      for (const [w, h2, x, y] of [[0.1, 0.016, 0, 0.155], [0.1, 0.016, 0, 0.085], [0.016, 0.086, -0.042, 0.12], [0.016, 0.086, 0.042, 0.12]] as const) add(track, g, new THREE.BoxGeometry(w, h2, 0.014), gold, x, y, 0.222);
+      return { group: g, at: 'spine' };
     }
     case 'tanks': {
       const glass = std(track, 0x3aff2a, { roughness: 0.1, transparent: true, opacity: 0.75, emissive: 0x2aff1a, emissiveIntensity: 0.8 });

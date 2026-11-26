@@ -226,6 +226,36 @@ export const buildFx = (id: string, track: Track, height: number, monster: boole
         },
       };
     }
+    case 'snow': {
+      // ❄️ Christmas: snowflakes falling and swirling around the body
+      const flakeGeo = track(new THREE.OctahedronGeometry(0.022, 0));
+      const white = glow(track, 0xffffff, 0.95);
+      const blue = glow(track, 0xbfe6ff, 0.9);
+      const flakes: { m: THREE.Mesh; p: number; a: number; r: number; s: number }[] = [];
+      for (let i = 0; i < 40; i++) {
+        const m = new THREE.Mesh(flakeGeo, i % 3 ? white : blue);
+        flakes.push({ m, p: Math.random(), a: Math.random() * Math.PI * 2, r: 0.25 + Math.random() * 0.45, s: 0.12 + Math.random() * 0.12 });
+        g.add(m);
+      }
+      noShadow(g);
+      return {
+        group: g,
+        tick(dt) {
+          t += dt;
+          for (const f of flakes) {
+            f.p += dt * f.s;
+            if (f.p > 1) {
+              f.p -= 1;
+              f.a = Math.random() * Math.PI * 2;
+            }
+            const a = f.a + f.p * 3 + Math.sin(t + f.a) * 0.3;
+            f.m.position.set(Math.cos(a) * f.r, (1 - f.p) * (height + 0.4), Math.sin(a) * f.r);
+            f.m.rotation.set(t * 2 + f.a, t * 3, 0);
+            f.m.scale.setScalar(0.6 + 0.5 * Math.sin(f.p * Math.PI));
+          }
+        },
+      };
+    }
     case 'stars': {
       // 🏅 Ranked: golden stars circling the body on two rings
       const geo = track(new THREE.OctahedronGeometry(0.05));
