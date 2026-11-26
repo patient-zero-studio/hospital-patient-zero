@@ -44,6 +44,8 @@ import { ShopMenu } from './components/ShopMenu';
 import { HoboShop } from './components/HoboShop';
 import { IS_TOUCH, RotateHint, TouchControls, enterMobileFullscreen } from './components/TouchControls';
 import type { BoxId, SupplyKind } from './economy';
+import { cosmetic, isLegendary, rarityColor } from './economy';
+import { LAMPS } from './lamps';
 import type { StatKey } from './achievements';
 import { Season, SeasonSetting, getActiveSeason, onSeasonChange, setActiveSeason } from './seasons';
 import { challengeMet, dailyChallenge, fmtTime } from './challenges';
@@ -230,6 +232,8 @@ export default function App() {
   const [versusResult, setVersusResult] = useState<{ won: boolean; reason: string } | null>(null);
   /** Account customisation (human + creature colours). */
   const [look, setLook] = useState<Appearance>(DEFAULT_APPEARANCE);
+  const lookRef = useRef(look);
+  lookRef.current = look;
   /** null = closed; 'welcome' right after the account was created. */
   const [customize, setCustomize] = useState<null | 'edit' | 'welcome'>(null);
   /** Coins, owned skins, today's shop. */
@@ -606,6 +610,25 @@ export default function App() {
     // 🔧 Atelier: everything you bought, except in ranked games (fair for everyone)
     engine.upgrades = rankedRunRef.current ? {} : upgradesRef.current;
     engine.whisperName = sessionRef.current?.username ?? '';
+    // 🏚️ room 104 shows your decor and your collection (Knights' update: admins only until released)
+    {
+      const w = walletRef.current;
+      const lk = lookRef.current;
+      if (w && lk && (KNIGHTS_PUBLIC || w.admin)) {
+        const owned = w.wallet.owned.map((id) => cosmetic(id)).filter((c): c is NonNullable<typeof c> => !!c);
+        const rank = (c: (typeof owned)[number]) => (isLegendary(c) ? 2 : c.tier === 'exclusif' ? 1 : 0);
+        engine.roomShow = {
+          theme: lk.human.room ?? '',
+          lamps: owned.filter((c) => c.slot === 'lamp').map((c) => LAMPS[c.value]?.color ?? 0xfff1dc),
+          rare: owned
+            .filter((c) => c.slot !== 'lamp' && c.slot !== 'room' && (c.tier === 'exclusif' || c.tier === 'style'))
+            .sort((a, b) => rank(b) - rank(a))
+            .slice(0, 12)
+            .map((c) => rarityColor(c)),
+          trophies: w.trophies?.length ?? 0,
+        };
+      } else engine.roomShow = null;
+    }
     engine.outage = outageRef.current;
     engine.onOutageFixed = async (id) => {
       const s = sessionRef.current;

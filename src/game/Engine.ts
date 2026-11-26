@@ -20,6 +20,7 @@ import { BossArena } from './BossArena';
 import { DreamHouse, MEMORY_IDS } from './DreamHouse';
 import { CircusTent } from './CircusTent';
 import { Dungeon, BLASON_IDS, PARCH_IDS, duelPoints } from './Dungeon';
+import { buildRoomDecor, roomShowKey, type RoomShow } from './RoomDecor';
 import { GameState } from './GameState';
 import { ProceduralTextures } from '../textures/ProceduralTextures';
 import { MicListener, MicStatus } from '../audio/MicListener';
@@ -2200,6 +2201,7 @@ export class GameEngine {
       const off = seat ? new THREE.Vector3(seat === 1 ? 1.4 : sx, 0, seat === 1 ? 0 : sz) : new THREE.Vector3();
       this.player.reset(lv.start.clone().add(off), lv.startYaw);
     } else this.player.reset(start, sewers ? this.map.sewer.startYaw : this.map.playerStartYaw);
+    this.applyRoomDecor();
     this.chapterToast = null;
     if (this.site instanceof CircusTent)
       this.queueChapterToast(
@@ -3151,6 +3153,41 @@ export class GameEngine {
     this.applyRandomEvent(e, x, z);
     this.net?.send({ k: 'rev', e, x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10 });
   }
+  // -----------------------------------------------------------------------
+  // 🏚️ Your room 104: the decor chosen in Personnaliser + your collection
+  // -----------------------------------------------------------------------
+  /** set by the app (null = nothing to show); applied right away if a game is on */
+  private _roomShow: RoomShow | null = null;
+  public get roomShow() {
+    return this._roomShow;
+  }
+  public set roomShow(v: RoomShow | null) {
+    this._roomShow = v;
+    if (this.map && this.player) this.applyRoomDecor();
+  }
+  private roomDecor: ReturnType<typeof buildRoomDecor> | null = null;
+  private roomDecorKey = '';
+  private roomDecorMap: unknown = null;
+  private applyRoomDecor() {
+    const want = this.chapter === 1 && !this.survival && !this.vsRole && !this.imp && !this.watchOnly && this.net?.mode !== 'versus' ? this.roomShow : null;
+    const key = roomShowKey(want);
+    if (key === this.roomDecorKey && this.roomDecorMap === this.map) return;
+    if (this.roomDecor) {
+      this.scene.remove(this.roomDecor.group);
+      const mine = new Set(this.roomDecor.boxes);
+      this.map.collisionBoxes = this.map.collisionBoxes.filter((b) => !mine.has(b));
+      this.roomDecor.dispose();
+      this.roomDecor = null;
+    }
+    this.roomDecorKey = key;
+    this.roomDecorMap = this.map;
+    if (!want) return;
+    this.roomDecor = buildRoomDecor(want);
+    // in the scene (not the level group): it never gets in the way of [E]
+    this.scene.add(this.roomDecor.group);
+    this.map.collisionBoxes.push(...this.roomDecor.boxes);
+  }
+
   // -----------------------------------------------------------------------
   // ⚡ Big power cut, scheduled by an admin: the whole place goes dark until
   // someone restarts the generator (3 pulls on the starter cord).
@@ -5700,6 +5737,7 @@ export class GameEngine {
     this.updateCat(delta);
     this.updateWhisper(delta);
     this.updateOutage(delta);
+    this.roomDecor?.tick(delta);
     this.updateUv(delta);
     this.updateSecret(delta);
     this.updateWounds(delta);
