@@ -3031,6 +3031,16 @@ app.get('/api/spectate/:name', (req, res) => {
 // Health check for hosting platforms
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
 
+// ⏰ Keep awake: Render's free plan puts the server to sleep after 15 min without
+// visits (then a player waits ~1 min). Every 10 min the server visits its own
+// public address, which counts as a visit, so it never falls asleep.
+const KEEP_AWAKE = process.env.RENDER_EXTERNAL_URL;
+if (KEEP_AWAKE) {
+  setInterval(() => {
+    fetch(`${KEEP_AWAKE}/healthz`, { cache: 'no-store' }).catch(() => {});
+  }, 10 * 60 * 1000).unref();
+}
+
 if (PROD) {
   const dist = path.join(ROOT, 'dist');
   app.use(
